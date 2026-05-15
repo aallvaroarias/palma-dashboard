@@ -875,6 +875,7 @@ let refreshTimer = null;
 // ════════════════════════════════════════════════════
 const fmt = v => '$' + Math.abs(+v || 0).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtK = v => (+v || 0) >= 1000 ? '$' + ((+v)/1000).toFixed(0) + 'k' : '$' + (+v || 0).toFixed(0);
+const fK = fmtK;
 const pct = v => (+v || 0).toFixed(1) + '%';
 const dc = id => { if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; } };
 const $ = id => document.getElementById(id);
@@ -1451,7 +1452,7 @@ function showView(name, btn) {
 // ════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   // Verificar que la URL fue configurada
-  if (API_URL === 'TU_URL_APPS_SCRIPT_AQUI') {
+  if (API_URL === 'https://script.google.com/macros/s/AKfycbxQ-ZWatZceisJuCuumV7DuwoqVxQ1-kHkV30Z5xkSKg-YFwCMkSf_M4mdtTnxk3vSM/exec') {
     $('loadingText').textContent = '⚠ Configura la API_URL en el código';
     $('loadingText').style.color = '#F59E0B';
     return;
