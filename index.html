@@ -820,7 +820,7 @@ tr:hover td { background: rgba(37,99,235,.05); }
 
 // ⚠ REEMPLAZA ESTA URL con la URL de tu Google Apps Script implementado
 // Ejemplo: https://script.google.com/macros/s/AKfy.../exec
-const API_URL = 'https://script.google.com/macros/s/AKfycbxQ-ZWatZceisJuCuumV7DuwoqVxQ1-kHkV30Z5xkSKg-YFwCMkSf_M4mdtTnxk3vSM/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzeKz9xrs4MKFfM_kswFQ7gA3bJ007lNLtAlnMBBxyV9lQBbF-rBIPkS7CUl43aRMWe/exec';
 
 // Intervalo de actualización (5 minutos = 300000 ms)
 const REFRESH_INTERVAL = 300000;
@@ -883,15 +883,39 @@ const $ = id => document.getElementById(id);
 // ════════════════════════════════════════════════════
 // FETCH DE DATOS
 // ════════════════════════════════════════════════════
-async function fetchSheet(sheet) {
-  try {
-    const res = await fetch(`${API_URL}?sheet=${sheet}&t=${Date.now()}`);
-    const json = await res.json();
-    return json.ok ? json.data : null;
-  } catch (e) {
-    console.error(`Error fetching ${sheet}:`, e);
-    return null;
-  }
+function fetchSheet(sheet) {
+  return new Promise((resolve) => {
+    const cbName = 'palma_' + sheet.replace(/[^a-z]/g,'') + '_' + Date.now();
+    const url = API_URL + '?sheet=' + sheet + '&callback=' + cbName + '&t=' + Date.now();
+
+    window[cbName] = function(json) {
+      delete window[cbName];
+      var s = document.getElementById(cbName);
+      if (s) s.parentNode.removeChild(s);
+      resolve(json && json.ok ? json.data : null);
+    };
+
+    var script = document.createElement('script');
+    script.id = cbName;
+    script.src = url;
+    script.onerror = function() {
+      delete window[cbName];
+      var s = document.getElementById(cbName);
+      if (s) s.parentNode.removeChild(s);
+      resolve(null);
+    };
+
+    setTimeout(function() {
+      if (window[cbName]) {
+        delete window[cbName];
+        var s = document.getElementById(cbName);
+        if (s) s.parentNode.removeChild(s);
+        resolve(null);
+      }
+    }, 20000);
+
+    document.head.appendChild(script);
+  });
 }
 
 async function loadAll() {
@@ -1452,7 +1476,7 @@ function showView(name, btn) {
 // ════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   // Verificar que la URL fue configurada
-  if (API_URL === 'https://script.google.com/macros/s/AKfycbxQ-ZWatZceisJuCuumV7DuwoqVxQ1-kHkV30Z5xkSKg-YFwCMkSf_M4mdtTnxk3vSM/exec') {
+  if (API_URL === 'https://script.google.com/macros/s/AKfycbzeKz9xrs4MKFfM_kswFQ7gA3bJ007lNLtAlnMBBxyV9lQBbF-rBIPkS7CUl43aRMWe/exec') {
     $('loadingText').textContent = '⚠ Configura la API_URL en el código';
     $('loadingText').style.color = '#F59E0B';
     return;
