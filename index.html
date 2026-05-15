@@ -155,7 +155,6 @@ body::before {
 }
 
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
-@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 
 .periodo-badge {
   font-size: 11px;
@@ -670,6 +669,33 @@ tr:hover td { background: rgba(37,99,235,.05); }
   <div class="section-title">Alertas Automáticas</div>
   <div class="alert-grid" id="alertGrid"></div>
 
+  <div class="section-title">Tendencia Semanal</div>
+  <div class="chart-card wide" style="margin-bottom:20px" id="tendenciaCard">
+    <div class="chart-header">
+      <div><div class="chart-title">Venta Real por Semana</div><div class="chart-sub">Evolución dentro del mes · barras = venta · línea = clientes impactados</div></div>
+      <div id="tendenciaTotales" style="font-size:11px;color:var(--muted)"></div>
+    </div>
+    <div class="chart-wrap" style="height:180px"><canvas id="chartTendencia"></canvas></div>
+  </div>
+
+  <div class="section-title">Top Marcas & SKUs</div>
+  <div class="two-col" style="margin-bottom:20px">
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Top 10 Marcas</h3><span id="marcasPeriodo">por venta real</span></div>
+      <table>
+        <thead><tr><th>Marca</th><th>Negocio</th><th style="text-align:right">Venta</th><th style="text-align:right">Part.%</th><th style="text-align:right">Clientes</th></tr></thead>
+        <tbody id="tbMarcas"></tbody>
+      </table>
+    </div>
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Top 15 SKUs</h3><span>por venta real</span></div>
+      <table>
+        <thead><tr><th>Producto</th><th>Negocio</th><th style="text-align:right">Venta</th><th style="text-align:right">Clientes</th></tr></thead>
+        <tbody id="tbSkus"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="section-title">Detalle por Vendedor</div>
   <div class="table-card">
     <div class="table-header"><h3>Ranking Completo</h3><span id="rankPeriodo">—</span></div>
@@ -706,6 +732,15 @@ tr:hover td { background: rgba(37,99,235,.05); }
   </div>
   <div class="section-title">Alertas</div>
   <div class="alert-grid" id="vendAlerts"></div>
+
+  <div class="section-title" id="vendSkusTitle">Mis Top SKUs</div>
+  <div class="table-card">
+    <div class="table-header"><h3 id="vendSkusHeader">Top productos del período</h3></div>
+    <table>
+      <thead><tr><th>#</th><th>Producto</th><th>Negocio</th><th style="text-align:right">Venta</th><th style="text-align:right">Clientes</th></tr></thead>
+      <tbody id="tbVendSkus"></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- ── VISTA COBERTURA ── -->
@@ -785,7 +820,7 @@ tr:hover td { background: rgba(37,99,235,.05); }
 
 // ⚠ REEMPLAZA ESTA URL con la URL de tu Google Apps Script implementado
 // Ejemplo: https://script.google.com/macros/s/AKfy.../exec
-const API_URL = 'https://script.google.com/macros/s/AKfycbzNyGq60YUiX0wqSp-ea-OKvvSc55q-4rUPVR3ss_as94UDeYVycsDnzVTQOFoh3l1C/exec';
+const API_URL = 'TU_URL_APPS_SCRIPT_AQUI';
 
 // Intervalo de actualización (5 minutos = 300000 ms)
 const REFRESH_INTERVAL = 300000;
@@ -827,6 +862,9 @@ let STATE = {
   devoluciones: { total: 0, por_concepto: [], por_vendedor: [], detalle: [] },
   clientesCero: { total: 0, por_vendedor: [], detalle: [] },
   clientesNuevos: { total: 0, por_vendedor: [], detalle: [] },
+  tendencia:    [],
+  skus:         { global: [], por_vendedor: [] },
+  marcas:       [],
 };
 
 let CHARTS = {};
@@ -837,42 +875,18 @@ let refreshTimer = null;
 // ════════════════════════════════════════════════════
 const fmt = v => '$' + Math.abs(+v || 0).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtK = v => (+v || 0) >= 1000 ? '$' + ((+v)/1000).toFixed(0) + 'k' : '$' + (+v || 0).toFixed(0);
-const fK = fmtK;
 const pct = v => (+v || 0).toFixed(1) + '%';
+const dc = id => { if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; } };
 const $ = id => document.getElementById(id);
-const arr = v => Array.isArray(v) ? v : [];
-const obj = (v, fallback) => v && typeof v === 'object' && !Array.isArray(v) ? v : fallback;
-
-const dc = id => {
-  const canvas = $(id);
-  if (!canvas || typeof Chart === 'undefined') return;
-  const existing = Chart.getChart(canvas);
-  if (existing) existing.destroy();
-  if (CHARTS[id]) delete CHARTS[id];
-};
 
 // ════════════════════════════════════════════════════
 // FETCH DE DATOS
 // ════════════════════════════════════════════════════
 async function fetchSheet(sheet) {
   try {
-    const url = new URL(API_URL);
-    url.searchParams.set('sheet', sheet);
-    url.searchParams.set('t', Date.now().toString());
-
-    const res = await fetch(url.toString(), { cache: 'no-store' });
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} al cargar ${sheet}`);
-    }
-
+    const res = await fetch(`${API_URL}?sheet=${sheet}&t=${Date.now()}`);
     const json = await res.json();
-
-    if (!json.ok) {
-      throw new Error(json.error || `Respuesta inválida en ${sheet}`);
-    }
-
-    return json.data;
+    return json.ok ? json.data : null;
   } catch (e) {
     console.error(`Error fetching ${sheet}:`, e);
     return null;
@@ -881,116 +895,67 @@ async function fetchSheet(sheet) {
 
 async function loadAll() {
   const btn = $('refreshBtn');
+  btn.classList.add('loading');
+  btn.querySelector('svg').style.animation = 'spin 1s linear infinite';
+  $('loadingText').textContent = 'Cargando datos...';
 
-  try {
-    if (btn) {
-      btn.classList.add('loading');
-      const icon = btn.querySelector('svg');
-      if (icon) icon.style.animation = 'spin 1s linear infinite';
-    }
+  // Cargar en paralelo
+  const [resumen, vendedores, cobertura, cobNegocio, efectividad, devoluciones, cero, nuevos] = await Promise.all([
+    fetchSheet('resumen'),
+    fetchSheet('vendedores'),
+    fetchSheet('cobertura'),
+    fetchSheet('cob_negocio'),
+    fetchSheet('efectividad'),
+    fetchSheet('devoluciones'),
+    fetchSheet('clientes_cero'),
+    fetchSheet('clientes_nuevos'),
+  ]);
 
-    if ($('loadingText')) {
-      $('loadingText').textContent = 'Cargando datos...';
-      $('loadingText').style.color = 'var(--muted)';
-    }
+  if (resumen)      STATE.resumen      = resumen;
+  if (vendedores)   STATE.vendedores   = vendedores;
+  if (cobertura)    STATE.cobertura    = cobertura;
+  if (cobNegocio)   STATE.cobNegocio   = cobNegocio;
+  if (efectividad)  STATE.efectividad  = efectividad;
+  if (devoluciones) STATE.devoluciones = devoluciones;
+  if (cero)         STATE.clientesCero = cero;
+  if (nuevos)       STATE.clientesNuevos = nuevos;
 
-    const [
-      resumen,
-      vendedores,
-      cobertura,
-      cobNegocio,
-      efectividad,
-      devoluciones,
-      cero,
-      nuevos
-    ] = await Promise.all([
-      fetchSheet('resumen'),
-      fetchSheet('vendedores'),
-      fetchSheet('cobertura'),
-      fetchSheet('cob_negocio'),
-      fetchSheet('efectividad'),
-      fetchSheet('devoluciones'),
-      fetchSheet('clientes_cero'),
-      fetchSheet('clientes_nuevos'),
-    ]);
+  // Poblar selector de vendedores
+  const sel = $('filtroVendedor');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos los vendedores</option>';
+  STATE.vendedores.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.cod;
+    opt.textContent = v.nombre;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
 
-    STATE.resumen = obj(resumen, null);
-    STATE.vendedores = arr(vendedores);
-    STATE.cobertura = arr(cobertura);
-    STATE.cobNegocio = arr(cobNegocio);
-    STATE.efectividad = obj(efectividad, { por_semana: [], resumen_mes: [] });
-    STATE.efectividad.por_semana = arr(STATE.efectividad.por_semana);
-    STATE.efectividad.resumen_mes = arr(STATE.efectividad.resumen_mes);
-    STATE.devoluciones = obj(devoluciones, { total: 0, por_concepto: [], por_vendedor: [], detalle: [] });
-    STATE.devoluciones.por_concepto = arr(STATE.devoluciones.por_concepto);
-    STATE.devoluciones.por_vendedor = arr(STATE.devoluciones.por_vendedor);
-    STATE.devoluciones.detalle = arr(STATE.devoluciones.detalle);
-    STATE.clientesCero = obj(cero, { total: 0, por_vendedor: [], detalle: [] });
-    STATE.clientesCero.por_vendedor = arr(STATE.clientesCero.por_vendedor);
-    STATE.clientesCero.detalle = arr(STATE.clientesCero.detalle);
-    STATE.clientesNuevos = obj(nuevos, { total: 0, por_vendedor: [], detalle: [] });
-    STATE.clientesNuevos.por_vendedor = arr(STATE.clientesNuevos.por_vendedor);
-    STATE.clientesNuevos.detalle = arr(STATE.clientesNuevos.detalle);
+  // Actualizar UI
+  renderAll();
 
-    const sel = $('filtroVendedor');
-    if (sel) {
-      const cur = sel.value;
-      sel.innerHTML = '<option value="">Todos los vendedores</option>';
+  // Ocultar loading
+  $('loadingOverlay').classList.add('hidden');
+  setTimeout(() => $('loadingOverlay').style.display = 'none', 500);
 
-      STATE.vendedores.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.cod;
-        opt.textContent = v.nombre;
-        sel.appendChild(opt);
-      });
-
-      if (cur) sel.value = cur;
-    }
-
-    renderAll();
-
-    const overlay = $('loadingOverlay');
-    if (overlay) {
-      overlay.classList.add('hidden');
-      setTimeout(() => overlay.style.display = 'none', 500);
-    }
-
-    const now = new Date().toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' });
-
-    if ($('lastUpdate')) $('lastUpdate').textContent = `Act. ${now}`;
-
-    if (STATE.resumen) {
-      if ($('topPeriodo')) $('topPeriodo').textContent = STATE.resumen.periodo || '—';
-      if ($('rankPeriodo')) $('rankPeriodo').textContent = STATE.resumen.periodo || '—';
-    }
-
-    if ($('filterInfo')) {
-      $('filterInfo').textContent = `${STATE.vendedores.length} vendedores · ${STATE.resumen?.clientes_maestro || 0} clientes en maestro`;
-    }
-
-  } catch (e) {
-    console.error('Error general cargando dashboard:', e);
-
-    if ($('loadingText')) {
-      $('loadingText').textContent = 'Error cargando datos. Revisa la consola.';
-      $('loadingText').style.color = '#F59E0B';
-    }
-
-    if ($('filterInfo')) {
-      $('filterInfo').textContent = 'Error cargando datos';
-    }
-
-  } finally {
-    if (btn) {
-      btn.classList.remove('loading');
-      const icon = btn.querySelector('svg');
-      if (icon) icon.style.animation = '';
-    }
+  // Update timestamps
+  const now = new Date().toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' });
+  $('lastUpdate').textContent = `Act. ${now}`;
+  if (STATE.resumen) {
+    $('topPeriodo').textContent = STATE.resumen.periodo || '—';
+    $('rankPeriodo').textContent = STATE.resumen.periodo || '—';
   }
+  $('filterInfo').textContent = `${STATE.vendedores.length} vendedores · ${STATE.resumen?.clientes_maestro || 0} clientes en maestro`;
+
+  btn.classList.remove('loading');
+  btn.querySelector('svg').style.animation = '';
 }
 
 function renderAll() {
   renderGerencial();
+  renderTendencia();
+  renderMarcasSkus();
   renderCobertura();
   renderEfectividad();
   renderDevoluciones();
@@ -998,6 +963,92 @@ function renderAll() {
 
   const vSel = $('filtroVendedor').value;
   if (vSel) renderVendedor(vSel);
+}
+
+// ════════════════════════════════════════════════════
+// TENDENCIA SEMANAL
+// ════════════════════════════════════════════════════
+function renderTendencia() {
+  const data = STATE.tendencia;
+  if (!data.length) return;
+
+  dc('chartTendencia');
+  const labels = data.map(s => `Sem ${s.semana}`);
+  const ventas  = data.map(s => s.venta);
+  const clientes = data.map(s => s.clientes);
+  const maxVenta = Math.max(...ventas);
+
+  $('tendenciaTotales').textContent = `${data.length} semanas · pico ${fmt(maxVenta)}`;
+
+  CHARTS.tendencia = new Chart($('chartTendencia').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Venta Real', data: ventas,
+          backgroundColor: ventas.map(v => v === maxVenta ? COLORS.cyan+'CC' : COLORS.blue+'99'),
+          borderRadius: 4, borderSkipped: false, borderWidth: 0, yAxisID: 'y' },
+        { type: 'line', label: 'Clientes', data: clientes,
+          borderColor: COLORS.amber, backgroundColor: COLORS.amber+'20',
+          borderWidth: 2, pointRadius: 4, pointBackgroundColor: COLORS.amber,
+          fill: true, tension: 0.3, yAxisID: 'y2' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#94A3B8', font: { size: 11 } } },
+        tooltip: { callbacks: {
+          label: c => c.datasetIndex === 0 ? ` Venta: ${fmt(c.raw)}` : ` Clientes: ${c.raw}`
+        }}
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 11 } }, border: { display: false } },
+        y: { position: 'left', grid: { color: 'rgba(148,163,184,.08)' }, ticks: { callback: fK, color: '#94A3B8', font: { size: 10 } }, border: { display: false } },
+        y2: { position: 'right', grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 10 } }, border: { display: false } }
+      }
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════
+// MARCAS Y SKUs
+// ════════════════════════════════════════════════════
+function renderMarcasSkus() {
+  // Marcas
+  const nc = { '01-Carnico':'#3B82F6','02-Galletas':'#10B981','03-Chocolates':'#F59E0B','04-Café':'#8B5CF6','10-TMLUC':'#06B6D4' };
+  const totalMarcas = STATE.marcas.reduce((s,m) => s+m.venta, 0);
+
+  $('tbMarcas').innerHTML = STATE.marcas.slice(0,10).map((m,i) => {
+    const color = nc[m.negocio] || '#64748B';
+    const barW  = totalMarcas > 0 ? Math.round(m.venta/totalMarcas*100) : 0;
+    return `<tr>
+      <td style="font-weight:600;font-size:12px">${m.marca}</td>
+      <td><span class="badge" style="background:${color}18;color:${color};border:1px solid ${color}30">${(m.negocio||'').replace(/^\d+-/,'')}</span></td>
+      <td style="text-align:right"><span class="mono">${fmt(m.venta)}</span></td>
+      <td style="text-align:right">
+        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+          <div style="width:50px;height:3px;background:var(--navy-4);border-radius:2px;overflow:hidden">
+            <div style="width:${Math.min(barW*3,100)}%;height:100%;background:${color};border-radius:2px"></div>
+          </div>
+          <span style="color:var(--muted);font-size:10px;font-family:'DM Mono',monospace;min-width:32px">${m.pct}%</span>
+        </div>
+      </td>
+      <td style="text-align:right;color:var(--muted)">${m.clientes}</td>
+    </tr>`;
+  }).join('');
+
+  // SKUs
+  $('tbSkus').innerHTML = STATE.skus.global.slice(0,15).map((s,i) => {
+    const color = nc[s.negocio] || '#64748B';
+    return `<tr>
+      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">${s.nombre||s.sku}</td>
+      <td><span class="badge" style="background:${color}18;color:${color};border:1px solid ${color}30">${(s.negocio||'').replace(/^\d+-/,'')}</span></td>
+      <td style="text-align:right"><span class="mono">${fmt(s.venta)}</span></td>
+      <td style="text-align:right;color:var(--muted)">${s.clientes}</td>
+    </tr>`;
+  }).join('');
 }
 
 function applyFilters() {
@@ -1051,19 +1102,12 @@ function renderGerencial() {
     }
   });
 
-  // Negocio donut — agregamos desde cobNegocio
-  const negTotals = {};
-  STATE.cobNegocio.forEach(r => {
-    const neg = r.negocio || '';
-    const imp = parseFloat(r.impactados) || 0;
-    // Aproximar venta desde vendedores
-    negTotals[neg] = (negTotals[neg] || 0) + imp;
-  });
-
-  // Mejor usar venta real por negocio desde vendedores si disponible
-  // Por ahora usamos distribución de cobertura por negocio
-  const negKeys = Object.keys(negTotals).filter(k => k && !k.includes('Barras') && !k.includes('Nutri') && !k.includes('Otros') && !k.includes('Snacks') && !k.includes('Helados')).slice(0, 5);
-  const negVals = negKeys.map(k => negTotals[k]);
+  // Negocio donut — usar venta real en $ desde resumen
+  const negData = (r.venta_por_negocio || [])
+    .filter(n => n.negocio && !n.negocio.includes('Barras') && !n.negocio.includes('Nutri') && !n.negocio.includes('Otros') && !n.negocio.includes('Snacks') && !n.negocio.includes('Helados'))
+    .slice(0, 5);
+  const negKeys = negData.map(n => n.negocio);
+  const negVals = negData.map(n => n.venta);
 
   dc('chartNegocio');
   $('totalNegocio').textContent = fmt(r.venta_real);
@@ -1234,6 +1278,22 @@ function renderVendedor(cod) {
   else als.push({ t: 'alert-green', m: `✅ <strong>Cobertura en meta:</strong> ${v.clientes_imp} de ${v.maestro} clientes impactados` });
   als.push({ t: 'alert-blue', m: `ℹ <strong>Efectividad del mes:</strong> ${pct(v.efectividad)} · Rank #${STATE.vendedores.indexOf(v)+1} del equipo` });
   $('vendAlerts').innerHTML = als.map(a => `<div class="alert ${a.t}">${a.m}</div>`).join('');
+
+  // Top SKUs del vendedor
+  const vendSkus = STATE.skus.por_vendedor.find(x => x.cod === cod);
+  const nc2 = { '01-Carnico':'#3B82F6','02-Galletas':'#10B981','03-Chocolates':'#F59E0B','04-Café':'#8B5CF6','10-TMLUC':'#06B6D4' };
+  if ($('tbVendSkus')) {
+    $('tbVendSkus').innerHTML = (vendSkus?.skus || []).map((s,i) => {
+      const color = nc2[s.negocio] || '#64748B';
+      return `<tr>
+        <td style="color:var(--muted);font-size:11px">${i+1}</td>
+        <td style="font-size:11px">${s.nombre||s.sku}</td>
+        <td><span class="badge" style="background:${color}18;color:${color};border:1px solid ${color}30">${(s.negocio||'').replace(/^\d+-/,'')}</span></td>
+        <td style="text-align:right"><span class="mono">${fmt(s.venta)}</span></td>
+        <td style="text-align:right;color:var(--muted)">${s.clientes}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Sin datos de SKUs</td></tr>';
+  }
 }
 
 // ════════════════════════════════════════════════════
@@ -1390,14 +1450,9 @@ function showView(name, btn) {
 // INIT
 // ════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
+  // Verificar que la URL fue configurada
   if (API_URL === 'TU_URL_APPS_SCRIPT_AQUI') {
     $('loadingText').textContent = '⚠ Configura la API_URL en el código';
-    $('loadingText').style.color = '#F59E0B';
-    return;
-  }
-
-  if (typeof Chart === 'undefined') {
-    $('loadingText').textContent = '⚠ No se pudo cargar Chart.js. Revisa tu conexión.';
     $('loadingText').style.color = '#F59E0B';
     return;
   }
