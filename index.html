@@ -820,7 +820,7 @@ tr:hover td { background: rgba(37,99,235,.05); }
 
 // ⚠ REEMPLAZA ESTA URL con la URL de tu Google Apps Script implementado
 // Ejemplo: https://script.google.com/macros/s/AKfy.../exec
-const API_URL = 'https://script.google.com/macros/s/AKfycbz7lo-PmDw77U5DhkyS7srZGp9nGxoFsxEbXybUD2gFoZqZxojFuUuv6lvpS0j2Beq9/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzeKz9xrs4MKFfM_kswFQ7gA3bJ007lNLtAlnMBBxyV9lQBbF-rBIPkS7CUl43aRMWe/exec';
 
 // Intervalo de actualización (5 minutos = 300000 ms)
 const REFRESH_INTERVAL = 300000;
@@ -885,45 +885,33 @@ const $ = id => document.getElementById(id);
 // ════════════════════════════════════════════════════
 function fetchSheet(sheet) {
   return new Promise((resolve) => {
-    const cbName = 'palma_' + sheet.replace(/[^a-z0-9]/gi, '') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    const url = API_URL + '?sheet=' + encodeURIComponent(sheet) + '&callback=' + cbName + '&t=' + Date.now();
-    let done = false;
-
-    function cleanup() {
-      delete window[cbName];
-      const s = document.getElementById(cbName);
-      if (s) s.parentNode.removeChild(s);
-    }
+    const cbName = 'palma_' + sheet.replace(/[^a-z]/g,'') + '_' + Date.now();
+    const url = API_URL + '?sheet=' + sheet + '&callback=' + cbName + '&t=' + Date.now();
 
     window[cbName] = function(json) {
-      if (done) return;
-      done = true;
-      cleanup();
-      if (!json || json.ok !== true) {
-        console.warn('Respuesta inválida de API:', sheet, json);
-        resolve({ sheet, ok: false, data: null, error: json?.error || 'Respuesta inválida' });
-        return;
-      }
-      resolve({ sheet, ok: true, data: json.data });
+      delete window[cbName];
+      var s = document.getElementById(cbName);
+      if (s) s.parentNode.removeChild(s);
+      resolve(json && json.ok ? json.data : null);
     };
 
-    const script = document.createElement('script');
+    var script = document.createElement('script');
     script.id = cbName;
     script.src = url;
     script.onerror = function() {
-      if (done) return;
-      done = true;
-      cleanup();
-      console.error('No cargó el endpoint:', sheet, url);
-      resolve({ sheet, ok: false, data: null, error: 'No cargó el endpoint' });
+      delete window[cbName];
+      var s = document.getElementById(cbName);
+      if (s) s.parentNode.removeChild(s);
+      resolve(null);
     };
 
     setTimeout(function() {
-      if (done) return;
-      done = true;
-      cleanup();
-      console.error('Timeout consultando:', sheet, url);
-      resolve({ sheet, ok: false, data: null, error: 'Timeout' });
+      if (window[cbName]) {
+        delete window[cbName];
+        var s = document.getElementById(cbName);
+        if (s) s.parentNode.removeChild(s);
+        resolve(null);
+      }
     }, 20000);
 
     document.head.appendChild(script);
@@ -936,8 +924,8 @@ async function loadAll() {
   btn.querySelector('svg').style.animation = 'spin 1s linear infinite';
   $('loadingText').textContent = 'Cargando datos...';
 
-  // Cargar en paralelo. Importante: antes faltaban tendencia, skus y marcas.
-  const results = await Promise.all([
+  // Cargar en paralelo
+  const [resumen, vendedores, cobertura, cobNegocio, efectividad, devoluciones, cero, nuevos] = await Promise.all([
     fetchSheet('resumen'),
     fetchSheet('vendedores'),
     fetchSheet('cobertura'),
@@ -946,33 +934,16 @@ async function loadAll() {
     fetchSheet('devoluciones'),
     fetchSheet('clientes_cero'),
     fetchSheet('clientes_nuevos'),
-    fetchSheet('tendencia'),
-    fetchSheet('skus'),
-    fetchSheet('marcas'),
   ]);
 
-  const bySheet = Object.fromEntries(results.map(r => [r.sheet, r]));
-  const failed = results.filter(r => !r.ok).map(r => r.sheet);
-
-  if (bySheet.resumen?.ok)        STATE.resumen = bySheet.resumen.data;
-  if (bySheet.vendedores?.ok)     STATE.vendedores = bySheet.vendedores.data || [];
-  if (bySheet.cobertura?.ok)      STATE.cobertura = bySheet.cobertura.data || [];
-  if (bySheet.cob_negocio?.ok)    STATE.cobNegocio = bySheet.cob_negocio.data || [];
-  if (bySheet.efectividad?.ok)    STATE.efectividad = bySheet.efectividad.data || { por_semana: [], resumen_mes: [] };
-  if (bySheet.devoluciones?.ok)   STATE.devoluciones = bySheet.devoluciones.data || { total: 0, por_concepto: [], por_vendedor: [], detalle: [] };
-  if (bySheet.clientes_cero?.ok)  STATE.clientesCero = bySheet.clientes_cero.data || { total: 0, por_vendedor: [], detalle: [] };
-  if (bySheet.clientes_nuevos?.ok) STATE.clientesNuevos = bySheet.clientes_nuevos.data || { total: 0, por_vendedor: [], detalle: [] };
-  if (bySheet.tendencia?.ok)      STATE.tendencia = bySheet.tendencia.data || [];
-  if (bySheet.skus?.ok)           STATE.skus = bySheet.skus.data || { global: [], por_vendedor: [] };
-  if (bySheet.marcas?.ok)         STATE.marcas = bySheet.marcas.data || [];
-
-  if (!STATE.resumen) {
-    $('loadingText').textContent = 'No se pudo cargar resumen. Revisa permisos del Apps Script o la hoja BASE_ACUMULADA.';
-    $('loadingText').style.color = '#EF4444';
-    btn.classList.remove('loading');
-    btn.querySelector('svg').style.animation = '';
-    return;
-  }
+  if (resumen)      STATE.resumen      = resumen;
+  if (vendedores)   STATE.vendedores   = vendedores;
+  if (cobertura)    STATE.cobertura    = cobertura;
+  if (cobNegocio)   STATE.cobNegocio   = cobNegocio;
+  if (efectividad)  STATE.efectividad  = efectividad;
+  if (devoluciones) STATE.devoluciones = devoluciones;
+  if (cero)         STATE.clientesCero = cero;
+  if (nuevos)       STATE.clientesNuevos = nuevos;
 
   // Poblar selector de vendedores
   const sel = $('filtroVendedor');
@@ -1000,9 +971,7 @@ async function loadAll() {
     $('topPeriodo').textContent = STATE.resumen.periodo || '—';
     $('rankPeriodo').textContent = STATE.resumen.periodo || '—';
   }
-  $('filterInfo').textContent = failed.length
-    ? `${STATE.vendedores.length} vendedores · ${STATE.resumen?.clientes_maestro || 0} clientes en maestro · fallaron: ${failed.join(', ')}`
-    : `${STATE.vendedores.length} vendedores · ${STATE.resumen?.clientes_maestro || 0} clientes en maestro`;
+  $('filterInfo').textContent = `${STATE.vendedores.length} vendedores · ${STATE.resumen?.clientes_maestro || 0} clientes en maestro`;
 
   btn.classList.remove('loading');
   btn.querySelector('svg').style.animation = '';
@@ -1108,11 +1077,17 @@ function renderMarcasSkus() {
 }
 
 function applyFilters() {
-  renderAll();
   const vSel = $('filtroVendedor').value;
   if (vSel) {
+    // Vendedor seleccionado → ir directo a Mi Panel
     showView('vendedor', document.querySelector('.nav-tab:nth-child(2)'));
     renderVendedor(vSel);
+  } else {
+    // Sin vendedor → vista gerencial con todos
+    showView('gerencial', document.querySelector('.nav-tab:nth-child(1)'));
+    renderGerencial();
+    renderTendencia();
+    renderMarcasSkus();
   }
 }
 
@@ -1250,8 +1225,14 @@ function renderGerencial() {
 // VISTA VENDEDOR
 // ════════════════════════════════════════════════════
 function renderVendedor(cod) {
-  const v = STATE.vendedores.find(x => x.cod === cod);
-  if (!v) return;
+  // Try exact match first, then partial match
+  let v = STATE.vendedores.find(x => x.cod === cod);
+  if (!v) v = STATE.vendedores.find(x => String(x.cod).includes(cod) || String(x.nombre).includes(cod));
+  if (!v) {
+    console.warn('Vendedor no encontrado:', cod, 'disponibles:', STATE.vendedores.map(x=>x.cod));
+    $('vendKpis').innerHTML = '<div style="padding:20px;color:var(--muted)">Cargando datos del vendedor...</div>';
+    return;
+  }
 
   $('vendChartTitle').textContent = `Venta por Negocio · ${v.nombre.split(' - ')[1] || v.nombre}`;
 
@@ -1506,10 +1487,9 @@ function showView(name, btn) {
 // INIT
 // ════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
-  // Validación real: solo falla si está vacía o si todavía quedó un placeholder.
-  // Antes comparaba contra TU URL real y por eso siempre mostraba “Configura la API_URL”.
-  if (!API_URL || API_URL.includes('AKfy...') || !API_URL.startsWith('https://script.google.com/macros/s/')) {
-    $('loadingText').textContent = '⚠ API_URL está vacía o no parece una URL válida de Apps Script.';
+  // Verificar que la URL fue configurada
+  if (API_URL === 'https://script.google.com/macros/s/AKfycbzeKz9xrs4MKFfM_kswFQ7gA3bJ007lNLtAlnMBBxyV9lQBbF-rBIPkS7CUl43aRMWe/exec') {
+    $('loadingText').textContent = '⚠ Configura la API_URL en el código';
     $('loadingText').style.color = '#F59E0B';
     return;
   }
