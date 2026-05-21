@@ -877,7 +877,22 @@ const fmt = v => '$' + Math.abs(+v || 0).toLocaleString('en', { minimumFractionD
 const fmtK = v => (+v || 0) >= 1000 ? '$' + ((+v)/1000).toFixed(0) + 'k' : '$' + (+v || 0).toFixed(0);
 const fK = fmtK;
 const pct = v => (+v || 0).toFixed(1) + '%';
-const dc = id => { if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; } };
+const dc = id => {
+  try {
+    if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; }
+    const canvas = document.getElementById(id);
+    if (canvas) {
+      const existing = Chart.getChart(canvas);
+      if (existing) existing.destroy();
+      const parent = canvas.parentNode;
+      if (parent) {
+        const newCanvas = document.createElement('canvas');
+        newCanvas.id = id;
+        parent.replaceChild(newCanvas, canvas);
+      }
+    }
+  } catch(e) {}
+};
 const $ = id => document.getElementById(id);
 
 // ════════════════════════════════════════════════════
