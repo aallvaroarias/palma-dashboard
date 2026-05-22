@@ -1351,6 +1351,26 @@ function dc(id){
   if (existing) existing.destroy();
 }
 
+// Ajusta el contenedor de un gráfico de barras horizontales
+// para que cada barra tenga suficiente espacio y se vean TODOS los nombres.
+function fitBarHeight(canvasId, n, pxPerBar, minH){
+  const wrap = $(canvasId)?.parentElement;
+  if (wrap) wrap.style.height = Math.max(minH || 180, n * (pxPerBar || 34) + 48) + 'px';
+}
+
+// Opciones Y estándar para barras horizontales — sin autoSkip
+function yAxisLabels(extraOpts){
+  return Object.assign({
+    ticks: {
+      color: '#7A9BB8',
+      autoSkip: false,
+      maxRotation: 0,
+      font: { size: 11 }
+    },
+    grid: { display: false }
+  }, extraOpts || {});
+}
+
 async function fetchSheet(sheet, extraParams){
   try {
     let url = `${API_URL}?sheet=${sheet}&t=${Date.now()}`;
@@ -1532,6 +1552,7 @@ function renderGerencial(){
   const vs = [...STATE.vendedores].sort((a,b) => (b.venta_bruta || 0) - (a.venta_bruta || 0));
 
   dc('chartRanking');
+  fitBarHeight('chartRanking', vs.length, 36, 220);
   CHARTS.ranking = new Chart($('chartRanking'), {
     type:'bar',
     data:{
@@ -1549,8 +1570,8 @@ function renderGerencial(){
       maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c => fmt(c.raw)}} },
       scales:{
-        x:{ ticks:{callback:fmtK,color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
-        y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+        x:{ ticks:{callback:fmtK, color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+        y: yAxisLabels()
       }
     }
   });
@@ -1630,6 +1651,7 @@ function renderEfectividadEquipo(){
   };
 
   dc('chartEfectGerencial');
+  fitBarHeight('chartEfectGerencial', data.length, 36, 200);
   CHARTS.efectGerencial = new Chart($('chartEfectGerencial'), {
     type: 'bar',
     plugins: [metaLine80],
@@ -1657,10 +1679,10 @@ function renderEfectividadEquipo(){
       scales: {
         x: {
           beginAtZero: true, max: 100,
-          ticks: { callback: v => v + '%', color: '#94A3B8' },
+          ticks: { callback: v => v + '%', color: '#7A9BB8' },
           grid: { color: 'rgba(148,163,184,.08)' }
         },
-        y: { ticks: { color: '#94A3B8' }, grid: { display: false } }
+        y: yAxisLabels()
       }
     }
   });
@@ -1794,6 +1816,7 @@ function renderChartsVendedor(v) {
         ctx.restore();
       }
     };
+    fitBarHeight('chartVendCobNeg', cobNegVend.length, 38, 160);
     CHARTS.vendCobNeg = new Chart($('chartVendCobNeg'),{
       type:'bar',
       plugins:[metaLine75vend],
@@ -1815,8 +1838,8 @@ function renderChartsVendedor(v) {
           tooltip:{callbacks:{label:c=>`${pct(c.raw)}  (${cobNegVend[c.dataIndex]?.impactados||0} / ${cobNegVend[c.dataIndex]?.clientes_maestro||0})`}}
         },
         scales:{
-          x:{ beginAtZero:true, max:100, ticks:{callback:vv=>vv+'%',color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
-          y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+          x:{ beginAtZero:true, max:100, ticks:{callback:vv=>vv+'%', color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y: yAxisLabels()
         }
       }
     });
@@ -2138,8 +2161,8 @@ function renderCoberturaNegocioEquipo(){
           tooltip:{callbacks:{label: c => `${pct(c.raw)}  (${negAvg[c.dataIndex]?.n} asesores)`}}
         },
         scales:{
-          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%',color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
-          y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%', color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y: yAxisLabels()
         }
       }
     });
@@ -2221,6 +2244,7 @@ function renderCobNegDetalle(){
 
   dc('chartCobNegDetalle');
   if($('chartCobNegDetalle') && rows.length){
+    fitBarHeight('chartCobNegDetalle', rows.length, 36, 180);
     CHARTS.cobNegDet = new Chart($('chartCobNegDetalle'),{
       type:'bar',
       plugins:[metaLine75det],
@@ -2242,8 +2266,8 @@ function renderCobNegDetalle(){
           tooltip:{callbacks:{label:c=>`${pct(c.raw)}  (${rows[c.dataIndex]?.impactados||0} / ${rows[c.dataIndex]?.clientes_maestro||0})`}}
         },
         scales:{
-          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%',color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
-          y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%', color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y: yAxisLabels()
         }
       }
     });
@@ -2298,6 +2322,7 @@ function renderCobertura(){
       }
     };
 
+    fitBarHeight('chartCobertura', data.length, 36, 200);
     CHARTS.cobertura = new Chart($('chartCobertura'), {
       type: 'bar',
       plugins: [metaLinePlugin],
@@ -2316,26 +2341,15 @@ function renderCobertura(){
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: c => `${pct(c.raw)}`
-            }
-          }
+          tooltip: { callbacks: { label: c => `${pct(c.raw)}` } }
         },
         scales: {
           x: {
-            beginAtZero: true,
-            max: 100,
-            ticks: {
-              callback: v => v + '%',
-              color: '#94A3B8'
-            },
+            beginAtZero: true, max: 100,
+            ticks: { callback: v => v + '%', color: '#7A9BB8' },
             grid: { color: 'rgba(148,163,184,.08)' }
           },
-          y: {
-            ticks: { color: '#94A3B8' },
-            grid: { display: false }
-          }
+          y: yAxisLabels()
         }
       }
     });
@@ -2446,6 +2460,7 @@ function renderClientesGerencial(){
 
   dc('chartNuevosGer');
   if (vends.length) {
+    fitBarHeight('chartNuevosGer', vends.length, 34, 160);
     CHARTS.nuevosGer = new Chart($('chartNuevosGer'), {
       type: 'bar',
       data: {
@@ -2456,8 +2471,8 @@ function renderClientesGerencial(){
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw + ' clientes' } } },
         scales: {
-          x: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
-          y: { ticks:{ color:'#94A3B8', font:{ size:11 } } }
+          x: { ticks:{ color:'#7A9BB8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          y: yAxisLabels()
         }
       }
     });
@@ -2514,6 +2529,7 @@ function renderClientes(){
   dc('chartNuevosRank');
   const vends = (cn.por_vendedor || []).slice(0, 10);
   if (vends.length) {
+    fitBarHeight('chartNuevosRank', vends.length, 34, 180);
     CHARTS.nuevosRank = new Chart($('chartNuevosRank'), {
       type: 'bar',
       data: {
@@ -2524,8 +2540,8 @@ function renderClientes(){
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw + ' clientes' } } },
         scales: {
-          x: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
-          y: { ticks:{ color:'#94A3B8', font:{ size:11 } } }
+          x: { ticks:{ color:'#7A9BB8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          y: yAxisLabels()
         }
       }
     });
