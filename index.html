@@ -626,9 +626,11 @@ tr:hover td { background: rgba(37,99,235,.05); }
 
   <div class="section-title">KPIs Globales</div>
   <div class="kpi-grid" id="kpiGrid">
-    <div class="kpi-card blue"><div class="kpi-label">Venta Real</div><div class="kpi-value" id="kVenta">—</div><div class="kpi-sub">mes en curso</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value" id="kVenta">—</div><div class="kpi-sub">igual a Ecom</div></div>
     <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value" id="kDevol">—</div><div class="kpi-sub" id="kDevolPct">—</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value" id="kNeta">—</div><div class="kpi-sub">después de devol.</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value" id="kAverias">—</div><div class="kpi-sub" id="kAveriasPct">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Total descuentos</div><div class="kpi-value" id="kDescuentoTotal">—</div><div class="kpi-sub" id="kDescuentoTotalPct">—</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value" id="kNeta">—</div><div class="kpi-sub">después de devol. y averías</div></div>
     <div class="kpi-card cyan"><div class="kpi-label">Cobertura</div><div class="kpi-value" id="kCob">—</div><div class="kpi-sub" id="kCobSub">clientes</div><div class="kpi-bar"><div class="kpi-bar-fill" id="kCobBar" style="background:var(--green)"></div></div></div>
     <div class="kpi-card amber"><div class="kpi-label">Ticket Promedio</div><div class="kpi-value" id="kTicket">—</div><div class="kpi-sub">por cliente</div></div>
     <div class="kpi-card purple"><div class="kpi-label">Efectividad</div><div class="kpi-value" id="kEfect">—</div><div class="kpi-sub">promedio equipo</div></div>
@@ -926,8 +928,8 @@ async function loadAll(){
 
   if (resumen) STATE.resumen = resumen;
   if (vendedores) STATE.vendedores = vendedores.filter(vendedorValido);
-  if (cobertura) STATE.cobertura = cobertura.filter(r => !esBodega(r.vendedor));
-  if (cobNegocio) STATE.cobNegocio = cobNegocio.filter(r => !esBodega(r.vendedor));
+  if (cobertura) STATE.cobertura = cobertura.filter(r => !esBodega(getCoberturaVendedor(r)));
+  if (cobNegocio) STATE.cobNegocio = cobNegocio.filter(r => !esBodega(getCoberturaVendedor(r)));
   if (efectividad) STATE.efectividad = efectividad;
   if (devoluciones) STATE.devoluciones = devoluciones;
   if (cero) STATE.clientesCero = cero;
@@ -987,13 +989,20 @@ function renderGerencial(){
   const r = STATE.resumen;
   if (!r) return;
 
-  $('kVenta').textContent = fmt(r.venta_real);
-  $('kDevol').textContent = fmt(r.devolucion_total);
-  $('kDevolPct').innerHTML = `<span class="down">${pct(r.pct_devolucion)}</span> de venta bruta`;
-  $('kNeta').textContent = fmt(r.venta_neta);
-  $('kCob').textContent = pct(r.cobertura_pct);
+  $('kVenta').textContent = fmt(r.venta_bruta ?? r.venta_real ?? 0);
+  $('kDevol').textContent = fmt(r.devolucion_total || 0);
+  $('kDevolPct').innerHTML = `<span class="down">${pct(r.pct_devolucion || 0)}</span> de venta bruta`;
+
+  if ($('kAverias')) $('kAverias').textContent = fmt(r.averia_total || 0);
+  if ($('kAveriasPct')) $('kAveriasPct').innerHTML = `<span class="down">${pct(r.pct_averia || 0)}</span> de venta bruta`;
+
+  if ($('kDescuentoTotal')) $('kDescuentoTotal').textContent = fmt(r.descuento_total || 0);
+  if ($('kDescuentoTotalPct')) $('kDescuentoTotalPct').innerHTML = `<span class="down">${pct(r.pct_descuento_total || 0)}</span> devol. + averías`;
+
+  $('kNeta').textContent = fmt(r.venta_neta || 0);
+  $('kCob').textContent = pct(r.cobertura_pct || 0);
   $('kCobSub').textContent = `${r.clientes_impactados} / ${r.clientes_maestro}`;
-  $('kCobBar').style.width = Math.min(r.cobertura_pct,100) + '%';
+  $('kCobBar').style.width = Math.min(r.cobertura_pct || 0, 100) + '%';
   $('kTicket').textContent = fmt(r.ticket_promedio);
   $('kEfect').textContent = pct(r.efectividad_pct);
 
@@ -1097,6 +1106,99 @@ function renderAlertas(){
   $('alertGrid').innerHTML = alerts.slice(0,6).map(a => `<div class="alert ${a.type}">${a.msg}</div>`).join('');
 }
 
+
+function renderChartsVendedor(v) {
+  if (!v) return;
+
+  const negocios = Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio : [];
+
+  dc('chartVendNeg');
+
+  if ($('chartVendNeg')) {
+    CHARTS.vendNeg = new Chart($('chartVendNeg'), {
+      type: 'doughnut',
+      data: {
+        labels: negocios.map(n => n.negocio),
+        datasets: [{
+          data: negocios.map(n => n.venta || 0),
+          backgroundColor: negocios.map(n => (NEG_COLORS[n.negocio] || '#64748B') + 'CC'),
+          borderColor: '#121F35',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#94A3B8', boxWidth: 10, font: { size: 10 } }
+          },
+          tooltip: {
+            callbacks: {
+              label: c => `${c.label}: ${fmt(c.raw)}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  dc('chartVendCob');
+
+  const equipoCob = STATE.vendedores.length
+    ? STATE.vendedores.reduce((s, x) => s + (+x.cobertura || 0), 0) / STATE.vendedores.length
+    : 0;
+
+  if ($('chartVendCob')) {
+    CHARTS.vendCob = new Chart($('chartVendCob'), {
+      type: 'bar',
+      data: {
+        labels: ['Mi cobertura', 'Promedio equipo', 'Meta'],
+        datasets: [{
+          data: [
+            +v.cobertura || 0,
+            equipoCob,
+            75
+          ],
+          backgroundColor: [
+            COLORS.blue + 'CC',
+            COLORS.green + 'CC',
+            COLORS.red + 'CC'
+          ],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: c => pct(c.raw)
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { callback: v => v + '%', color: '#94A3B8' },
+            grid: { color: 'rgba(148,163,184,.08)' }
+          },
+          x: {
+            ticks: { color: '#94A3B8' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+}
+
+
 function renderVendedor(cod){
   const v = STATE.vendedores.find(x => String(x.cod) === String(cod));
   if (!v) return;
@@ -1104,12 +1206,15 @@ function renderVendedor(cod){
   const devPct = v.pct_devolucion ?? (v.venta_real > 0 ? (v.devol / v.venta_real * 100) : 0);
 
   $('vendKpis').innerHTML = `
-    <div class="kpi-card blue"><div class="kpi-label">Venta Real</div><div class="kpi-value">${fmt(v.venta_real)}</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value">${fmt(v.devol)}</div><div class="kpi-sub">${pct(devPct)}</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value">${fmt(v.venta_neta)}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value">${fmt(v.venta_bruta ?? v.venta_real ?? 0)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value">${fmt(v.devol || 0)}</div><div class="kpi-sub">${pct(devPct)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value">${fmt(v.averias || 0)}</div><div class="kpi-sub">${pct(v.pct_averia || 0)}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value">${fmt(v.venta_neta || 0)}</div></div>
     <div class="kpi-card cyan"><div class="kpi-label">Impactos</div><div class="kpi-value">${v.clientes_imp || 0}</div><div class="kpi-sub">de ${v.maestro || 0}</div></div>
     <div class="kpi-card purple"><div class="kpi-label">Cobertura</div><div class="kpi-value">${pct(v.cobertura)}</div></div>
   `;
+
+  renderChartsVendedor(v);
 
   $('vendAlerts').innerHTML = `
     <div class="alert ${devPct > 10 ? 'alert-red' : 'alert-green'}">
@@ -1177,23 +1282,79 @@ function renderMarcasSkus(){
   `).join('');
 }
 
+
+function getCoberturaValue(row) {
+  return Number(row.cobertura ?? row.cobertura_ ?? row.cobertura_pct ?? row['cobertura_%'] ?? row['cobertura %'] ?? 0);
+}
+
+function getCoberturaVendedor(row) {
+  return String(row.vendedor ?? row.nombre ?? row.nom_vendedor ?? '').trim();
+}
+
+
 function renderCobertura(){
-  const data = STATE.cobertura;
-  const cobField = data[0] ? Object.keys(data[0]).find(k => k.includes('cobertura')) : 'cobertura_';
+  const data = (STATE.cobertura || [])
+    .filter(r => getCoberturaValue(r) > 0)
+    .sort((a,b) => getCoberturaValue(b) - getCoberturaValue(a));
 
   $('tbCobertura').innerHTML = data.map(r => `
     <tr>
-      <td>${r.vendedor}</td>
+      <td>${getCoberturaVendedor(r)}</td>
       <td style="text-align:right">${r.clientes_maestro || 0}</td>
       <td style="text-align:right">${r.impactados || 0}</td>
-      <td style="text-align:right">${pct(r[cobField])}</td>
+      <td style="text-align:right">${pct(getCoberturaValue(r))}</td>
       <td style="text-align:right">${r.sin_compra || 0}</td>
     </tr>
   `).join('');
 
+  dc('chartCobertura');
+
+  if ($('chartCobertura') && data.length) {
+    CHARTS.cobertura = new Chart($('chartCobertura'), {
+      type: 'bar',
+      data: {
+        labels: data.map(r => getCoberturaVendedor(r)),
+        datasets: [{
+          label: 'Cobertura real',
+          data: data.map(r => getCoberturaValue(r)),
+          backgroundColor: COLORS.blue + 'CC',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: c => `${pct(c.raw)}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: v => v + '%',
+              color: '#94A3B8'
+            },
+            grid: { color: 'rgba(148,163,184,.08)' }
+          },
+          y: {
+            ticks: { color: '#94A3B8' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
   $('totalCero').textContent = `${STATE.clientesCero.total || 0} clientes`;
-  $('tbCero').innerHTML = STATE.clientesCero.por_vendedor.map(r => `
-    <tr><td>${r.vendedor}</td><td style="text-align:right">${r.cantidad}</td></tr>
+  $('tbCero').innerHTML = (STATE.clientesCero.por_vendedor || []).map(r => `
+    <tr><td>${getCoberturaVendedor(r)}</td><td style="text-align:right">${r.cantidad}</td></tr>
   `).join('');
 }
 
@@ -1207,7 +1368,7 @@ function renderEfectividad(){
   CHARTS.efect = new Chart($('chartEfect'), {
     type:'bar',
     data:{
-      labels:data.map(r => r.vendedor),
+      labels:data.map(r => getCoberturaVendedor(r)),
       datasets:[{
         data:data.map(r => +r[efField] || 0),
         backgroundColor:COLORS.green + 'CC',
@@ -1224,7 +1385,7 @@ function renderEfectividad(){
 
   $('tbEfectividad').innerHTML = (STATE.efectividad.por_semana || []).slice(0,50).map(r => `
     <tr>
-      <td>${r.vendedor || ''}</td>
+      <td>${getCoberturaVendedor(r)}</td>
       <td style="text-align:right">${r.semana || ''}</td>
       <td style="text-align:right">${r.impactos || 0}</td>
       <td style="text-align:right">${r.maestra || 0}</td>

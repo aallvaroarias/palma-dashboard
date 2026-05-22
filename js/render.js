@@ -12,6 +12,8 @@ function renderGerencial() {
     <div class="kpi-grid">
       <div class="kpi-card blue"><div class="kpi-label">Venta Real</div><div class="kpi-value">${fmt(r.venta_real)}</div></div>
       <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value">${fmt(r.devolucion_total)}</div><div class="kpi-sub">${pct(r.pct_devolucion)}</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value">${fmt(r.averia_total || 0)}</div><div class="kpi-sub">${pct(r.pct_averia || 0)}</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Total descuentos</div><div class="kpi-value">${fmt(r.descuento_total || 0)}</div><div class="kpi-sub">${pct(r.pct_descuento_total || 0)}</div></div>
       <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value">${fmt(r.venta_neta)}</div></div>
       <div class="kpi-card cyan"><div class="kpi-label">Cobertura</div><div class="kpi-value">${pct(r.cobertura_pct)}</div><div class="kpi-sub">${r.clientes_impactados} / ${r.clientes_maestro}</div></div>
       <div class="kpi-card amber"><div class="kpi-label">Ticket Promedio</div><div class="kpi-value">${fmt(r.ticket_promedio)}</div></div>
@@ -89,6 +91,8 @@ function renderTablaRanking() {
         <td style="text-align:right">${fmt(v.venta_real)}</td>
         <td style="text-align:right" class="down">${fmt(v.devol)}</td>
         <td style="text-align:right">${pct(v.pct_devolucion)}</td>
+        <td style="text-align:right" class="down">${fmt(v.devol || 0)}</td>
+        <td style="text-align:right" class="down">${fmt(v.averias || 0)}</td>
         <td style="text-align:right" class="up">${fmt(v.venta_neta)}</td>
         <td style="text-align:right">${v.clientes_imp || 0}</td>
         <td style="text-align:right">${pct(v.cobertura)}</td>
