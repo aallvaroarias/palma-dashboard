@@ -1,0 +1,5 @@
+# Ignorar todo excepto los archivos de Apps Script
+**
+!Código.js
+!diagnostico.js
+!appsscript.json
