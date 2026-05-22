@@ -917,6 +917,16 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
     </div>
   </div>
 
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Efectividad por Vendedor</div><div class="chart-sub">Impactos / Maestra acumulado del mes · línea roja = meta 80%</div></div>
+      <span id="efBajoMeta" style="font-size:11px;color:var(--amber);font-weight:600"></span>
+    </div>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="chartEfectGerencial"></canvas>
+    </div>
+  </div>
+
   <div class="section-title">Alertas Automáticas</div>
   <div class="alert-grid" id="alertGrid"></div>
 
@@ -958,6 +968,7 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
         <th style="text-align:right">Dev%</th>
         <th style="text-align:right">Venta Neta</th>
         <th style="text-align:right">Cobertura</th>
+        <th style="text-align:right">Efectiv%</th>
         <th style="text-align:right">Cuota</th>
         <th style="text-align:right">Cumpl%</th>
         <th>Estado</th>
@@ -981,6 +992,15 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
       <div class="chart-wrap" style="height:210px"><canvas id="chartVendCob"></canvas></div>
     </div>
   </div>
+
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Efectividad por Semana</div><div class="chart-sub">Impactos / Maestra · línea roja = meta 80%</div></div>
+      <span id="vendEfectPct" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--white)">—</span>
+    </div>
+    <div class="chart-wrap" style="height:180px"><canvas id="chartVendEfect"></canvas></div>
+  </div>
+
   <div class="section-title">Alertas</div>
   <div class="alert-grid" id="vendAlerts"></div>
 
@@ -1313,16 +1333,96 @@ function renderGerencial(){
   ).join('');
 
   renderTablaRanking(vs);
+  renderEfectividadEquipo();
   renderAlertas();
   injectKpiIcons();
+}
+
+function renderEfectividadEquipo(){
+  const data = [...(STATE.efectividad.resumen_mes || [])]
+    .sort((a,b) => (b.efectividad || 0) - (a.efectividad || 0));
+
+  if (!data.length) return;
+
+  const bajometa = data.filter(r => (r.efectividad || 0) < 80).length;
+  if ($('efBajoMeta')) {
+    $('efBajoMeta').textContent = bajometa > 0
+      ? `${bajometa} vendedor${bajometa !== 1 ? 'es' : ''} bajo meta`
+      : '✓ Equipo sobre meta';
+    $('efBajoMeta').style.color = bajometa > 0 ? 'var(--amber)' : 'var(--green)';
+  }
+
+  const barColors = data.map(r => {
+    const v = r.efectividad || 0;
+    return v >= 80 ? COLORS.green + 'CC' : v >= 65 ? COLORS.amber + 'CC' : COLORS.red + 'CC';
+  });
+
+  const metaLine80 = {
+    id: 'metaLine80',
+    afterDraw(chart) {
+      const { ctx, scales: { x, y } } = chart;
+      const px = x.getPixelForValue(80);
+      ctx.save();
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(px, y.top);
+      ctx.lineTo(px, y.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#EF4444';
+      ctx.font = '10px Inter,sans-serif';
+      ctx.fillText('80%', px + 4, y.top + 12);
+      ctx.restore();
+    }
+  };
+
+  dc('chartEfectGerencial');
+  CHARTS.efectGerencial = new Chart($('chartEfectGerencial'), {
+    type: 'bar',
+    plugins: [metaLine80],
+    data: {
+      labels: data.map(r => getCoberturaVendedor(r)),
+      datasets: [{
+        label: 'Efectividad',
+        data: data.map(r => r.efectividad || 0),
+        backgroundColor: barColors,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => `${pct(c.raw)}  (${data[c.dataIndex]?.impactos || 0} / ${data[c.dataIndex]?.maestra || 0})`
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true, max: 100,
+          ticks: { callback: v => v + '%', color: '#94A3B8' },
+          grid: { color: 'rgba(148,163,184,.08)' }
+        },
+        y: { ticks: { color: '#94A3B8' }, grid: { display: false } }
+      }
+    }
+  });
 }
 
 function renderTablaRanking(vs){
   $('tbRanking').innerHTML = vs.map((v,i) => {
     const devPct    = v.pct_devolucion ?? (v.venta_bruta > 0 ? (v.devol / v.venta_bruta * 100) : 0);
     const cob       = +v.cobertura || 0;
+    const ef        = +v.efectividad || 0;
     const cumpl     = +v.pct_cumplimiento || 0;
     const cumplCls  = cumpl >= 90 ? 'up' : cumpl >= 75 ? 'warn' : 'down';
+    const efCls     = ef >= 80 ? 'up' : ef >= 65 ? 'warn' : 'down';
     const estado    = cob >= 75
       ? '<span class="badge badge-green">En meta</span>'
       : cob >= 60
@@ -1337,6 +1437,7 @@ function renderTablaRanking(vs){
       <td style="text-align:right">${pct(devPct)}</td>
       <td style="text-align:right"><span class="mono up">${fmt(v.venta_neta)}</span></td>
       <td style="text-align:right">${pct(cob)}</td>
+      <td style="text-align:right"><span class="${efCls}">${pct(ef)}</span></td>
       <td style="text-align:right"><span class="mono">${fmt(v.cuota || 0)}</span></td>
       <td style="text-align:right"><span class="${cumplCls}">${pct(cumpl)}</span></td>
       <td>${estado}</td>
@@ -1365,6 +1466,9 @@ function renderAlertas(){
 
 function renderChartsVendedor(v) {
   if (!v) return;
+
+  const ef      = +v.efectividad || 0;
+  const efColor = ef >= 80 ? 'var(--green)' : ef >= 65 ? 'var(--amber)' : 'var(--red)';
 
   const negocios = Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio.filter(n => (n.venta || 0) > 0) : [];
 
@@ -1414,6 +1518,81 @@ function renderChartsVendedor(v) {
               label: c => `${c.label}: ${fmt(c.raw)}`
             }
           }
+        }
+      }
+    });
+  }
+
+  // ── Chart efectividad por semana ──
+  dc('chartVendEfect');
+  const semanas = (STATE.efectividad.por_semana || [])
+    .filter(r => String(r.vendedor || r.asesor || '').split(' - ')[0].trim() === String(v.cod))
+    .sort((a,b) => (a.semana || 0) - (b.semana || 0));
+
+  if ($('vendEfectPct')) {
+    $('vendEfectPct').textContent = pct(v.efectividad || 0);
+    $('vendEfectPct').style.color = efColor;
+  }
+
+  if ($('chartVendEfect')) {
+    const metaLine80vend = {
+      id: 'metaLine80v',
+      afterDraw(chart) {
+        const { ctx, scales: { x, y } } = chart;
+        const py = y.getPixelForValue(80);
+        ctx.save();
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x.left, py);
+        ctx.lineTo(x.right, py);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#EF4444';
+        ctx.font = '9px Inter,sans-serif';
+        ctx.fillText('80%', x.right + 4, py + 4);
+        ctx.restore();
+      }
+    };
+
+    const semColors = semanas.map(s => {
+      const ef = s.efectividad || 0;
+      return ef >= 80 ? COLORS.green + 'CC' : ef >= 65 ? COLORS.amber + 'CC' : COLORS.red + 'CC';
+    });
+
+    CHARTS.vendEfect = new Chart($('chartVendEfect'), {
+      type: 'bar',
+      plugins: [metaLine80vend],
+      data: {
+        labels: semanas.length ? semanas.map(s => `Sem ${s.semana}`) : ['Sin datos'],
+        datasets: [{
+          label: 'Efectividad',
+          data: semanas.length ? semanas.map(s => s.efectividad || 0) : [0],
+          backgroundColor: semanas.length ? semColors : ['#64748B55'],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: c => semanas[c.dataIndex]
+                ? `${pct(c.raw)}  (${semanas[c.dataIndex].impactos} / ${semanas[c.dataIndex].maestra})`
+                : pct(c.raw)
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true, max: 100,
+            ticks: { callback: v => v + '%', color: '#94A3B8' },
+            grid: { color: 'rgba(148,163,184,.08)' }
+          },
+          x: { ticks: { color: '#94A3B8' }, grid: { display: false } }
         }
       }
     });
@@ -1481,6 +1660,8 @@ function renderVendedor(cod){
 
   const cumpl      = +v.pct_cumplimiento || 0;
   const cumplColor = cumpl >= 90 ? 'var(--green)' : cumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+  const ef         = +v.efectividad || 0;
+  const efColor    = ef >= 80 ? 'var(--green)' : ef >= 65 ? 'var(--amber)' : 'var(--red)';
 
   $('vendKpis').innerHTML = `
     <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value" id="vkVenta">${fmt(v.venta_bruta ?? v.venta_real ?? 0)}</div></div>
@@ -1489,6 +1670,12 @@ function renderVendedor(cod){
     <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value" id="vkNeta">${fmt(v.venta_neta || 0)}</div></div>
     <div class="kpi-card cyan"><div class="kpi-label">Impactos</div><div class="kpi-value" id="vkImp">${v.clientes_imp || 0}</div><div class="kpi-sub">de ${v.maestro || 0}</div></div>
     <div class="kpi-card purple"><div class="kpi-label">Cobertura</div><div class="kpi-value" id="vkCob">${pct(v.cobertura)}</div></div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Efectividad</div>
+      <div class="kpi-value" id="vkEf" style="color:${efColor}">${pct(ef)}</div>
+      <div class="kpi-sub">${v.clientes_imp || 0} impactos / ${v.maestro || 0} maestra</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${Math.min(ef,100)}%;background:${efColor}"></div></div>
+    </div>
     <div class="kpi-card blue">
       <div class="kpi-label">Cuota Mes</div>
       <div class="kpi-value" id="vkCumpl" style="color:${cumplColor}">${pct(cumpl)}</div>
@@ -1503,6 +1690,7 @@ function renderVendedor(cod){
   countUp($('vkNeta'),    +(v.venta_neta || 0),                  fmt);
   countUp($('vkImp'),     +(v.clientes_imp || 0),                n => Math.round(n).toString());
   countUp($('vkCob'),     +(v.cobertura || 0),                   pct);
+  countUp($('vkEf'),      ef,                                    pct);
   countUp($('vkCumpl'),   cumpl,                                 pct);
 
   renderChartsVendedor(v);
