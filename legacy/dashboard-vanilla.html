@@ -1,0 +1,2710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PALMA · Distribuciones Palumar S.A.</title>
+
+<!-- ══ FUENTES ══ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- ══ CHART.JS ══ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+<style>
+/* ════════════════════════════════════════════════
+   VARIABLES Y RESET
+════════════════════════════════════════════════ */
+:root {
+  /* ── Fondos oceánicos Palumar ── */
+  --navy:      #07131D;
+  --navy-2:    #0D1E2B;
+  --navy-3:    #132736;
+  --navy-4:    #1A3347;
+
+  /* ── Teal (olas del logo) ── */
+  --blue:      #1A7FA6;
+  --blue-l:    #2AAED9;
+
+  /* ── Dorado (anillo del logo) ── */
+  --gold:      #C8A43E;
+  --gold-l:    #DDB84A;
+
+  /* ── Semánticos ── */
+  --cyan:      #2DC8D8;
+  --green:     #0FA97A;
+  --green-d:   #0A8260;
+  --red:       #E05252;
+  --amber:     #C8A43E;
+  --purple:    #8B6CF6;
+
+  /* ── Texto ── */
+  --white:     #EDF4FB;
+  --white-2:   #C8D8E8;
+  --muted:     #7A9BB8;
+  --border:    rgba(90,145,185,.1);
+  --border-2:  rgba(90,145,185,.18);
+
+  --glow-teal: 0 0 40px rgba(26,127,166,.28);
+  --glow-gold: 0 0 40px rgba(200,164,62,.22);
+  --r:         10px;
+  --r2:        16px;
+}
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: linear-gradient(160deg, #07131D 0%, #0B1C2A 50%, #07131D 100%);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Subtle grid background — teal tint */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(26,127,166,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,127,166,.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ════ TOPBAR ════ */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(7,19,29,.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(200,164,62,.15);
+  padding: 0 24px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px rgba(200,164,62,.35), 0 4px 16px rgba(0,0,0,.4);
+  flex-shrink: 0;
+}
+.brand-logo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+
+.brand-text .name {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: .4px;
+  color: var(--white);
+  text-transform: uppercase;
+}
+
+.brand-text .sub {
+  font-size: 9.5px;
+  color: var(--gold);
+  letter-spacing: .5px;
+  margin-top: 1px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.topbar-sep { width: 1px; height: 28px; background: var(--border-2); }
+
+.nav-tabs { display: flex; gap: 2px; }
+
+.nav-tab {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.nav-tab:hover { background: var(--navy-3); color: var(--white-2); }
+.nav-tab.active { background: rgba(200,164,62,.14); color: var(--gold-l); border: 1px solid rgba(200,164,62,.35); }
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(26,127,166,.12);
+  border: 1px solid rgba(26,127,166,.3);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue-l);
+  letter-spacing: .3px;
+}
+
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--blue-l);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+.periodo-badge {
+  font-size: 11px;
+  color: var(--gold-l);
+  background: rgba(200,164,62,.08);
+  border: 1px solid rgba(200,164,62,.22);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+}
+
+.last-update {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+}
+
+/* ════ FILTROS ════ */
+.filter-bar {
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(200,164,62,.1);
+  background: rgba(7,19,29,.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  position: relative;
+  z-index: 1;
+}
+
+.filter-group { display: flex; align-items: center; gap: 8px; }
+
+.filter-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+select, .filter-select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  background: var(--navy-3);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  color: var(--white-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394A3B8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color .15s;
+}
+select:focus { border-color: var(--blue-l); }
+
+input[type="date"] {
+  height: 32px;
+  padding: 0 8px;
+  background: var(--navy-3);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  color: var(--white-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  color-scheme: dark;
+}
+input[type="date"]:focus { border-color: var(--blue-l); }
+
+.quick-btn {
+  height: 26px;
+  padding: 0 10px;
+  background: var(--navy-3);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.quick-btn:hover { border-color: var(--gold); color: var(--gold-l); }
+.quick-btn.active { background: rgba(200,164,62,.16); border-color: rgba(200,164,62,.4); color: var(--gold-l); }
+
+.refresh-btn {
+  height: 32px;
+  padding: 0 16px;
+  background: linear-gradient(135deg, var(--blue), #12688A);
+  border: 1px solid rgba(42,174,217,.3);
+  border-radius: 7px;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all .18s;
+  box-shadow: 0 2px 12px rgba(26,127,166,.25);
+}
+.refresh-btn:hover { background: linear-gradient(135deg, #2AAED9, #1A7FA6); box-shadow: 0 4px 20px rgba(26,127,166,.4); }
+.refresh-btn.loading { opacity: .7; pointer-events: none; }
+
+.filter-right { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+/* ════ MAIN LAYOUT ════ */
+.main {
+  position: relative;
+  z-index: 1;
+  padding: 20px 24px 48px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* ════ SECTION TITLE ════ */
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 28px 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-title::before {
+  content: '';
+  width: 3px; height: 12px;
+  background: linear-gradient(180deg, var(--gold), var(--blue));
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(200,164,62,.25), transparent);
+}
+
+/* ════ KPI CARDS ════ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: var(--navy-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r2);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: transform .2s, box-shadow .2s;
+}
+.kpi-card:hover { transform: translateY(-2px); }
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: var(--r2) var(--r2) 0 0;
+}
+.kpi-card.blue::before   { background: linear-gradient(90deg, var(--blue), var(--blue-l)); }
+.kpi-card.green::before  { background: linear-gradient(90deg, var(--green), #2ED4A0); }
+.kpi-card.red::before    { background: linear-gradient(90deg, var(--red), #F87171); }
+.kpi-card.amber::before  { background: linear-gradient(90deg, var(--gold), var(--gold-l)); }
+.kpi-card.purple::before { background: linear-gradient(90deg, var(--purple), #A78BFA); }
+.kpi-card.cyan::before   { background: linear-gradient(90deg, var(--cyan), #67E8F9); }
+
+.kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.kpi-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--white);
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.kpi-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.kpi-sub .up   { color: var(--green); font-weight: 600; }
+.kpi-sub .down { color: var(--red);   font-weight: 600; }
+
+.kpi-bar {
+  height: 3px;
+  background: var(--navy-4);
+  border-radius: 2px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.kpi-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .8s ease;
+}
+
+/* ════ CHART CARDS ════ */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.chart-card {
+  background: var(--navy-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r2);
+  padding: 20px;
+}
+.chart-card.wide { grid-column: 1 / -1; }
+
+.chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.chart-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.chart-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.chart-total {
+  font-family: 'DM Mono', monospace;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--white);
+}
+
+.chart-wrap { position: relative; width: 100%; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-dot {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ════ TABLA ════ */
+.table-card {
+  background: var(--navy-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r2);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.table-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-header h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.table-header span { font-size: 11px; color: var(--muted); }
+
+table { width: 100%; border-collapse: collapse; }
+
+th {
+  padding: 9px 16px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--navy-3);
+  border-bottom: 1px solid var(--border-2);
+}
+
+td {
+  padding: 10px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--white-2);
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(26,127,166,.07); }
+
+.mono { font-family: 'DM Mono', monospace; font-weight: 500; }
+.up   { color: var(--green); }
+.down { color: var(--red); }
+.warn { color: var(--amber); }
+
+.avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.vname { display: flex; align-items: center; gap: 9px; }
+
+.badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+.badge-green  { background: rgba(16,185,129,.15); color: var(--green); border: 1px solid rgba(16,185,129,.3); }
+.badge-amber  { background: rgba(245,158,11,.15);  color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+.badge-red    { background: rgba(239,68,68,.15);   color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+
+.mini-bar { display: flex; align-items: center; gap: 6px; min-width: 90px; }
+.mini-track { height: 4px; background: var(--navy-4); border-radius: 2px; flex: 1; overflow: hidden; }
+.mini-fill  { height: 100%; border-radius: 2px; }
+
+/* ════ ALERTS ════ */
+.alert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.alert {
+  padding: 12px 15px;
+  border-radius: var(--r);
+  border-left: 3px solid;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.alert-red    { background: rgba(239,68,68,.08);   border-color: var(--red);   color: #FCA5A5; }
+.alert-amber  { background: rgba(245,158,11,.08);  border-color: var(--amber); color: #FCD34D; }
+.alert-green  { background: rgba(16,185,129,.08);  border-color: var(--green); color: #6EE7B7; }
+.alert-blue   { background: rgba(26,127,166,.08);   border-color: var(--blue);  color: #7DCDE8; }
+.alert strong { font-weight: 700; display: block; margin-bottom: 2px; font-size: 11px; }
+
+/* ════ TWO-COL GRID ════ */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+/* ════ ANIMATED ORBS ════ */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+.orb-1 {
+  width: 760px; height: 760px;
+  background: radial-gradient(circle, rgba(26,127,166,.18) 0%, transparent 68%);
+  top: -300px; left: -200px;
+  animation: orbFloat1 22s ease-in-out infinite;
+}
+.orb-2 {
+  width: 560px; height: 560px;
+  background: radial-gradient(circle, rgba(200,164,62,.12) 0%, transparent 68%);
+  bottom: -180px; right: -140px;
+  animation: orbFloat2 28s ease-in-out infinite;
+}
+.orb-3 {
+  width: 420px; height: 420px;
+  background: radial-gradient(circle, rgba(15,169,122,.1) 0%, transparent 68%);
+  top: 38%; left: 42%;
+  animation: orbFloat3 19s ease-in-out infinite;
+}
+@keyframes orbFloat1 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%      { transform: translate(45px,-55px) scale(1.06); }
+  66%      { transform: translate(-30px,40px) scale(0.96); }
+}
+@keyframes orbFloat2 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  40%      { transform: translate(-55px,35px) scale(1.08); }
+  70%      { transform: translate(40px,-28px) scale(0.93); }
+}
+@keyframes orbFloat3 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  50%      { transform: translate(-38px,-32px) scale(1.12); }
+}
+
+/* ════ GLASSMORPHISM UPGRADE ════ */
+.kpi-card {
+  background: rgba(13,30,43,.78) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(90,145,185,.16) !important;
+  transition: transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s ease !important;
+}
+.kpi-card:hover { transform: translateY(-5px) scale(1.01) !important; }
+.kpi-card.blue:hover   { box-shadow: 0 16px 48px rgba(26,127,166,.38),  0 0 0 1px rgba(26,127,166,.28); }
+.kpi-card.green:hover  { box-shadow: 0 16px 48px rgba(15,169,122,.32),  0 0 0 1px rgba(15,169,122,.22); }
+.kpi-card.red:hover    { box-shadow: 0 16px 48px rgba(224,82,82,.32),   0 0 0 1px rgba(224,82,82,.22); }
+.kpi-card.amber:hover  { box-shadow: 0 16px 48px rgba(200,164,62,.36),  0 0 0 1px rgba(200,164,62,.26); }
+.kpi-card.purple:hover { box-shadow: 0 16px 48px rgba(139,108,246,.32), 0 0 0 1px rgba(139,108,246,.22); }
+.kpi-card.cyan:hover   { box-shadow: 0 16px 48px rgba(45,200,216,.30),  0 0 0 1px rgba(45,200,216,.20); }
+
+/* ════ KPI ICON ════ */
+.kpi-icon {
+  position: absolute;
+  top: 14px; right: 14px;
+  opacity: .17;
+  transition: opacity .22s, transform .22s;
+  line-height: 0;
+}
+.kpi-card:hover .kpi-icon { opacity: .45; transform: scale(1.12) rotate(-4deg); }
+
+/* ════ CHART CARD GLASS ════ */
+.chart-card {
+  background: rgba(13,30,43,.75) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(90,145,185,.16) !important;
+  transition: box-shadow .22s;
+}
+.chart-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,.32), 0 0 0 1px rgba(26,127,166,.12); }
+
+/* ════ TABLE CARD GLASS ════ */
+.table-card {
+  background: rgba(13,30,43,.78) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(90,145,185,.16) !important;
+}
+
+/* ════ SKELETON ════ */
+.skel {
+  display: inline-block;
+  background: linear-gradient(90deg, var(--navy-3) 25%, var(--navy-4) 50%, var(--navy-3) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 4px;
+  color: transparent !important;
+  min-width: 72px; min-height: 1em;
+  user-select: none;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ════ VIEW TRANSITIONS ════ */
+.view { display: none; }
+.view.active {
+  display: block;
+  animation: viewIn .3s cubic-bezier(.22,1,.36,1) forwards;
+}
+@keyframes viewIn {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ════ CLICKABLE TABLE ROWS ════ */
+tr[data-cod] { cursor: pointer; }
+tr[data-cod]:hover td { background: rgba(26,127,166,.12) !important; transition: background .12s; }
+
+/* ════ BOTTOM NAV (MOBILE) ════ */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 200;
+  background: rgba(7,19,29,.97);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-top: 1px solid rgba(200,164,62,.15);
+  padding: 6px 0 env(safe-area-inset-bottom, 6px);
+}
+.bottom-nav-inner {
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  padding: 0 4px;
+}
+.bottom-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all .15s;
+  min-width: 50px;
+}
+.bottom-nav-btn svg { opacity: .5; transition: opacity .15s; }
+.bottom-nav-btn.active { color: var(--gold-l); background: rgba(200,164,62,.12); }
+.bottom-nav-btn.active svg { opacity: 1; }
+
+/* ════ FILTER TOGGLE (MOBILE) ════ */
+.filter-toggle {
+  display: none;
+  width: 32px; height: 32px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  background: var(--navy-3);
+  color: var(--muted);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.filter-toggle:hover { background: var(--navy-4); }
+.filter-collapsible {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.filter-bar.collapsed .filter-collapsible { display: none; }
+
+/* ════ RESPONSIVE — MOBILE (<640px) ════ */
+@media (max-width: 640px) {
+  .topbar .nav-tabs { display: none; }
+  .topbar-sep { display: none; }
+  .bottom-nav { display: block; }
+  .filter-toggle { display: flex; }
+  .main { padding: 12px 12px 86px; }
+  .kpi-grid { grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 16px; }
+  .kpi-value { font-size: 20px; }
+  .kpi-card { padding: 13px 14px; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .section-title { font-size: 9px; margin: 14px 0 8px; }
+  .table-card table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .chart-card.wide { margin-bottom: 12px !important; }
+}
+
+/* ════ RESPONSIVE — TABLET (641-1024px) ════ */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .kpi-grid { grid-template-columns: repeat(3,1fr); }
+  .main { padding: 16px 16px 40px; }
+  .two-col { grid-template-columns: 1fr; }
+}
+
+/* ════ RESPONSIVE — TV (>1920px) ════ */
+@media (min-width: 1920px) {
+  .main { max-width: 1800px; }
+  .kpi-grid { grid-template-columns: repeat(5,1fr); }
+  .kpi-value { font-size: 30px; }
+  .topbar { height: 68px; }
+  .nav-tab { font-size: 14px; padding: 7px 18px; }
+}
+
+/* ════ LOADING STATE ════ */
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(160deg, #07131D 0%, #0A1824 60%, #07131D 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  gap: 24px;
+  transition: opacity .6s;
+}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.loading-logo-img {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 0 0 3px rgba(200,164,62,.4), 0 0 40px rgba(26,127,166,.3);
+  animation: logoPulse 2s ease-in-out infinite;
+}
+.loading-logo-img img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes logoPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(200,164,62,.4), 0 0 40px rgba(26,127,166,.3); }
+  50%      { box-shadow: 0 0 0 6px rgba(200,164,62,.6), 0 0 60px rgba(26,127,166,.5); }
+}
+
+.loading-brand {
+  text-align: center;
+}
+.loading-brand .loading-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--white);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.loading-brand .loading-sub {
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.loading-bar {
+  width: 200px; height: 2px;
+  background: var(--navy-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.loading-bar::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, var(--blue), var(--gold));
+  border-radius: 2px;
+  animation: slide 1.2s ease-in-out infinite;
+}
+@keyframes slide { 0%{margin-left:-40%} 100%{margin-left:100%} }
+
+.loading-text { font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+</style>
+</head>
+<body>
+
+<!-- ══ ORBES ══ -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<!-- ══ LOADING ══ -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-logo-img">
+    <img src="assets/logo-palumar.png" alt="Palumar">
+  </div>
+  <div class="loading-brand">
+    <div class="loading-title">Distribuciones Palumar</div>
+    <div class="loading-sub">Presencia que construye</div>
+  </div>
+  <div class="loading-bar"></div>
+  <div class="loading-text" id="loadingText">Conectando con Google Sheets...</div>
+</div>
+
+<!-- ══ TOPBAR ══ -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">
+      <img src="assets/logo-palumar.png" alt="Distribuciones Palumar">
+    </div>
+    <div class="brand-text">
+      <div class="name">Distribuciones Palumar</div>
+      <div class="sub">Dashboard Comercial</div>
+    </div>
+  </div>
+  <div class="topbar-sep"></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showView('gerencial', this)">Gerencial</button>
+    <button class="nav-tab" onclick="showView('vendedor', this)">Mi Panel</button>
+    <button class="nav-tab" onclick="showView('cobertura', this)">Cobertura</button>
+    <button class="nav-tab" onclick="showView('efectividad', this)">Efectividad</button>
+    <button class="nav-tab" onclick="showView('devoluciones', this)">Devoluciones</button>
+    <button class="nav-tab" onclick="showView('clientes', this)">Clientes</button>
+  </div>
+  <div class="topbar-right">
+    <span class="periodo-badge" id="topPeriodo">—</span>
+    <div class="live-badge"><span class="live-dot"></span>EN VIVO</div>
+    <span class="last-update" id="lastUpdate">—</span>
+  </div>
+</div>
+
+<!-- ══ BOTTOM NAV (MOBILE) ══ -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bottom-nav-btn active" onclick="showView('gerencial',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="7" height="7" rx="1"/><rect x="15" y="3" width="7" height="7" rx="1"/><rect x="2" y="14" width="7" height="7" rx="1"/><rect x="15" y="14" width="7" height="7" rx="1"/></svg>
+      General
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('vendedor',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Mi Panel
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('cobertura',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Cobertura
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('efectividad',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Efectividad
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('devoluciones',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/></svg>
+      Devol.
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('clientes',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Clientes
+    </button>
+  </div>
+</nav>
+
+<!-- ══ FILTROS ══ -->
+<div class="filter-bar" id="filterBar">
+  <button class="filter-toggle" onclick="toggleFilters()" title="Filtros">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+  </button>
+  <div class="filter-collapsible">
+    <div class="filter-group">
+      <span class="filter-label">Vendedor</span>
+      <select id="filtroVendedor" onchange="applyFilters()">
+        <option value="">Todos los vendedores</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Negocio</span>
+      <select id="filtroNegocio" onchange="applyFilters()">
+        <option value="">Todos</option>
+        <option value="01-Carnico">Cárnico</option>
+        <option value="02-Galletas">Galletas</option>
+        <option value="03-Chocolates">Chocolates</option>
+        <option value="04-Café">Café</option>
+        <option value="10-TMLUC">TMLUC</option>
+      </select>
+    </div>
+    <div class="filter-group" id="filterFechasClientes">
+      <span class="filter-label">Clientes Nuevos</span>
+      <input type="date" id="fechaDesde" title="Desde" onchange="refetchClientesNuevos()">
+      <span style="color:var(--muted);font-size:11px">→</span>
+      <input type="date" id="fechaHasta" title="Hasta" onchange="refetchClientesNuevos()">
+      <button class="quick-btn active" id="qbTodo" onclick="setQuickRange('todo')">Todo</button>
+      <button class="quick-btn" id="qb30" onclick="setQuickRange('30d')">30d</button>
+      <button class="quick-btn" id="qbMes" onclick="setQuickRange('mes')">Este mes</button>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      Actualizar
+    </button>
+    <span class="filter-right" id="filterInfo">Cargando...</span>
+  </div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+
+<!-- ── VISTA GERENCIAL ── -->
+<div id="view-gerencial" class="view active">
+
+  <div class="section-title">KPIs Globales</div>
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value" id="kVenta">—</div><div class="kpi-sub">igual a Ecom</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value" id="kDevol">—</div><div class="kpi-sub" id="kDevolPct">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value" id="kAverias">—</div><div class="kpi-sub" id="kAveriasPct">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Total descuentos</div><div class="kpi-value" id="kDescuentoTotal">—</div><div class="kpi-sub" id="kDescuentoTotalPct">—</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value" id="kNeta">—</div><div class="kpi-sub">después de devol. y averías</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Cobertura</div><div class="kpi-value" id="kCob">—</div><div class="kpi-sub" id="kCobSub">clientes</div><div class="kpi-bar"><div class="kpi-bar-fill" id="kCobBar" style="background:var(--green)"></div></div></div>
+    <div class="kpi-card amber"><div class="kpi-label">Ticket Promedio</div><div class="kpi-value" id="kTicket">—</div><div class="kpi-sub">por cliente</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Efectividad</div><div class="kpi-value" id="kEfect">—</div><div class="kpi-sub">promedio equipo</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Cuota Equipo</div><div class="kpi-value" id="kCumplPct">—</div><div class="kpi-sub" id="kCumplSub">de —</div><div class="kpi-bar"><div class="kpi-bar-fill" id="kCumplBar" style="background:var(--amber)"></div></div></div>
+  </div>
+
+  <div class="section-title">Análisis Comercial</div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div><div class="chart-title">Ranking de Vendedores</div><div class="chart-sub">Venta real del período</div></div>
+      </div>
+      <div class="chart-wrap" style="height:300px">
+        <canvas id="chartRanking"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div><div class="chart-title">Venta por Negocio</div><div class="chart-sub">Distribución del período</div></div>
+        <div class="chart-total" id="totalNegocio">—</div>
+      </div>
+      <div class="legend" id="legendNegocio"></div>
+      <div class="chart-wrap" style="height:240px">
+        <canvas id="chartNegocio"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Cobertura Real por Vendedor</div><div class="chart-sub">vs maestra del MAESTRO_CLIENTES · línea roja = meta 75%</div></div>
+      <span id="vendsBajoMeta" style="font-size:11px;color:var(--amber);font-weight:600"></span>
+    </div>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="chartCobertura"></canvas>
+    </div>
+  </div>
+
+  <div class="section-title">Cobertura por Negocio</div>
+
+  <div class="chart-grid" style="margin-bottom:16px">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div><div class="chart-title">Promedio Equipo por Negocio</div><div class="chart-sub">Cobertura promedio del equipo · meta 75%</div></div>
+      </div>
+      <div class="chart-wrap" style="height:240px"><canvas id="chartCobNeg"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div><div class="chart-title">Detalle por Negocio</div><div class="chart-sub">Selecciona un negocio para ver el ranking de asesores</div></div>
+        <select id="selNegocio" onchange="renderCobNegDetalle()" style="height:28px;font-size:11px;padding:0 22px 0 8px"></select>
+      </div>
+      <div class="chart-wrap" style="height:240px"><canvas id="chartCobNegDetalle"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card" id="pivotCobNeg" style="margin-bottom:20px;overflow-x:auto">
+    <div class="table-header"><h3>Cobertura por Negocio × Vendedor</h3><span>Verde ≥75% · Ámbar ≥50% · Rojo &lt;50%</span></div>
+    <div id="pivotCobNegContent"></div>
+  </div>
+
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Efectividad por Vendedor</div><div class="chart-sub">Impactos / Maestra acumulado del mes · línea roja = meta 80%</div></div>
+      <span id="efBajoMeta" style="font-size:11px;color:var(--amber);font-weight:600"></span>
+    </div>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="chartEfectGerencial"></canvas>
+    </div>
+  </div>
+
+  <div class="section-title">Clientes Nuevos</div>
+  <div class="chart-grid" style="margin-bottom:20px">
+    <div class="kpi-card blue" onclick="showView('clientes')" style="cursor:pointer;display:flex;flex-direction:column;justify-content:center;min-height:120px">
+      <div class="kpi-label">Total Clientes Nuevos</div>
+      <div class="kpi-value" id="gkNuevos">—</div>
+      <div class="kpi-sub" id="gkNuevosSub">en el período</div>
+      <div style="margin-top:10px;font-size:10px;color:var(--muted)">Ver detalle →</div>
+    </div>
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header">
+        <div><div class="chart-title">Nuevos por Vendedor</div><div class="chart-sub" id="gNuevosPeriodo">—</div></div>
+        <div class="chart-total" id="gNuevosTotal">—</div>
+      </div>
+      <div class="chart-wrap" style="height:180px"><canvas id="chartNuevosGer"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header">
+        <div><div class="chart-title">Tendencia Mensual</div><div class="chart-sub">Clientes nuevos por mes</div></div>
+      </div>
+      <div class="chart-wrap" style="height:180px"><canvas id="chartNuevosTrend"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section-title">Alertas Automáticas</div>
+  <div class="alert-grid" id="alertGrid"></div>
+
+  <div class="section-title">Tendencia Semanal</div>
+  <div class="chart-card wide" style="margin-bottom:20px" id="tendenciaCard">
+    <div class="chart-header">
+      <div><div class="chart-title">Venta Real por Semana</div><div class="chart-sub">Evolución dentro del mes · barras = venta · línea = clientes impactados</div></div>
+      <div id="tendenciaTotales" style="font-size:11px;color:var(--muted)"></div>
+    </div>
+    <div class="chart-wrap" style="height:180px"><canvas id="chartTendencia"></canvas></div>
+  </div>
+
+  <div class="section-title">Top Marcas & SKUs</div>
+  <div class="two-col" style="margin-bottom:20px">
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Top 10 Marcas</h3><span id="marcasPeriodo">por venta real</span></div>
+      <table>
+        <thead><tr><th>Marca</th><th>Negocio</th><th style="text-align:right">Venta</th><th style="text-align:right">Part.%</th><th style="text-align:right">Clientes</th></tr></thead>
+        <tbody id="tbMarcas"></tbody>
+      </table>
+    </div>
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Top 15 SKUs</h3><span>por venta real</span></div>
+      <table>
+        <thead><tr><th>Producto</th><th>Negocio</th><th style="text-align:right">Venta</th><th style="text-align:right">Clientes</th></tr></thead>
+        <tbody id="tbSkus"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-title">Detalle por Vendedor</div>
+  <div class="table-card">
+    <div class="table-header"><h3>Ranking Completo</h3><span id="rankPeriodo">—</span></div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Vendedor</th>
+        <th style="text-align:right">Venta Bruta</th>
+        <th style="text-align:right">Devol.</th>
+        <th style="text-align:right">Dev%</th>
+        <th style="text-align:right">Venta Neta</th>
+        <th style="text-align:right">Cobertura</th>
+        <th style="text-align:right">Efectiv%</th>
+        <th style="text-align:right">Cuota</th>
+        <th style="text-align:right">Cumpl%</th>
+        <th>Estado</th>
+      </tr></thead>
+      <tbody id="tbRanking"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── VISTA VENDEDOR ── -->
+<div id="view-vendedor" class="view">
+  <div class="section-title">Mis Indicadores</div>
+  <div class="kpi-grid" id="vendKpis"></div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-header"><div><div class="chart-title" id="vendChartTitle">Venta por Negocio</div></div></div>
+      <div class="chart-wrap" style="height:210px"><canvas id="chartVendNeg"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div><div class="chart-title">Mi Cobertura vs Equipo</div><div class="chart-sub">Línea roja = meta 75%</div></div></div>
+      <div class="chart-wrap" style="height:210px"><canvas id="chartVendCob"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Mi Cobertura por Negocio</div><div class="chart-sub">Impactados / Maestro por línea de negocio · meta 75%</div></div>
+    </div>
+    <div class="chart-wrap" style="height:200px"><canvas id="chartVendCobNeg"></canvas></div>
+  </div>
+
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Efectividad por Semana</div><div class="chart-sub">Impactos / Maestra · línea roja = meta 80%</div></div>
+      <span id="vendEfectPct" style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--white)">—</span>
+    </div>
+    <div class="chart-wrap" style="height:180px"><canvas id="chartVendEfect"></canvas></div>
+  </div>
+
+  <div class="section-title">Alertas</div>
+  <div class="alert-grid" id="vendAlerts"></div>
+
+  <div class="section-title">Mis Clientes Nuevos</div>
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Clientes Nuevos</div>
+      <div class="kpi-value" id="vkNuevos">—</div>
+      <div class="kpi-sub" id="vkNuevosSub">en el período</div>
+    </div>
+  </div>
+  <div class="table-card" id="vendClientesNuevosCard">
+    <div class="table-header"><h3>Mis Clientes Nuevos</h3><span id="vendClientesPeriodo">—</span></div>
+    <table>
+      <thead><tr><th>Cliente</th><th>Razón Social</th><th style="text-align:right">Fecha</th></tr></thead>
+      <tbody id="tbVendNuevos"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title" id="vendSkusTitle">Mis Top SKUs</div>
+  <div class="table-card">
+    <div class="table-header"><h3 id="vendSkusHeader">Top productos del período</h3></div>
+    <table>
+      <thead><tr><th>#</th><th>Producto</th><th>Negocio</th><th style="text-align:right">Venta</th><th style="text-align:right">Clientes</th></tr></thead>
+      <tbody id="tbVendSkus"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── VISTA COBERTURA ── -->
+<div id="view-cobertura" class="view">
+  <div class="section-title">Cobertura Real vs Maestro</div>
+  <div class="two-col">
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Por Vendedor</h3></div>
+      <table><thead><tr><th>Vendedor</th><th style="text-align:right">Maestro</th><th style="text-align:right">Impactos</th><th style="text-align:right">Cobertura%</th><th style="text-align:right">Sin Compra</th></tr></thead>
+      <tbody id="tbCobertura"></tbody></table>
+    </div>
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Clientes Cero</h3><span id="totalCero">—</span></div>
+      <table><thead><tr><th>Vendedor</th><th style="text-align:right">Clientes Cero</th></tr></thead>
+      <tbody id="tbCero"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ── VISTA EFECTIVIDAD ── -->
+<div id="view-efectividad" class="view">
+  <div class="section-title">Efectividad del Equipo</div>
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">Efectividad Acumulada del Mes</div><div class="chart-sub">Impactos / Maestra · meta 80%</div></div></div>
+    <div class="chart-wrap" style="height:200px"><canvas id="chartEfect"></canvas></div>
+  </div>
+  <div class="table-card">
+    <div class="table-header"><h3>Efectividad por Semana</h3></div>
+    <table><thead><tr><th>Vendedor</th><th style="text-align:right">Semana</th><th style="text-align:right">Impactos</th><th style="text-align:right">Maestra</th><th style="text-align:right">Efectividad%</th></tr></thead>
+    <tbody id="tbEfectividad"></tbody></table>
+  </div>
+</div>
+
+<!-- ── VISTA DEVOLUCIONES ── -->
+<div id="view-devoluciones" class="view">
+  <div class="section-title">Análisis de Devoluciones</div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-header"><div><div class="chart-title">Por Concepto</div><div class="chart-sub">Valor total por razón de devolución</div></div></div>
+      <div class="chart-wrap" style="height:280px"><canvas id="chartDevConcepto"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div><div class="chart-title">Por Vendedor</div></div></div>
+      <div class="chart-wrap" style="height:280px"><canvas id="chartDevVend"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── VISTA CLIENTES ── -->
+<div id="view-clientes" class="view">
+  <div class="section-title" id="clientesTitulo">Clientes Nuevos</div>
+
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:20px">
+    <div class="kpi-card blue"><div class="kpi-label">Total Nuevos</div><div class="kpi-value" id="kNuevos">—</div><div class="kpi-sub" id="kNuevosSub">en el período</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Top Vendedor</div><div class="kpi-value" id="kNuevosTop">—</div><div class="kpi-sub" id="kNuevosTopSub">clientes</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Clientes Cero</div><div class="kpi-value" id="kCeroCount">—</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Maestro Total</div><div class="kpi-value" id="kMaestro">—</div></div>
+  </div>
+
+  <div class="chart-grid" style="margin-bottom:20px">
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header"><div><div class="chart-title">Nuevos por Vendedor</div><div class="chart-sub" id="clientesRankSub">—</div></div></div>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartNuevosRank"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header"><div><div class="chart-title">Tendencia Mensual</div><div class="chart-sub">Clientes nuevos acumulados por mes</div></div></div>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartNuevosMes"></canvas></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Ranking por Vendedor</h3></div>
+      <table>
+        <thead><tr><th>#</th><th>Vendedor</th><th style="text-align:right">Nuevos</th></tr></thead>
+        <tbody id="tbNuevosVend"></tbody>
+      </table>
+    </div>
+    <div class="table-card" style="margin:0">
+      <div class="table-header"><h3>Lista de Clientes Nuevos</h3><span id="tbNuevosCount">—</span></div>
+      <table>
+        <thead><tr><th>Asesor</th><th>Cliente</th><th style="text-align:right">Fecha</th></tr></thead>
+        <tbody id="tbNuevosLista"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbxon9PiTxLibNmihjEGdRoCqYO4YdTEFes88w8Ub2YqDXfZaTPCm1Wk9L0-m-ONXSAh/exec';
+const REFRESH_INTERVAL = 300000;
+
+const COLORS = {
+  blue:'#2AAED9', cyan:'#2DC8D8', green:'#0FA97A',
+  amber:'#C8A43E', red:'#E05252', purple:'#8B6CF6',
+  gold:'#C8A43E', teal:'#1A7FA6'
+};
+
+const VEND_COLORS = ['#2AAED9','#0FA97A','#C8A43E','#8B6CF6','#2DC8D8','#E05252','#5BADC7','#DDB84A','#4CAF8A','#F97316'];
+
+const NEG_COLORS = {
+  '01-Carnico':'#3B82F6',
+  '02-Galletas':'#10B981',
+  '03-Chocolates':'#F59E0B',
+  '04-Café':'#8B5CF6',
+  '10-TMLUC':'#06B6D4'
+};
+
+let STATE = {
+  resumen:null,
+  vendedores:[],
+  cobertura:[],
+  cobNegocio:[],
+  efectividad:{ por_semana:[], resumen_mes:[] },
+  devoluciones:{ total:0, por_concepto:[], por_vendedor:[], detalle:[] },
+  clientesCero:{ total:0, por_vendedor:[], detalle:[] },
+  clientesNuevos:{ total:0, por_vendedor:[], por_mes:[], detalle:[], desde:null, hasta:null },
+  tendencia:[],
+  skus:{ global:[], por_vendedor:[] },
+  marcas:[]
+};
+
+let CHARTS = {};
+let refreshTimer = null;
+
+const $ = id => document.getElementById(id);
+const fmt = v => '$' + Math.abs(+v || 0).toLocaleString('en', { maximumFractionDigits:0 });
+const fmtK = v => (+v || 0) >= 1000 ? '$' + ((+v)/1000).toFixed(0) + 'k' : '$' + (+v || 0).toFixed(0);
+const pct = v => (+v || 0).toFixed(1) + '%';
+
+function norm(v){
+  return String(v || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,'')
+    .replace(/-/g,'');
+}
+
+function esBodega(v){
+  const x = norm(v);
+  return x.includes('BOD100') || x.includes('BODEGA100') || x === 'BODEGA';
+}
+
+function vendedorValido(v){
+  return v && !esBodega(v.cod) && !esBodega(v.nombre);
+}
+
+function dc(id){
+  if (CHARTS[id]) {
+    CHARTS[id].destroy();
+    delete CHARTS[id];
+  }
+  const canvas = $(id);
+  if (!canvas) return;
+  const existing = Chart.getChart(canvas);
+  if (existing) existing.destroy();
+}
+
+// Ajusta el contenedor de un gráfico de barras horizontales
+// para que cada barra tenga suficiente espacio y se vean TODOS los nombres.
+function fitBarHeight(canvasId, n, pxPerBar, minH){
+  const wrap = $(canvasId)?.parentElement;
+  if (wrap) wrap.style.height = Math.max(minH || 180, n * (pxPerBar || 34) + 48) + 'px';
+}
+
+// Opciones Y estándar para barras horizontales — sin autoSkip
+function yAxisLabels(extraOpts){
+  return Object.assign({
+    ticks: {
+      color: '#7A9BB8',
+      autoSkip: false,
+      maxRotation: 0,
+      font: { size: 11 }
+    },
+    grid: { display: false }
+  }, extraOpts || {});
+}
+
+async function fetchSheet(sheet, extraParams){
+  try {
+    let url = `${API_URL}?sheet=${sheet}&t=${Date.now()}`;
+    if (extraParams) {
+      Object.entries(extraParams).forEach(([k,v]) => { if (v) url += `&${k}=${encodeURIComponent(v)}`; });
+    }
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.ok ? json.data : null;
+  } catch(e) {
+    console.error('Error cargando', sheet, e);
+    return null;
+  }
+}
+
+// ── Clientes Nuevos: rango de fechas ──────────────────────────────────
+
+function getClientesFechas(){
+  return { desde: $('fechaDesde')?.value || null, hasta: $('fechaHasta')?.value || null };
+}
+
+function setQuickRange(tipo){
+  const hoy = new Date();
+  const iso  = d => d.toISOString().slice(0,10);
+  document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+  if (tipo === '30d') {
+    const d30 = new Date(hoy); d30.setDate(d30.getDate() - 30);
+    $('fechaDesde').value = iso(d30);
+    $('fechaHasta').value = iso(hoy);
+    $('qb30').classList.add('active');
+  } else if (tipo === 'mes') {
+    const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    $('fechaDesde').value = iso(inicio);
+    $('fechaHasta').value = iso(hoy);
+    $('qbMes').classList.add('active');
+  } else {
+    $('fechaDesde').value = '';
+    $('fechaHasta').value = '';
+    $('qbTodo').classList.add('active');
+  }
+  refetchClientesNuevos();
+}
+
+async function refetchClientesNuevos(){
+  // Actualizar estado visual de quick-btns si el usuario editó manual
+  const desde = $('fechaDesde')?.value || '';
+  const hasta  = $('fechaHasta')?.value || '';
+  if (!desde && !hasta) {
+    document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+    $('qbTodo')?.classList.add('active');
+  }
+
+  const data = await fetchSheet('clientes_nuevos', { desde, hasta });
+  if (data) {
+    STATE.clientesNuevos = data;
+    renderClientesGerencial();
+    renderClientes();
+    // Si hay un vendedor seleccionado, actualizar Mi Panel también
+    const cod = $('filtroVendedor')?.value;
+    if (cod) renderVendedorNuevos(cod);
+  }
+}
+
+async function loadAll(){
+  const btn = $('refreshBtn');
+  if (btn) btn.classList.add('loading');
+
+  const [
+    resumen,
+    vendedores,
+    cobertura,
+    cobNegocio,
+    efectividad,
+    devoluciones,
+    cero,
+    nuevos,
+    tendencia,
+    skus,
+    marcas
+  ] = await Promise.all([
+    fetchSheet('resumen'),
+    fetchSheet('vendedores'),
+    fetchSheet('cobertura'),
+    fetchSheet('cob_negocio'),
+    fetchSheet('efectividad'),
+    fetchSheet('devoluciones'),
+    fetchSheet('clientes_cero'),
+    fetchSheet('clientes_nuevos'),
+    fetchSheet('tendencia'),
+    fetchSheet('skus'),
+    fetchSheet('marcas')
+  ]);
+
+  if (resumen) STATE.resumen = resumen;
+  if (vendedores) STATE.vendedores = vendedores.filter(vendedorValido);
+  if (cobertura) STATE.cobertura = cobertura.filter(r => !esBodega(getCoberturaVendedor(r)));
+  if (cobNegocio) STATE.cobNegocio = cobNegocio.filter(r => !esBodega(getCoberturaVendedor(r)));
+  if (efectividad) STATE.efectividad = efectividad;
+  if (devoluciones) STATE.devoluciones = devoluciones;
+  if (cero) STATE.clientesCero = cero;
+  if (nuevos) STATE.clientesNuevos = nuevos;
+  if (tendencia) STATE.tendencia = tendencia;
+  if (skus) STATE.skus = skus;
+  if (marcas) STATE.marcas = marcas;
+
+  cargarSelectVendedores();
+  renderAll();
+
+  $('loadingOverlay')?.classList.add('hidden');
+  setTimeout(() => {
+    if ($('loadingOverlay')) $('loadingOverlay').style.display = 'none';
+  }, 500);
+
+  const now = new Date().toLocaleTimeString('es-PA', { hour:'2-digit', minute:'2-digit' });
+  if ($('lastUpdate')) $('lastUpdate').textContent = `Act. ${now}`;
+  if ($('topPeriodo')) $('topPeriodo').textContent = STATE.resumen?.periodo || '—';
+  if ($('rankPeriodo')) $('rankPeriodo').textContent = STATE.resumen?.periodo || '—';
+  if ($('filterInfo')) $('filterInfo').textContent = `${STATE.vendedores.length} vendedores · ${STATE.resumen?.clientes_maestro || 0} clientes`;
+
+  if (btn) btn.classList.remove('loading');
+}
+
+function cargarSelectVendedores(){
+  const sel = $('filtroVendedor');
+  if (!sel) return;
+
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">Todos los vendedores</option>';
+
+  STATE.vendedores.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.cod;
+    opt.textContent = v.nombre;
+    sel.appendChild(opt);
+  });
+
+  if (actual) sel.value = actual;
+}
+
+function renderAll(){
+  renderGerencial();
+  renderClientesGerencial();
+  renderTendencia();
+  renderMarcasSkus();
+  renderCobertura();
+  renderEfectividad();
+  renderDevoluciones();
+  renderClientes();
+
+  const cod = $('filtroVendedor')?.value;
+  if (cod) renderVendedor(cod);
+}
+
+function renderGerencial(){
+  const r = STATE.resumen;
+  if (!r) return;
+
+  countUp($('kVenta'),          r.venta_bruta ?? r.venta_real ?? 0, fmt);
+  countUp($('kDevol'),          r.devolucion_total || 0,            fmt);
+  countUp($('kAverias'),        r.averia_total || 0,                fmt);
+  countUp($('kDescuentoTotal'), r.descuento_total || 0,             fmt);
+  countUp($('kNeta'),           r.venta_neta || 0,                  fmt);
+  countUp($('kCob'),            r.cobertura_pct || 0,               pct);
+  countUp($('kTicket'),         r.ticket_promedio || 0,             fmt);
+  countUp($('kEfect'),          r.efectividad_pct || 0,             pct);
+
+  $('kDevolPct').innerHTML       = `<span class="down">${pct(r.pct_devolucion || 0)}</span> de venta bruta`;
+  if ($('kAveriasPct'))          $('kAveriasPct').innerHTML = `<span class="down">${pct(r.pct_averia || 0)}</span> de venta bruta`;
+  if ($('kDescuentoTotalPct'))   $('kDescuentoTotalPct').innerHTML = `<span class="down">${pct(r.pct_descuento_total || 0)}</span> devol. + averías`;
+  $('kCobSub').textContent       = `${r.clientes_impactados} / ${r.clientes_maestro}`;
+  $('kCobBar').style.width       = Math.min(r.cobertura_pct || 0, 100) + '%';
+
+  const pctCumpl    = r.pct_cumplimiento_equipo || 0;
+  const cumplColor  = pctCumpl >= 90 ? 'var(--green)' : pctCumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+  if ($('kCumplPct')) countUp($('kCumplPct'), pctCumpl, pct);
+  if ($('kCumplSub')) $('kCumplSub').textContent = `${fmt(r.venta_bruta || 0)} / ${fmt(r.cuota_total || 0)}`;
+  if ($('kCumplBar')) { $('kCumplBar').style.width = Math.min(pctCumpl, 100) + '%'; $('kCumplBar').style.background = cumplColor; }
+
+  const vs = [...STATE.vendedores].sort((a,b) => (b.venta_bruta || 0) - (a.venta_bruta || 0));
+
+  dc('chartRanking');
+  fitBarHeight('chartRanking', vs.length, 36, 220);
+  CHARTS.ranking = new Chart($('chartRanking'), {
+    type:'bar',
+    data:{
+      labels:vs.map(v => v.nombre),
+      datasets:[{
+        label:'Venta neta',
+        data:vs.map(v => v.venta_neta || 0),
+        backgroundColor:vs.map((_,i) => VEND_COLORS[i % VEND_COLORS.length] + 'CC'),
+        borderRadius:4
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c => fmt(c.raw)}} },
+      scales:{
+        x:{ ticks:{callback:fmtK, color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+        y: yAxisLabels()
+      }
+    }
+  });
+
+  dc('chartNegocio');
+  const neg = r.venta_por_negocio || [];
+  $('totalNegocio').textContent = fmt(r.venta_real);
+
+  CHARTS.negocio = new Chart($('chartNegocio'), {
+    type:'doughnut',
+    data:{
+      labels:neg.map(n => n.negocio),
+      datasets:[{
+        data:neg.map(n => n.venta),
+        backgroundColor:neg.map(n => (NEG_COLORS[n.negocio] || '#64748B') + 'CC'),
+        borderColor:'#121F35',
+        borderWidth:2
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      cutout:'62%',
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c => `${c.label}: ${fmt(c.raw)}`}} }
+    }
+  });
+
+  $('legendNegocio').innerHTML = neg.map(n =>
+    `<span class="legend-item"><span class="legend-dot" style="background:${NEG_COLORS[n.negocio] || '#64748B'}"></span>${n.negocio}</span>`
+  ).join('');
+
+  renderTablaRanking(vs);
+  renderCoberturaNegocioEquipo();
+  renderEfectividadEquipo();
+  renderAlertas();
+  injectKpiIcons();
+}
+
+function renderEfectividadEquipo(){
+  const data = [...(STATE.efectividad.resumen_mes || [])]
+    .sort((a,b) => (b.efectividad || 0) - (a.efectividad || 0));
+
+  if (!data.length) return;
+
+  const bajometa = data.filter(r => (r.efectividad || 0) < 80).length;
+  if ($('efBajoMeta')) {
+    $('efBajoMeta').textContent = bajometa > 0
+      ? `${bajometa} vendedor${bajometa !== 1 ? 'es' : ''} bajo meta`
+      : '✓ Equipo sobre meta';
+    $('efBajoMeta').style.color = bajometa > 0 ? 'var(--amber)' : 'var(--green)';
+  }
+
+  const barColors = data.map(r => {
+    const v = r.efectividad || 0;
+    return v >= 80 ? COLORS.green + 'CC' : v >= 65 ? COLORS.amber + 'CC' : COLORS.red + 'CC';
+  });
+
+  const metaLine80 = {
+    id: 'metaLine80',
+    afterDraw(chart) {
+      const { ctx, scales: { x, y } } = chart;
+      const px = x.getPixelForValue(80);
+      ctx.save();
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(px, y.top);
+      ctx.lineTo(px, y.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#EF4444';
+      ctx.font = '10px Inter,sans-serif';
+      ctx.fillText('80%', px + 4, y.top + 12);
+      ctx.restore();
+    }
+  };
+
+  dc('chartEfectGerencial');
+  fitBarHeight('chartEfectGerencial', data.length, 36, 200);
+  CHARTS.efectGerencial = new Chart($('chartEfectGerencial'), {
+    type: 'bar',
+    plugins: [metaLine80],
+    data: {
+      labels: data.map(r => getCoberturaVendedor(r)),
+      datasets: [{
+        label: 'Efectividad',
+        data: data.map(r => r.efectividad || 0),
+        backgroundColor: barColors,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => `${pct(c.raw)}  (${data[c.dataIndex]?.impactos || 0} / ${data[c.dataIndex]?.maestra || 0})`
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true, max: 100,
+          ticks: { callback: v => v + '%', color: '#7A9BB8' },
+          grid: { color: 'rgba(148,163,184,.08)' }
+        },
+        y: yAxisLabels()
+      }
+    }
+  });
+}
+
+function renderTablaRanking(vs){
+  $('tbRanking').innerHTML = vs.map((v,i) => {
+    const devPct    = v.pct_devolucion ?? (v.venta_bruta > 0 ? (v.devol / v.venta_bruta * 100) : 0);
+    const cob       = +v.cobertura || 0;
+    const ef        = +v.efectividad || 0;
+    const cumpl     = +v.pct_cumplimiento || 0;
+    const cumplCls  = cumpl >= 90 ? 'up' : cumpl >= 75 ? 'warn' : 'down';
+    const efCls     = ef >= 80 ? 'up' : ef >= 65 ? 'warn' : 'down';
+    const estado    = cob >= 75
+      ? '<span class="badge badge-green">En meta</span>'
+      : cob >= 60
+      ? '<span class="badge badge-amber">Cerca</span>'
+      : '<span class="badge badge-red">Bajo meta</span>';
+
+    return `<tr data-cod="${v.cod}" onclick="clickVendedor('${v.cod}')">
+      <td>${i + 1}</td>
+      <td>${v.nombre}</td>
+      <td style="text-align:right"><span class="mono">${fmt(v.venta_bruta)}</span></td>
+      <td style="text-align:right"><span class="mono down">${fmt(v.devol)}</span></td>
+      <td style="text-align:right">${pct(devPct)}</td>
+      <td style="text-align:right"><span class="mono up">${fmt(v.venta_neta)}</span></td>
+      <td style="text-align:right">${pct(cob)}</td>
+      <td style="text-align:right"><span class="${efCls}">${pct(ef)}</span></td>
+      <td style="text-align:right"><span class="mono">${fmt(v.cuota || 0)}</span></td>
+      <td style="text-align:right"><span class="${cumplCls}">${pct(cumpl)}</span></td>
+      <td>${estado}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderAlertas(){
+  const r = STATE.resumen;
+  const alerts = [];
+
+  STATE.vendedores.forEach(v => {
+    if ((+v.cobertura || 0) < 65) alerts.push({type:'alert-red', msg:`🔴 <strong>${v.nombre}</strong> cobertura crítica: ${pct(v.cobertura)}`});
+    else if ((+v.cobertura || 0) < 75) alerts.push({type:'alert-amber', msg:`⚠ <strong>${v.nombre}</strong> bajo meta: ${pct(v.cobertura)}`});
+  });
+
+  if ((+r.pct_devolucion || 0) > 10) {
+    alerts.push({type:'alert-amber', msg:`⚠ <strong>Devoluciones altas:</strong> ${pct(r.pct_devolucion)} de la venta real`});
+  }
+
+  if (!alerts.length) alerts.push({type:'alert-green', msg:'✅ <strong>Sin alertas críticas</strong>'});
+
+  $('alertGrid').innerHTML = alerts.slice(0,6).map(a => `<div class="alert ${a.type}">${a.msg}</div>`).join('');
+}
+
+
+function renderChartsVendedor(v) {
+  if (!v) return;
+
+  const ef      = +v.efectividad || 0;
+  const efColor = ef >= 80 ? 'var(--green)' : ef >= 65 ? 'var(--amber)' : 'var(--red)';
+
+  const negocios = Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio.filter(n => (n.venta || 0) > 0) : [];
+
+  const noDataPlugin = {
+    id: 'noData',
+    afterDraw(chart) {
+      const hasData = chart.data.datasets.some(d => d.data && d.data.some(x => x > 0));
+      if (!hasData) {
+        const { ctx, width, height } = chart;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.fillText('Sin datos de venta por negocio', width / 2, height / 2);
+        ctx.restore();
+      }
+    }
+  };
+
+  dc('chartVendNeg');
+
+  if ($('chartVendNeg')) {
+    CHARTS.vendNeg = new Chart($('chartVendNeg'), {
+      type: 'doughnut',
+      plugins: [noDataPlugin],
+      data: {
+        labels: negocios.map(n => n.negocio),
+        datasets: [{
+          data: negocios.map(n => n.venta || 0),
+          backgroundColor: negocios.map(n => (NEG_COLORS[n.negocio] || '#64748B') + 'CC'),
+          borderColor: '#121F35',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#94A3B8', boxWidth: 10, font: { size: 10 } }
+          },
+          tooltip: {
+            callbacks: {
+              label: c => `${c.label}: ${fmt(c.raw)}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ── Chart cobertura por negocio (vendedor individual) ──
+  dc('chartVendCobNeg');
+  const cobNegVend = STATE.cobNegocio
+    .filter(r => codDesdeVendedor(r.vendedor) === String(v.cod))
+    .sort((a,b) => getCobNegVal(b) - getCobNegVal(a));
+
+  if($('chartVendCobNeg') && cobNegVend.length){
+    const metaLine75vend = {
+      id:'metaLine75vend',
+      afterDraw(chart){
+        const { ctx, scales:{ x, y } } = chart;
+        const px = x.getPixelForValue(75);
+        ctx.save();
+        ctx.strokeStyle='#EF4444'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(px,y.top); ctx.lineTo(px,y.bottom); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle='#EF4444'; ctx.font='10px Inter,sans-serif';
+        ctx.fillText('75%', px+4, y.top+12);
+        ctx.restore();
+      }
+    };
+    fitBarHeight('chartVendCobNeg', cobNegVend.length, 38, 160);
+    CHARTS.vendCobNeg = new Chart($('chartVendCobNeg'),{
+      type:'bar',
+      plugins:[metaLine75vend],
+      data:{
+        labels: cobNegVend.map(r => r.negocio),
+        datasets:[{
+          data: cobNegVend.map(r => getCobNegVal(r)),
+          backgroundColor: cobNegVend.map(r => {
+            const cv=getCobNegVal(r);
+            return cv>=75?COLORS.green+'CC':cv>=50?COLORS.amber+'CC':COLORS.red+'CC';
+          }),
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>`${pct(c.raw)}  (${cobNegVend[c.dataIndex]?.impactados||0} / ${cobNegVend[c.dataIndex]?.clientes_maestro||0})`}}
+        },
+        scales:{
+          x:{ beginAtZero:true, max:100, ticks:{callback:vv=>vv+'%', color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y: yAxisLabels()
+        }
+      }
+    });
+  } else if($('chartVendCobNeg')){
+    const ctx = $('chartVendCobNeg').getContext('2d');
+    ctx.fillStyle='#94A3B8'; ctx.font='12px Inter,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Sin datos de cobertura por negocio', $('chartVendCobNeg').width/2, $('chartVendCobNeg').height/2);
+  }
+
+  // ── Chart efectividad por semana ──
+  dc('chartVendEfect');
+  const semanas = (STATE.efectividad.por_semana || [])
+    .filter(r => String(r.vendedor || r.asesor || '').split(' - ')[0].trim() === String(v.cod))
+    .sort((a,b) => (a.semana || 0) - (b.semana || 0));
+
+  if ($('vendEfectPct')) {
+    $('vendEfectPct').textContent = pct(v.efectividad || 0);
+    $('vendEfectPct').style.color = efColor;
+  }
+
+  if ($('chartVendEfect')) {
+    const metaLine80vend = {
+      id: 'metaLine80v',
+      afterDraw(chart) {
+        const { ctx, scales: { x, y } } = chart;
+        const py = y.getPixelForValue(80);
+        ctx.save();
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x.left, py);
+        ctx.lineTo(x.right, py);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#EF4444';
+        ctx.font = '9px Inter,sans-serif';
+        ctx.fillText('80%', x.right + 4, py + 4);
+        ctx.restore();
+      }
+    };
+
+    const semColors = semanas.map(s => {
+      const ef = s.efectividad || 0;
+      return ef >= 80 ? COLORS.green + 'CC' : ef >= 65 ? COLORS.amber + 'CC' : COLORS.red + 'CC';
+    });
+
+    CHARTS.vendEfect = new Chart($('chartVendEfect'), {
+      type: 'bar',
+      plugins: [metaLine80vend],
+      data: {
+        labels: semanas.length ? semanas.map(s => `Sem ${s.semana}`) : ['Sin datos'],
+        datasets: [{
+          label: 'Efectividad',
+          data: semanas.length ? semanas.map(s => s.efectividad || 0) : [0],
+          backgroundColor: semanas.length ? semColors : ['#64748B55'],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: c => semanas[c.dataIndex]
+                ? `${pct(c.raw)}  (${semanas[c.dataIndex].impactos} / ${semanas[c.dataIndex].maestra})`
+                : pct(c.raw)
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true, max: 100,
+            ticks: { callback: v => v + '%', color: '#94A3B8' },
+            grid: { color: 'rgba(148,163,184,.08)' }
+          },
+          x: { ticks: { color: '#94A3B8' }, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  dc('chartVendCob');
+
+  const equipoCob = STATE.vendedores.length
+    ? STATE.vendedores.reduce((s, x) => s + (+x.cobertura || 0), 0) / STATE.vendedores.length
+    : 0;
+
+  if ($('chartVendCob')) {
+    CHARTS.vendCob = new Chart($('chartVendCob'), {
+      type: 'bar',
+      data: {
+        labels: ['Mi cobertura', 'Promedio equipo', 'Meta'],
+        datasets: [{
+          data: [
+            +v.cobertura || 0,
+            equipoCob,
+            75
+          ],
+          backgroundColor: [
+            COLORS.blue + 'CC',
+            COLORS.green + 'CC',
+            COLORS.red + 'CC'
+          ],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: c => pct(c.raw)
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { callback: v => v + '%', color: '#94A3B8' },
+            grid: { color: 'rgba(148,163,184,.08)' }
+          },
+          x: {
+            ticks: { color: '#94A3B8' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+}
+
+
+function renderVendedor(cod){
+  const v = STATE.vendedores.find(x => String(x.cod) === String(cod));
+  if (!v) return;
+
+  const devPct = v.pct_devolucion ?? (v.venta_real > 0 ? (v.devol / v.venta_real * 100) : 0);
+
+  const cumpl      = +v.pct_cumplimiento || 0;
+  const cumplColor = cumpl >= 90 ? 'var(--green)' : cumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+  const ef         = +v.efectividad || 0;
+  const efColor    = ef >= 80 ? 'var(--green)' : ef >= 65 ? 'var(--amber)' : 'var(--red)';
+
+  $('vendKpis').innerHTML = `
+    <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value" id="vkVenta">${fmt(v.venta_bruta ?? v.venta_real ?? 0)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value" id="vkDevol">${fmt(v.devol || 0)}</div><div class="kpi-sub">${pct(devPct)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value" id="vkAverias">${fmt(v.averias || 0)}</div><div class="kpi-sub">${pct(v.pct_averia || 0)}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value" id="vkNeta">${fmt(v.venta_neta || 0)}</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Impactos</div><div class="kpi-value" id="vkImp">${v.clientes_imp || 0}</div><div class="kpi-sub">de ${v.maestro || 0}</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Cobertura</div><div class="kpi-value" id="vkCob">${pct(v.cobertura)}</div></div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Efectividad</div>
+      <div class="kpi-value" id="vkEf" style="color:${efColor}">${pct(ef)}</div>
+      <div class="kpi-sub">${v.clientes_imp || 0} impactos / ${v.maestro || 0} maestra</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${Math.min(ef,100)}%;background:${efColor}"></div></div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Cuota Mes</div>
+      <div class="kpi-value" id="vkCumpl" style="color:${cumplColor}">${pct(cumpl)}</div>
+      <div class="kpi-sub">${fmt(v.venta_bruta ?? 0)} / ${fmt(v.cuota || 0)}</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${Math.min(cumpl,100)}%;background:${cumplColor}"></div></div>
+    </div>
+  `;
+
+  countUp($('vkVenta'),   +(v.venta_bruta ?? v.venta_real ?? 0), fmt);
+  countUp($('vkDevol'),   +(v.devol || 0),                       fmt);
+  countUp($('vkAverias'), +(v.averias || 0),                     fmt);
+  countUp($('vkNeta'),    +(v.venta_neta || 0),                  fmt);
+  countUp($('vkImp'),     +(v.clientes_imp || 0),                n => Math.round(n).toString());
+  countUp($('vkCob'),     +(v.cobertura || 0),                   pct);
+  countUp($('vkEf'),      ef,                                    pct);
+  countUp($('vkCumpl'),   cumpl,                                 pct);
+
+  renderChartsVendedor(v);
+
+  $('vendAlerts').innerHTML = `
+    <div class="alert ${devPct > 10 ? 'alert-red' : 'alert-green'}">
+      <strong>Devoluciones</strong>${pct(devPct)} de la venta real
+    </div>
+    <div class="alert ${v.cobertura >= 75 ? 'alert-green' : 'alert-amber'}">
+      <strong>Cobertura</strong>${pct(v.cobertura)}
+    </div>
+  `;
+
+  const skus = STATE.skus.por_vendedor.find(x => String(x.cod) === String(cod));
+  $('tbVendSkus').innerHTML = (skus?.skus || []).map((s,i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${s.nombre || s.sku}</td>
+      <td>${s.negocio || ''}</td>
+      <td style="text-align:right">${fmt(s.venta)}</td>
+      <td style="text-align:right">${s.clientes}</td>
+    </tr>
+  `).join('');
+
+  renderVendedorNuevos(cod);
+}
+
+function renderTendencia(){
+  if (!STATE.tendencia.length) return;
+
+  dc('chartTendencia');
+  CHARTS.tendencia = new Chart($('chartTendencia'), {
+    type:'bar',
+    data:{
+      labels:STATE.tendencia.map(x => `Sem ${x.semana}`),
+      datasets:[{
+        label:'Venta real',
+        data:STATE.tendencia.map(x => x.venta),
+        backgroundColor:COLORS.blue + 'CC',
+        borderRadius:4
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{ tooltip:{callbacks:{label:c => fmt(c.raw)}} },
+      scales:{ y:{ticks:{callback:fmtK,color:'#94A3B8'}}, x:{ticks:{color:'#94A3B8'}} }
+    }
+  });
+}
+
+function renderMarcasSkus(){
+  $('tbMarcas').innerHTML = STATE.marcas.slice(0,10).map(m => `
+    <tr>
+      <td>${m.marca}</td>
+      <td>${m.negocio}</td>
+      <td style="text-align:right">${fmt(m.venta)}</td>
+      <td style="text-align:right">${m.pct}%</td>
+      <td style="text-align:right">${m.clientes}</td>
+    </tr>
+  `).join('');
+
+  $('tbSkus').innerHTML = STATE.skus.global.slice(0,15).map(s => `
+    <tr>
+      <td>${s.nombre || s.sku}</td>
+      <td>${s.negocio}</td>
+      <td style="text-align:right">${fmt(s.venta)}</td>
+      <td style="text-align:right">${s.clientes}</td>
+    </tr>
+  `).join('');
+}
+
+
+function getCoberturaValue(row) {
+  return Number(row.cobertura ?? row.cobertura_ ?? row.cobertura_pct ?? row['cobertura_%'] ?? row['cobertura %'] ?? 0);
+}
+
+function getCoberturaVendedor(row) {
+  return String(row.vendedor ?? row.nombre ?? row.nom_vendedor ?? '').trim();
+}
+
+
+// ── helper: extrae el valor de cobertura de una fila de cobNegocio ──
+function getCobNegVal(r){
+  return +(r.cobertura_ ?? r.cobertura ?? r['cobertura_%'] ?? r.cobertura_pct ?? 0);
+}
+
+// ── helper: cod del vendedor desde texto "212 - NOMBRE" ──
+function codDesdeVendedor(txt){
+  return String(txt || '').split(' - ')[0].trim();
+}
+
+function renderCoberturaNegocioEquipo(){
+  const data = STATE.cobNegocio;
+  if (!data.length) return;
+
+  // Negocios únicos ordenados
+  const negs = [...new Set(data.map(r => r.negocio))].sort();
+
+  // Promedio por negocio (solo vendedores con maestro > 0)
+  const negAvg = negs.map(neg => {
+    const rows = data.filter(r => r.negocio === neg && (+r.clientes_maestro || 0) > 0);
+    const avg  = rows.length
+      ? rows.reduce((s, r) => s + getCobNegVal(r), 0) / rows.length
+      : 0;
+    return { negocio: neg, avg: +avg.toFixed(1), n: rows.length };
+  }).sort((a,b) => b.avg - a.avg);
+
+  // ── Chart promedio por negocio ──
+  const metaLine75neg = {
+    id:'metaLine75neg',
+    afterDraw(chart){
+      const { ctx, scales:{ x, y } } = chart;
+      const px = x.getPixelForValue(75);
+      ctx.save();
+      ctx.strokeStyle='#EF4444'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(px,y.top); ctx.lineTo(px,y.bottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle='#EF4444'; ctx.font='10px Inter,sans-serif';
+      ctx.fillText('75%', px+4, y.top+12);
+      ctx.restore();
+    }
+  };
+
+  dc('chartCobNeg');
+  if($('chartCobNeg') && negAvg.length){
+    CHARTS.cobNeg = new Chart($('chartCobNeg'),{
+      type:'bar',
+      plugins:[metaLine75neg],
+      data:{
+        labels: negAvg.map(n => n.negocio),
+        datasets:[{
+          data: negAvg.map(n => n.avg),
+          backgroundColor: negAvg.map(n => n.avg>=75?COLORS.green+'CC':n.avg>=50?COLORS.amber+'CC':COLORS.red+'CC'),
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label: c => `${pct(c.raw)}  (${negAvg[c.dataIndex]?.n} asesores)`}}
+        },
+        scales:{
+          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%', color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y: yAxisLabels()
+        }
+      }
+    });
+  }
+
+  // ── Selector de negocio ──
+  const sel = $('selNegocio');
+  if(sel){
+    sel.innerHTML = negs.map(n => `<option value="${n}">${n}</option>`).join('');
+    renderCobNegDetalle();
+  }
+
+  // ── Pivot table: vendedor × negocio ──
+  const vends = [...new Set(data.map(r => r.vendedor))].sort((a,b) => {
+    // ordenar por cobertura promedio desc
+    const avgA = negs.reduce((s,n) => { const r=data.find(x=>x.vendedor===a&&x.negocio===n); return s+(r?getCobNegVal(r):0);},0)/negs.length;
+    const avgB = negs.reduce((s,n) => { const r=data.find(x=>x.vendedor===b&&x.negocio===n); return s+(r?getCobNegVal(r):0);},0)/negs.length;
+    return avgB - avgA;
+  });
+
+  const pivot = {};
+  data.forEach(r => {
+    if(!pivot[r.vendedor]) pivot[r.vendedor]={};
+    pivot[r.vendedor][r.negocio] = getCobNegVal(r);
+  });
+
+  const cell = v => {
+    if(v == null) return '<td style="text-align:center;color:var(--muted)">—</td>';
+    const bg = v>=75?'rgba(16,185,129,.18)':v>=50?'rgba(245,158,11,.18)':'rgba(239,68,68,.18)';
+    const cl = v>=75?'var(--green)':v>=50?'var(--amber)':'var(--red)';
+    return `<td style="text-align:center;background:${bg};color:${cl};font-weight:600;font-family:'DM Mono',monospace;font-size:11px">${v.toFixed(0)}%</td>`;
+  };
+
+  const theads = negs.map(n=>`<th style="text-align:center;font-size:9px;white-space:nowrap">${n}</th>`).join('');
+  const trows  = vends.map(vend => {
+    const cells = negs.map(n => cell(pivot[vend]?.[n])).join('');
+    const avgV  = negs.filter(n=>pivot[vend]?.[n]!=null).reduce((s,n)=>s+(pivot[vend][n]||0),0) /
+                  (negs.filter(n=>pivot[vend]?.[n]!=null).length||1);
+    const avgCl = avgV>=75?'var(--green)':avgV>=50?'var(--amber)':'var(--red)';
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">${vend}</td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${avgCl}">${avgV.toFixed(0)}%</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  if($('pivotCobNegContent')){
+    $('pivotCobNegContent').innerHTML = `
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th>Vendedor</th>
+          <th style="text-align:center">Prom.</th>
+          ${theads}
+        </tr></thead>
+        <tbody>${trows}</tbody>
+      </table>`;
+  }
+}
+
+function renderCobNegDetalle(){
+  const neg  = $('selNegocio')?.value;
+  if(!neg) return;
+
+  const rows = STATE.cobNegocio
+    .filter(r => r.negocio === neg && (+r.clientes_maestro||0) > 0)
+    .sort((a,b) => getCobNegVal(b) - getCobNegVal(a));
+
+  const metaLine75det = {
+    id:'metaLine75det',
+    afterDraw(chart){
+      const { ctx, scales:{ x, y } } = chart;
+      const px = x.getPixelForValue(75);
+      ctx.save();
+      ctx.strokeStyle='#EF4444'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(px,y.top); ctx.lineTo(px,y.bottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
+    }
+  };
+
+  dc('chartCobNegDetalle');
+  if($('chartCobNegDetalle') && rows.length){
+    fitBarHeight('chartCobNegDetalle', rows.length, 36, 180);
+    CHARTS.cobNegDet = new Chart($('chartCobNegDetalle'),{
+      type:'bar',
+      plugins:[metaLine75det],
+      data:{
+        labels: rows.map(r => r.vendedor),
+        datasets:[{
+          data: rows.map(r => getCobNegVal(r)),
+          backgroundColor: rows.map(r => {
+            const v=getCobNegVal(r);
+            return v>=75?COLORS.green+'CC':v>=50?COLORS.amber+'CC':COLORS.red+'CC';
+          }),
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>`${pct(c.raw)}  (${rows[c.dataIndex]?.impactados||0} / ${rows[c.dataIndex]?.clientes_maestro||0})`}}
+        },
+        scales:{
+          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%', color:'#7A9BB8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y: yAxisLabels()
+        }
+      }
+    });
+  }
+}
+
+function renderCobertura(){
+  const data = (STATE.cobertura || [])
+    .filter(r => getCoberturaValue(r) > 0)
+    .sort((a,b) => getCoberturaValue(b) - getCoberturaValue(a));
+
+  $('tbCobertura').innerHTML = data.map(r => `
+    <tr>
+      <td>${getCoberturaVendedor(r)}</td>
+      <td style="text-align:right">${r.clientes_maestro || 0}</td>
+      <td style="text-align:right">${r.impactados || 0}</td>
+      <td style="text-align:right">${pct(getCoberturaValue(r))}</td>
+      <td style="text-align:right">${r.sin_compra || 0}</td>
+    </tr>
+  `).join('');
+
+  const bajometa = data.filter(r => getCoberturaValue(r) < 75).length;
+  if ($('vendsBajoMeta')) {
+    $('vendsBajoMeta').textContent = bajometa > 0
+      ? `${bajometa} vendedor${bajometa !== 1 ? 'es' : ''} bajo meta`
+      : '';
+  }
+
+  dc('chartCobertura');
+
+  if ($('chartCobertura') && data.length) {
+    const barColors = data.map(r => {
+      const v = getCoberturaValue(r);
+      return v >= 75 ? COLORS.green + 'CC' : v >= 60 ? COLORS.amber + 'CC' : COLORS.red + 'CC';
+    });
+
+    const metaLinePlugin = {
+      id: 'metaLine75',
+      afterDraw(chart) {
+        const { ctx, scales: { x, y } } = chart;
+        const px = x.getPixelForValue(75);
+        ctx.save();
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(px, y.top);
+        ctx.lineTo(px, y.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    };
+
+    fitBarHeight('chartCobertura', data.length, 36, 200);
+    CHARTS.cobertura = new Chart($('chartCobertura'), {
+      type: 'bar',
+      plugins: [metaLinePlugin],
+      data: {
+        labels: data.map(r => getCoberturaVendedor(r)),
+        datasets: [{
+          label: 'Cobertura real',
+          data: data.map(r => getCoberturaValue(r)),
+          backgroundColor: barColors,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => `${pct(c.raw)}` } }
+        },
+        scales: {
+          x: {
+            beginAtZero: true, max: 100,
+            ticks: { callback: v => v + '%', color: '#7A9BB8' },
+            grid: { color: 'rgba(148,163,184,.08)' }
+          },
+          y: yAxisLabels()
+        }
+      }
+    });
+  }
+
+  $('totalCero').textContent = `${STATE.clientesCero.total || 0} clientes`;
+  $('tbCero').innerHTML = (STATE.clientesCero.por_vendedor || []).map(r => `
+    <tr><td>${getCoberturaVendedor(r)}</td><td style="text-align:right">${r.cantidad}</td></tr>
+  `).join('');
+}
+
+function renderEfectividad(){
+  const data = STATE.efectividad.resumen_mes || [];
+  if (!data.length) return;
+
+  const efField = Object.keys(data[0]).find(k => k.includes('efectividad')) || 'efectividad';
+
+  dc('chartEfect');
+  CHARTS.efect = new Chart($('chartEfect'), {
+    type:'bar',
+    data:{
+      labels:data.map(r => getCoberturaVendedor(r)),
+      datasets:[{
+        data:data.map(r => +r[efField] || 0),
+        backgroundColor:COLORS.green + 'CC',
+        borderRadius:4
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{ y:{ticks:{callback:v => v+'%',color:'#94A3B8'}}, x:{ticks:{color:'#94A3B8'}} }
+    }
+  });
+
+  $('tbEfectividad').innerHTML = (STATE.efectividad.por_semana || []).slice(0,50).map(r => `
+    <tr>
+      <td>${getCoberturaVendedor(r)}</td>
+      <td style="text-align:right">${r.semana || ''}</td>
+      <td style="text-align:right">${r.impactos || 0}</td>
+      <td style="text-align:right">${r.maestra || 0}</td>
+      <td style="text-align:right">${pct(r.efectividad)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderDevoluciones(){
+  const d = STATE.devoluciones;
+  if (!d.por_concepto.length && !d.por_vendedor.length) return;
+
+  dc('chartDevConcepto');
+  CHARTS.devConcepto = new Chart($('chartDevConcepto'), {
+    type:'bar',
+    data:{
+      labels:d.por_concepto.slice(0,8).map(x => x.concepto),
+      datasets:[{data:d.por_concepto.slice(0,8).map(x => x.monto), backgroundColor:COLORS.red + 'CC'}]
+    },
+    options:{indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}
+  });
+
+  dc('chartDevVend');
+  CHARTS.devVend = new Chart($('chartDevVend'), {
+    type:'bar',
+    data:{
+      labels:d.por_vendedor.map(x => x.vendedor),
+      datasets:[{data:d.por_vendedor.map(x => x.monto), backgroundColor:COLORS.amber + 'CC'}]
+    },
+    options:{indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}
+  });
+}
+
+// ── helpers de periodo ───────────────────────────────────────────────
+
+function periodoClientesTexto(){
+  const d = $('fechaDesde')?.value;
+  const h = $('fechaHasta')?.value;
+  if (!d && !h) return 'Todos los registros';
+  if (d && h)   return `${d}  →  ${h}`;
+  if (d)        return `Desde ${d}`;
+  return `Hasta ${h}`;
+}
+
+function shortNombre(vendedorStr){
+  const parts = String(vendedorStr || '').split(' - ');
+  return parts.length > 1 ? parts.slice(1).join(' - ') : vendedorStr;
+}
+
+function mesLabel(mesStr){
+  const [y, mo] = (mesStr || '').split('-');
+  const names = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return (names[parseInt(mo)-1] || mesStr) + ' ' + (y || '').slice(2);
+}
+
+// ── Clientes Nuevos en vista Gerencial ───────────────────────────────
+
+function renderClientesGerencial(){
+  const cn      = STATE.clientesNuevos;
+  const total   = cn.total || 0;
+  const periodo = periodoClientesTexto();
+
+  countUp($('gkNuevos'), total, n => Math.round(n).toString());
+  if ($('gkNuevosSub'))   $('gkNuevosSub').textContent   = periodo;
+  if ($('gNuevosPeriodo'))$('gNuevosPeriodo').textContent = periodo;
+  if ($('gNuevosTotal'))  $('gNuevosTotal').textContent   = total + ' clientes';
+
+  const vends = (cn.por_vendedor || []).slice(0, 8);
+
+  dc('chartNuevosGer');
+  if (vends.length) {
+    fitBarHeight('chartNuevosGer', vends.length, 34, 160);
+    CHARTS.nuevosGer = new Chart($('chartNuevosGer'), {
+      type: 'bar',
+      data: {
+        labels: vends.map(v => shortNombre(v.vendedor)),
+        datasets: [{ data: vends.map(v => v.cantidad), backgroundColor: VEND_COLORS.slice(0,vends.length), borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw + ' clientes' } } },
+        scales: {
+          x: { ticks:{ color:'#7A9BB8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          y: yAxisLabels()
+        }
+      }
+    });
+  }
+
+  dc('chartNuevosTrend');
+  const meses = cn.por_mes || [];
+  if (meses.length) {
+    CHARTS.nuevosTrend = new Chart($('chartNuevosTrend'), {
+      type: 'line',
+      data: {
+        labels: meses.map(m => mesLabel(m.mes)),
+        datasets: [{
+          label: 'Clientes nuevos', data: meses.map(m => m.cantidad),
+          borderColor: COLORS.blue, backgroundColor: COLORS.blue + '22',
+          fill: true, tension: 0.4, pointRadius: 5, pointHoverRadius: 7
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false } },
+        scales: {
+          y: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          x: { ticks:{ color:'#94A3B8' } }
+        }
+      }
+    });
+  }
+}
+
+// ── Clientes Nuevos — vista Clientes ─────────────────────────────────
+
+function renderClientes(){
+  const cn      = STATE.clientesNuevos;
+  const total   = cn.total || 0;
+  const periodo = periodoClientesTexto();
+
+  if ($('clientesTitulo')) $('clientesTitulo').textContent = 'Clientes Nuevos — ' + periodo;
+
+  countUp($('kNuevos'), total, n => Math.round(n).toString());
+  if ($('kNuevosSub'))  $('kNuevosSub').textContent  = periodo;
+  $('kCeroCount').textContent = STATE.clientesCero.total || 0;
+  $('kMaestro').textContent   = STATE.resumen?.clientes_maestro || 0;
+
+  const top = (cn.por_vendedor || [])[0];
+  if (top) {
+    countUp($('kNuevosTop'), top.cantidad, n => Math.round(n).toString());
+    if ($('kNuevosTopSub')) $('kNuevosTopSub').textContent = shortNombre(top.vendedor);
+  }
+
+  if ($('clientesRankSub')) $('clientesRankSub').textContent = periodo;
+
+  // Ranking bar chart
+  dc('chartNuevosRank');
+  const vends = (cn.por_vendedor || []).slice(0, 10);
+  if (vends.length) {
+    fitBarHeight('chartNuevosRank', vends.length, 34, 180);
+    CHARTS.nuevosRank = new Chart($('chartNuevosRank'), {
+      type: 'bar',
+      data: {
+        labels: vends.map(v => shortNombre(v.vendedor)),
+        datasets: [{ data: vends.map(v => v.cantidad), backgroundColor: VEND_COLORS.slice(0,vends.length), borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw + ' clientes' } } },
+        scales: {
+          x: { ticks:{ color:'#7A9BB8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          y: yAxisLabels()
+        }
+      }
+    });
+  }
+
+  // Tendencia mensual line chart
+  dc('chartNuevosMes');
+  const meses = cn.por_mes || [];
+  if (meses.length) {
+    CHARTS.nuevosMes = new Chart($('chartNuevosMes'), {
+      type: 'line',
+      data: {
+        labels: meses.map(m => mesLabel(m.mes)),
+        datasets: [{
+          label: 'Clientes nuevos', data: meses.map(m => m.cantidad),
+          borderColor: COLORS.cyan, backgroundColor: COLORS.cyan + '22',
+          fill: true, tension: 0.4, pointRadius: 5, pointHoverRadius: 7
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false } },
+        scales: {
+          y: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          x: { ticks:{ color:'#94A3B8' } }
+        }
+      }
+    });
+  }
+
+  // Tabla ranking
+  $('tbNuevosVend').innerHTML = (cn.por_vendedor || []).map((v,i) => `
+    <tr>
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td>${shortNombre(v.vendedor)}</td>
+      <td style="text-align:right"><strong>${v.cantidad}</strong></td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">Sin datos</td></tr>';
+
+  // Tabla detalle
+  if ($('tbNuevosCount')) $('tbNuevosCount').textContent = (cn.detalle || []).length + ' registros';
+  $('tbNuevosLista').innerHTML = (cn.detalle || []).map(c => `
+    <tr>
+      <td style="font-size:11px;color:var(--muted)">${shortNombre(c.asesor)}</td>
+      <td>${c.nombre || c.razon_social || '—'}</td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)">${c.fecha_creacion}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">Sin clientes nuevos en el período</td></tr>';
+}
+
+// ── Clientes Nuevos — Mi Panel (vendedor individual) ─────────────────
+
+function renderVendedorNuevos(cod){
+  const cn      = STATE.clientesNuevos;
+  const periodo = periodoClientesTexto();
+
+  // Filtrar detalle por cod_asesor
+  const miDetalle = (cn.detalle || []).filter(c =>
+    String(c.cod_asesor || '').trim() === String(cod)
+  );
+
+  // Buscar en por_vendedor por código (ej: "212 - NOMBRE" → "212")
+  const miRow = (cn.por_vendedor || []).find(v =>
+    String(v.vendedor || '').split(' - ')[0].trim() === String(cod)
+  );
+
+  const miTotal = miRow ? miRow.cantidad : miDetalle.length;
+
+  countUp($('vkNuevos'), miTotal, n => Math.round(n).toString());
+  if ($('vkNuevosSub'))       $('vkNuevosSub').textContent       = periodo;
+  if ($('vendClientesPeriodo'))$('vendClientesPeriodo').textContent = periodo;
+
+  $('tbVendNuevos').innerHTML = miDetalle.length
+    ? miDetalle.map(c => `
+        <tr>
+          <td>${c.nombre || c.razon_social || '—'}</td>
+          <td style="font-size:11px;color:var(--muted)">${c.razon_social && c.nombre ? c.razon_social : '—'}</td>
+          <td style="text-align:right;font-size:11px;color:var(--muted)">${c.fecha_creacion}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">Sin clientes nuevos en el período</td></tr>`;
+}
+
+function applyFilters(){
+  const cod = $('filtroVendedor').value;
+  if (cod) {
+    showView('vendedor');
+    renderVendedor(cod);
+  } else {
+    showView('gerencial');
+    renderGerencial();
+  }
+}
+
+const VIEW_ORDER = ['gerencial','vendedor','cobertura','efectividad','devoluciones','clientes'];
+
+function showView(name){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab, .bottom-nav-btn').forEach(t => t.classList.remove('active'));
+  $('view-' + name).classList.add('active');
+  const idx = VIEW_ORDER.indexOf(name);
+  if (idx >= 0) {
+    document.querySelectorAll('.nav-tab')[idx]?.classList.add('active');
+    document.querySelectorAll('.bottom-nav-btn')[idx]?.classList.add('active');
+  }
+}
+
+function toggleFilters(){
+  $('filterBar')?.classList.toggle('collapsed');
+}
+
+function clickVendedor(cod){
+  $('filtroVendedor').value = cod;
+  showView('vendedor');
+  renderVendedor(cod);
+}
+
+function countUp(el, to, formatter, duration){
+  if (!el) return;
+  duration = duration || 850;
+  const t0 = performance.now();
+  function tick(now){
+    const p = Math.min((now - t0) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = formatter(to * eased);
+    if (p < 1) requestAnimationFrame(tick);
+    else el.textContent = formatter(to);
+  }
+  requestAnimationFrame(tick);
+}
+
+const KPI_ICONS = {
+  kVenta:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+  kDevol:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/></svg>`,
+  kAverias:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  kDescuentoTotal:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>`,
+  kNeta:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  kCob:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  kTicket:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>`,
+  kEfect:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  kCumplPct:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
+};
+
+function injectKpiIcons(){
+  Object.entries(KPI_ICONS).forEach(([id, svg]) => {
+    const el = $(id);
+    if (!el) return;
+    const card = el.closest('.kpi-card');
+    if (card && !card.querySelector('.kpi-icon')){
+      const icon = document.createElement('div');
+      icon.className = 'kpi-icon';
+      icon.innerHTML = svg;
+      card.appendChild(icon);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  refreshTimer = setInterval(loadAll, REFRESH_INTERVAL);
+});
+
+window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
+</script>
+</body>
+</html>
