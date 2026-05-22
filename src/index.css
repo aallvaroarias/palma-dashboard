@@ -138,6 +138,10 @@ body::before {
 .kpi-card.color-purple:hover    { box-shadow: 0 8px 32px rgba(139,108,246,0.3); }
 .kpi-card.color-cyan::before   { background: linear-gradient(90deg, var(--cyan), #67E8F9); }
 .kpi-card.color-cyan:hover      { box-shadow: 0 8px 32px rgba(45,200,216,0.3); }
+.kpi-card.color-gold::before   { background: linear-gradient(90deg, var(--gold), var(--gold-l)); }
+.kpi-card.color-gold:hover      { box-shadow: 0 8px 32px rgba(200,164,62,0.35); }
+.kpi-card.color-teal::before   { background: linear-gradient(90deg, var(--blue), var(--blue-l)); }
+.kpi-card.color-teal:hover      { box-shadow: 0 8px 32px rgba(26,127,166,0.35); }
 
 /* ═══════════════════════════════════════════════
    CHART CARDS

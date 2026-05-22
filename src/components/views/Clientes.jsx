@@ -137,6 +137,19 @@ export default function Clientes() {
           >
             Este mes
           </button>
+          {['2025','2024','2023'].map(yr => (
+            <button
+              key={yr}
+              onClick={() => {
+                const d = `${yr}-01-01`, h = `${yr}-12-31`;
+                setDesde(d); setHasta(h); apply(d, h);
+              }}
+              className="h-7 px-3 rounded-lg text-xs font-medium border transition-all hover:bg-navy-3"
+              style={{ borderColor: 'var(--border-2)', color: 'var(--muted)' }}
+            >
+              {yr}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -241,14 +254,18 @@ export default function Clientes() {
               <table className="palma-table">
                 <thead>
                   <tr>
+                    <th>Cód. Cliente</th>
                     <th>Asesor</th>
-                    <th>Cliente</th>
-                    <th>Fecha</th>
+                    <th>Cliente / Razón Social</th>
+                    <th>Fecha Creación</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clientesNuevos.detalle.map((c, i) => (
                     <tr key={i}>
+                      <td className="font-mono-num" style={{ color: 'var(--cyan)', fontWeight: 600 }}>
+                        {c.cod_cliente || '—'}
+                      </td>
                       <td>{c.asesor || '—'}</td>
                       <td>{c.nombre || c.razon_social || '—'}</td>
                       <td>{c.fecha_creacion || '—'}</td>

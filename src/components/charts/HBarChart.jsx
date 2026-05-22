@@ -9,10 +9,11 @@ import {
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { metaLinePlugin } from './MetaLinePlugin';
-import { fmtK, pct } from '../../utils/formatters';
+import { barDataLabelsPlugin } from './BarDataLabelsPlugin';
+import { fmt, fmtK, pct } from '../../utils/formatters';
 import { alpha } from '../../utils/colors';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, metaLinePlugin);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, metaLinePlugin, barDataLabelsPlugin);
 
 const TICK_COLOR = '#7A9BB8';
 const GRID_COLOR = 'rgba(90,145,185,0.08)';
@@ -54,8 +55,9 @@ export default function HBarChart({
     return alpha(color, 0.82);
   }, [barColors, color]);
 
-  const tickFmt = isPct ? (v) => v + '%' : fmtK;
-  const tooltipFmt = formatValue || (isPct ? pct : fmtK);
+  // x-axis ticks: compact (fmtK) para que no se superpongan. Etiquetas de barra: valor completo en $.
+  const tickFmt    = isPct ? (v) => v + '%' : fmtK;
+  const tooltipFmt = formatValue || (isPct ? pct : fmt);
 
   const chartData = {
     labels,
@@ -74,6 +76,10 @@ export default function HBarChart({
     responsive: true,
     maintainAspectRatio: false,
     animation: { duration: 400 },
+    layout: {
+      // Extra right padding so short-bar outside labels never clip
+      padding: { right: 56 },
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -90,6 +96,10 @@ export default function HBarChart({
       metaLine: metaValue != null
         ? { value: metaValue, color: metaColor, label: metaLabel }
         : {},
+      barDataLabels: {
+        formatValue: tooltipFmt,
+        isPct,
+      },
     },
     scales: {
       x: {

@@ -739,6 +739,7 @@ function doGet(e) {
       case 'tendencia':     data = getTendencia();        break;
       case 'skus':          data = getTopSKUs();          break;
       case 'marcas':        data = getTopMarcas();        break;
+      case 'top_clientes':  data = getTopClientes();      break;
       case 'cuotas':        data = getCuotas();           break;  // ← nuevo
       case 'diagnostico':   data = getDiagnosticoAPI();   break;
       default:              data = getResumen();          break;
@@ -1592,6 +1593,57 @@ function getTopSKUs() {
 
 // ════════════════════════════════════════════════════════════════════
 // TOP MARCAS
+// ════════════════════════════════════════════════════════════════════
+// TOP CLIENTES (global + por vendedor)
+// ════════════════════════════════════════════════════════════════════
+
+function getTopClientes() {
+  const mesData   = getBasePeriodoActual_();
+  const globalMap = {};   // cod_cliente → { cod_cliente, nombre, venta }
+  const vendMap   = {};   // cod_asesor  → { cod_vendedor, nom_vendedor, clientes:{} }
+
+  mesData.forEach(function(r) {
+    if (!esFilaBaseValida_(r)) return;
+    const codCli  = String(r[1]  || '').trim();
+    const nomCli  = String(r[2]  || '').trim();
+    const codAs   = obtenerCodAsesor_(String(r[3] || ''));
+    const nomVend = String(r[4]  || '').trim();
+    const valor   = parseFloat(r[14]) || 0;
+
+    if (!codCli || !codAs) return;
+    if (valor <= 0) return;
+
+    // Acumulado global
+    if (!globalMap[codCli]) globalMap[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
+    globalMap[codCli].venta += valor;
+
+    // Acumulado por vendedor
+    if (!vendMap[codAs]) vendMap[codAs] = { cod_vendedor: codAs, nom_vendedor: nomVend, clientes: {} };
+    if (!vendMap[codAs].clientes[codCli])
+      vendMap[codAs].clientes[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
+    vendMap[codAs].clientes[codCli].venta += valor;
+  });
+
+  const top_global = Object.values(globalMap)
+    .sort(function(a, b) { return b.venta - a.venta; })
+    .slice(0, 10)
+    .map(function(c, i) { return { ranking: i + 1, cod_cliente: c.cod_cliente, nombre: c.nombre, venta: round2_(c.venta) }; });
+
+  const top_por_vendedor = Object.entries(vendMap).map(function(entry) {
+    var cod = entry[0], v = entry[1];
+    return {
+      cod_vendedor: cod,
+      nom_vendedor: v.nom_vendedor,
+      top10: Object.values(v.clientes)
+        .sort(function(a, b) { return b.venta - a.venta; })
+        .slice(0, 10)
+        .map(function(c, i) { return { ranking: i + 1, cod_cliente: c.cod_cliente, nombre: c.nombre, venta: round2_(c.venta) }; })
+    };
+  });
+
+  return { top_global: top_global, top_por_vendedor: top_por_vendedor };
+}
+
 // ════════════════════════════════════════════════════════════════════
 
 function getTopMarcas() {

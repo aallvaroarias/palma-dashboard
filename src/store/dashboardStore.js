@@ -1,23 +1,14 @@
 import { create } from 'zustand';
 import { vendedorValido, esBodega, getCoberturaVendedor } from '../utils/formatters';
 
-const BASE = import.meta.env.DEV
-  ? 'https://script.google.com/macros/s/AKfycbxon9PiTxLibNmihjEGdRoCqYO4YdTEFes88w8Ub2YqDXfZaTPCm1Wk9L0-m-ONXSAh/exec'
-  : '/api/datos';
+// Always route through /api/datos → Vite proxy in dev, Vercel serverless in prod
+const BASE = '/api/datos';
 
 async function fetchSheet(sheet, params = {}) {
   try {
-    let url;
-    if (import.meta.env.DEV) {
-      // In dev, hit Apps Script directly (no proxy needed locally)
-      url = `${BASE}?sheet=${sheet}`;
-      if (params.desde) url += `&desde=${params.desde}`;
-      if (params.hasta) url += `&hasta=${params.hasta}`;
-    } else {
-      url = `${BASE}?sheet=${sheet}`;
-      if (params.desde) url += `&desde=${params.desde}`;
-      if (params.hasta) url += `&hasta=${params.hasta}`;
-    }
+    let url = `${BASE}?sheet=${sheet}`;
+    if (params.desde) url += `&desde=${params.desde}`;
+    if (params.hasta) url += `&hasta=${params.hasta}`;
 
     const res = await fetch(url);
     const json = await res.json();
@@ -46,6 +37,7 @@ const useDashboardStore = create((set, get) => ({
   tendencia: [],
   skus: { global: [], por_vendedor: [] },
   marcas: [],
+  topClientes: { top_global: [], top_por_vendedor: [] },
   loading: false,
   lastUpdate: null,
   error: null,
@@ -57,7 +49,7 @@ const useDashboardStore = create((set, get) => ({
       const [
         resumen, vendedores, cobertura, cobNegocio,
         efectividad, devoluciones, cero, nuevos,
-        tendencia, skus, marcas,
+        tendencia, skus, marcas, topClientes,
       ] = await Promise.all([
         fetchSheet('resumen'),
         fetchSheet('vendedores'),
@@ -70,6 +62,7 @@ const useDashboardStore = create((set, get) => ({
         fetchSheet('tendencia'),
         fetchSheet('skus'),
         fetchSheet('marcas'),
+        fetchSheet('top_clientes'),
       ]);
 
       set({
@@ -90,6 +83,7 @@ const useDashboardStore = create((set, get) => ({
         tendencia: tendencia || get().tendencia,
         skus: skus || get().skus,
         marcas: marcas || get().marcas,
+        topClientes: topClientes || get().topClientes,
         loading: false,
         lastUpdate: new Date(),
       });

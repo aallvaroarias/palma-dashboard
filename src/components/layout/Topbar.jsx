@@ -25,12 +25,23 @@ export default function Topbar({ onRefresh }) {
     >
       {/* Brand */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <img
-          src="/logo-palumar.png"
-          alt="Palumar"
-          className="w-8 h-8 object-contain"
-          onError={(e) => { e.target.style.display = 'none'; }}
-        />
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: '1.5px solid rgba(200,164,62,0.45)',
+            background: '#ffffff',
+            flexShrink: 0,
+          }}
+        >
+          <img
+            src="/logo-emblema.png"
+            alt="Palumar"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        </div>
         <div className="leading-tight">
           <div
             className="font-display font-extrabold tracking-wide text-palumar-white"

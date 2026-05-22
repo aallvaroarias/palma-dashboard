@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import useDashboardStore from '../../store/dashboardStore';
 import KpiCard from '../ui/KpiCard';
@@ -13,7 +13,8 @@ export default function Vendedor() {
   const [params] = useSearchParams();
   const cod = params.get('v');
 
-  const { vendedores, cobertura, cobNegocio, efectividad, skus, clientesNuevos } = useDashboardStore();
+  const { vendedores, cobertura, cobNegocio, efectividad, skus, clientesNuevos,
+          clientesCero, topClientes, refetchClientes } = useDashboardStore();
 
   const v = useMemo(
     () => vendedores.find(x => String(x.cod) === String(cod)),
@@ -54,12 +55,42 @@ export default function Vendedor() {
     return found?.skus || [];
   }, [skus, cod]);
 
+  // Clientes nuevos con filtro de fecha propio del panel vendedor
+  const [desdeN, setDesdeN] = useState('');
+  const [hastaN, setHastaN] = useState('');
+  const [loadingN, setLoadingN] = useState(false);
+
+  const applyNuevos = useCallback(async (d, h) => {
+    setLoadingN(true);
+    try { await refetchClientes(d || undefined, h || undefined); }
+    finally { setLoadingN(false); }
+  }, [refetchClientes]);
+
   const nuevosVend = useMemo(() => {
     if (!v) return [];
-    return (clientesNuevos.detalle || []).filter(c => {
-      return c.asesor === v.nombre || c.asesor === String(v.cod);
-    });
+    return (clientesNuevos.detalle || []).filter(c =>
+      c.asesor === v.nombre || c.asesor === String(v.cod) ||
+      c.cod_asesor === String(v.cod)
+    );
   }, [clientesNuevos, v]);
+
+  // Clientes cero de este vendedor
+  const ceroVend = useMemo(() => {
+    if (!v) return [];
+    return (clientesCero.detalle || []).filter(r => {
+      const nom = String(r.vendedor || r.nom_vendedor || '').trim();
+      return nom === v.nombre || nom === String(v.cod);
+    });
+  }, [clientesCero, v]);
+
+  // Top 10 clientes de este vendedor
+  const top10Vend = useMemo(() => {
+    if (!v) return [];
+    const found = (topClientes.top_por_vendedor || []).find(x =>
+      x.cod_vendedor === String(v.cod) || x.nom_vendedor === v.nombre
+    );
+    return found?.top10 || [];
+  }, [topClientes, v]);
 
   if (!cod) {
     return (
@@ -179,7 +210,7 @@ export default function Vendedor() {
             labels={['Mi cobertura', 'Prom. equipo', 'Meta']}
             datasets={[{
               label: 'Porcentaje',
-              data: [+v.cobertura || 0, equipoCobPct, 75],
+              data: [+v.cobertura || 0, equipoCobPct, 95],
               color: '#2AAED9',
               fill: false,
             }]}
@@ -200,10 +231,49 @@ export default function Vendedor() {
               data={cobVend.map(r2 => getCoberturaValue(r2))}
               barColors={cobVend.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
               isPct
-              metaValue={75}
+              metaValue={95}
+              metaLabel="Meta 95%"
               minH={120}
               rowH={32}
             />
+            {/* Tabla detallada: maestro vs impactados por negocio */}
+            <div className="mt-4 overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>Negocio</th>
+                    <th style={{ textAlign: 'right' }}>Maestro</th>
+                    <th style={{ textAlign: 'right' }}>Impactados</th>
+                    <th style={{ textAlign: 'right' }}>Cobertura</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cobVend.map((r2, i) => {
+                    const cob = getCoberturaValue(r2);
+                    const maestro    = r2.clientes_maestro || r2.maestro || 0;
+                    const impactados = r2.impactados || 0;
+                    return (
+                      <tr key={i}>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-sm flex-shrink-0"
+                              style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                            {r2.negocio || getCoberturaVendedor(r2)}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">{maestro}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">{impactados}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: cob >= 95 ? 'var(--green)' : cob >= 75 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>
+                            {pct(cob)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -236,46 +306,41 @@ export default function Vendedor() {
           </strong>
           {pct(devPct)} de la venta real
         </div>
-        <div className={`alert-item ${+v.cobertura >= 75 ? 'alert-green' : 'alert-amber'}`}>
+        <div className={`alert-item ${+v.cobertura >= 95 ? 'alert-green' : +v.cobertura >= 75 ? 'alert-amber' : 'alert-red'}`}>
           <strong style={{ display: 'block', marginBottom: '2px', fontSize: '11px', fontWeight: 700 }}>
             Cobertura
           </strong>
-          {pct(v.cobertura)} — Meta 75%
+          {pct(v.cobertura)} — Meta 95%
         </div>
       </div>
 
-      {/* Mis clientes nuevos */}
-      {nuevosVend.length > 0 && (
+      {/* ── Clientes Cero ── */}
+      {ceroVend.length > 0 && (
         <>
-          <SectionTitle>Mis Clientes Nuevos</SectionTitle>
-          <div className="flex items-center gap-3 mb-3">
-            <KpiCard
-              label="Total nuevos"
-              value={String(nuevosVend.length)}
-              color="green"
-            />
+          <SectionTitle>Mis Clientes Cero</SectionTitle>
+          <div className="mb-3">
+            <KpiCard label="Sin compra este período" value={String(ceroVend.length)} color="red" />
           </div>
           <div className="table-card mb-4">
-            <div className="px-5 py-3.5 border-b" style={{ borderColor: 'var(--border-2)' }}>
-              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-                Detalle Clientes Nuevos
-              </h3>
-            </div>
             <div className="overflow-x-auto">
               <table className="palma-table">
                 <thead>
                   <tr>
+                    <th>Cód. Cliente</th>
                     <th>Cliente</th>
                     <th>Razón Social</th>
-                    <th>Fecha</th>
+                    <th>Ciudad</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {nuevosVend.map((c, i) => (
+                  {ceroVend.map((c, i) => (
                     <tr key={i}>
-                      <td>{c.cod || c.codigo || '—'}</td>
-                      <td>{c.nombre || c.razon_social || '—'}</td>
-                      <td>{c.fecha_creacion || '—'}</td>
+                      <td className="font-mono-num" style={{ color: 'var(--red)', fontWeight: 700 }}>
+                        {c.cod_cliente || c['cod cliente'] || '—'}
+                      </td>
+                      <td>{c.cliente || c.nom_cliente || '—'}</td>
+                      <td>{c.razon_social || '—'}</td>
+                      <td>{c.ciudad || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -283,6 +348,110 @@ export default function Vendedor() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Top 10 Clientes ── */}
+      {top10Vend.length > 0 && (
+        <>
+          <SectionTitle>Mis Top 10 Clientes</SectionTitle>
+          <div className="table-card mb-4">
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cód.</th>
+                    <th>Cliente</th>
+                    <th style={{ textAlign: 'right' }}>Venta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {top10Vend.map((c) => (
+                    <tr key={c.cod_cliente}>
+                      <td>
+                        <span className="font-mono-num font-bold"
+                          style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}>
+                          {c.ranking}
+                        </span>
+                      </td>
+                      <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
+                      <td>{c.nombre}</td>
+                      <td style={{ textAlign: 'right' }} className="font-mono-num">
+                        <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Mis Clientes Nuevos ── */}
+      <SectionTitle>Mis Clientes Nuevos</SectionTitle>
+
+      {/* Filtro de fechas */}
+      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl border"
+        style={{ background: 'rgba(13,30,43,0.6)', borderColor: 'var(--border-2)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-palumar-muted" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Desde</span>
+          <input type="date" value={desdeN} onChange={e => setDesdeN(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-palumar-muted" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Hasta</span>
+          <input type="date" value={hastaN} onChange={e => setHastaN(e.target.value)} />
+        </div>
+        <button
+          onClick={() => applyNuevos(desdeN, hastaN)}
+          disabled={loadingN}
+          className="h-8 px-4 rounded-lg text-xs font-semibold text-white"
+          style={{ background: 'var(--blue)', opacity: loadingN ? 0.6 : 1 }}
+        >
+          {loadingN ? 'Cargando…' : 'Aplicar'}
+        </button>
+        <button
+          onClick={() => { setDesdeN(''); setHastaN(''); applyNuevos('', ''); }}
+          className="h-8 px-3 rounded-lg text-xs font-medium border"
+          style={{ borderColor: 'var(--border-2)', color: 'var(--muted)' }}
+        >
+          Todo el historial
+        </button>
+      </div>
+
+      <div className="mb-3">
+        <KpiCard label="Clientes nuevos" value={String(nuevosVend.length)} color="green" />
+      </div>
+
+      {nuevosVend.length > 0 ? (
+        <div className="table-card mb-4">
+          <div className="overflow-x-auto">
+            <table className="palma-table">
+              <thead>
+                <tr>
+                  <th>Cód. Cliente</th>
+                  <th>Cliente / Razón Social</th>
+                  <th>Fecha Creación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nuevosVend.map((c, i) => (
+                  <tr key={i}>
+                    <td className="font-mono-num" style={{ color: 'var(--cyan)', fontWeight: 600 }}>
+                      {c.cod_cliente || '—'}
+                    </td>
+                    <td>{c.nombre || c.razon_social || '—'}</td>
+                    <td>{c.fecha_creacion || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-8 text-palumar-muted text-sm mb-4">
+          Sin clientes nuevos en el rango seleccionado
+        </div>
       )}
 
       {/* Top SKUs */}

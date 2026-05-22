@@ -5,8 +5,10 @@ const COLOR_MAP = {
   green:  { bar: 'linear-gradient(90deg, #0FA97A, #34D399)' },
   red:    { bar: 'linear-gradient(90deg, #E05252, #F87171)' },
   amber:  { bar: 'linear-gradient(90deg, #C8A43E, #DDB84A)' },
+  gold:   { bar: 'linear-gradient(90deg, #C8A43E, #DDB84A)' },
   purple: { bar: 'linear-gradient(90deg, #8B6CF6, #A78BFA)' },
   cyan:   { bar: 'linear-gradient(90deg, #2DC8D8, #67E8F9)' },
+  teal:   { bar: 'linear-gradient(90deg, #1A7FA6, #2AAED9)' },
 };
 
 /**
