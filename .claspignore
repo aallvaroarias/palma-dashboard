@@ -1,4 +1,5 @@
-# Ignorar todo excepto los archivos de Apps Script
+# Ignorar TODO — solo subir los 3 archivos GAS
+**/**
 **
 !Código.js
 !diagnostico.js
