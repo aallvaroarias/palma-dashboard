@@ -917,6 +917,29 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
     </div>
   </div>
 
+  <div class="section-title">Cobertura por Negocio</div>
+
+  <div class="chart-grid" style="margin-bottom:16px">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div><div class="chart-title">Promedio Equipo por Negocio</div><div class="chart-sub">Cobertura promedio del equipo · meta 75%</div></div>
+      </div>
+      <div class="chart-wrap" style="height:240px"><canvas id="chartCobNeg"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div><div class="chart-title">Detalle por Negocio</div><div class="chart-sub">Selecciona un negocio para ver el ranking de asesores</div></div>
+        <select id="selNegocio" onchange="renderCobNegDetalle()" style="height:28px;font-size:11px;padding:0 22px 0 8px"></select>
+      </div>
+      <div class="chart-wrap" style="height:240px"><canvas id="chartCobNegDetalle"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card" id="pivotCobNeg" style="margin-bottom:20px;overflow-x:auto">
+    <div class="table-header"><h3>Cobertura por Negocio × Vendedor</h3><span>Verde ≥75% · Ámbar ≥50% · Rojo &lt;50%</span></div>
+    <div id="pivotCobNegContent"></div>
+  </div>
+
   <div class="chart-card wide" style="margin-bottom:20px">
     <div class="chart-header">
       <div><div class="chart-title">Efectividad por Vendedor</div><div class="chart-sub">Impactos / Maestra acumulado del mes · línea roja = meta 80%</div></div>
@@ -991,6 +1014,13 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
       <div class="chart-header"><div><div class="chart-title">Mi Cobertura vs Equipo</div><div class="chart-sub">Línea roja = meta 75%</div></div></div>
       <div class="chart-wrap" style="height:210px"><canvas id="chartVendCob"></canvas></div>
     </div>
+  </div>
+
+  <div class="chart-card wide" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div><div class="chart-title">Mi Cobertura por Negocio</div><div class="chart-sub">Impactados / Maestro por línea de negocio · meta 75%</div></div>
+    </div>
+    <div class="chart-wrap" style="height:200px"><canvas id="chartVendCobNeg"></canvas></div>
   </div>
 
   <div class="chart-card wide" style="margin-bottom:20px">
@@ -1333,6 +1363,7 @@ function renderGerencial(){
   ).join('');
 
   renderTablaRanking(vs);
+  renderCoberturaNegocioEquipo();
   renderEfectividadEquipo();
   renderAlertas();
   injectKpiIcons();
@@ -1521,6 +1552,59 @@ function renderChartsVendedor(v) {
         }
       }
     });
+  }
+
+  // ── Chart cobertura por negocio (vendedor individual) ──
+  dc('chartVendCobNeg');
+  const cobNegVend = STATE.cobNegocio
+    .filter(r => codDesdeVendedor(r.vendedor) === String(v.cod))
+    .sort((a,b) => getCobNegVal(b) - getCobNegVal(a));
+
+  if($('chartVendCobNeg') && cobNegVend.length){
+    const metaLine75vend = {
+      id:'metaLine75vend',
+      afterDraw(chart){
+        const { ctx, scales:{ x, y } } = chart;
+        const px = x.getPixelForValue(75);
+        ctx.save();
+        ctx.strokeStyle='#EF4444'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(px,y.top); ctx.lineTo(px,y.bottom); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle='#EF4444'; ctx.font='10px Inter,sans-serif';
+        ctx.fillText('75%', px+4, y.top+12);
+        ctx.restore();
+      }
+    };
+    CHARTS.vendCobNeg = new Chart($('chartVendCobNeg'),{
+      type:'bar',
+      plugins:[metaLine75vend],
+      data:{
+        labels: cobNegVend.map(r => r.negocio),
+        datasets:[{
+          data: cobNegVend.map(r => getCobNegVal(r)),
+          backgroundColor: cobNegVend.map(r => {
+            const cv=getCobNegVal(r);
+            return cv>=75?COLORS.green+'CC':cv>=50?COLORS.amber+'CC':COLORS.red+'CC';
+          }),
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>`${pct(c.raw)}  (${cobNegVend[c.dataIndex]?.impactados||0} / ${cobNegVend[c.dataIndex]?.clientes_maestro||0})`}}
+        },
+        scales:{
+          x:{ beginAtZero:true, max:100, ticks:{callback:vv=>vv+'%',color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+        }
+      }
+    });
+  } else if($('chartVendCobNeg')){
+    const ctx = $('chartVendCobNeg').getContext('2d');
+    ctx.fillStyle='#94A3B8'; ctx.font='12px Inter,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Sin datos de cobertura por negocio', $('chartVendCobNeg').width/2, $('chartVendCobNeg').height/2);
   }
 
   // ── Chart efectividad por semana ──
@@ -1770,6 +1854,179 @@ function getCoberturaVendedor(row) {
   return String(row.vendedor ?? row.nombre ?? row.nom_vendedor ?? '').trim();
 }
 
+
+// ── helper: extrae el valor de cobertura de una fila de cobNegocio ──
+function getCobNegVal(r){
+  return +(r.cobertura_ ?? r.cobertura ?? r['cobertura_%'] ?? r.cobertura_pct ?? 0);
+}
+
+// ── helper: cod del vendedor desde texto "212 - NOMBRE" ──
+function codDesdeVendedor(txt){
+  return String(txt || '').split(' - ')[0].trim();
+}
+
+function renderCoberturaNegocioEquipo(){
+  const data = STATE.cobNegocio;
+  if (!data.length) return;
+
+  // Negocios únicos ordenados
+  const negs = [...new Set(data.map(r => r.negocio))].sort();
+
+  // Promedio por negocio (solo vendedores con maestro > 0)
+  const negAvg = negs.map(neg => {
+    const rows = data.filter(r => r.negocio === neg && (+r.clientes_maestro || 0) > 0);
+    const avg  = rows.length
+      ? rows.reduce((s, r) => s + getCobNegVal(r), 0) / rows.length
+      : 0;
+    return { negocio: neg, avg: +avg.toFixed(1), n: rows.length };
+  }).sort((a,b) => b.avg - a.avg);
+
+  // ── Chart promedio por negocio ──
+  const metaLine75neg = {
+    id:'metaLine75neg',
+    afterDraw(chart){
+      const { ctx, scales:{ x, y } } = chart;
+      const px = x.getPixelForValue(75);
+      ctx.save();
+      ctx.strokeStyle='#EF4444'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(px,y.top); ctx.lineTo(px,y.bottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle='#EF4444'; ctx.font='10px Inter,sans-serif';
+      ctx.fillText('75%', px+4, y.top+12);
+      ctx.restore();
+    }
+  };
+
+  dc('chartCobNeg');
+  if($('chartCobNeg') && negAvg.length){
+    CHARTS.cobNeg = new Chart($('chartCobNeg'),{
+      type:'bar',
+      plugins:[metaLine75neg],
+      data:{
+        labels: negAvg.map(n => n.negocio),
+        datasets:[{
+          data: negAvg.map(n => n.avg),
+          backgroundColor: negAvg.map(n => n.avg>=75?COLORS.green+'CC':n.avg>=50?COLORS.amber+'CC':COLORS.red+'CC'),
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label: c => `${pct(c.raw)}  (${negAvg[c.dataIndex]?.n} asesores)`}}
+        },
+        scales:{
+          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%',color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+        }
+      }
+    });
+  }
+
+  // ── Selector de negocio ──
+  const sel = $('selNegocio');
+  if(sel){
+    sel.innerHTML = negs.map(n => `<option value="${n}">${n}</option>`).join('');
+    renderCobNegDetalle();
+  }
+
+  // ── Pivot table: vendedor × negocio ──
+  const vends = [...new Set(data.map(r => r.vendedor))].sort((a,b) => {
+    // ordenar por cobertura promedio desc
+    const avgA = negs.reduce((s,n) => { const r=data.find(x=>x.vendedor===a&&x.negocio===n); return s+(r?getCobNegVal(r):0);},0)/negs.length;
+    const avgB = negs.reduce((s,n) => { const r=data.find(x=>x.vendedor===b&&x.negocio===n); return s+(r?getCobNegVal(r):0);},0)/negs.length;
+    return avgB - avgA;
+  });
+
+  const pivot = {};
+  data.forEach(r => {
+    if(!pivot[r.vendedor]) pivot[r.vendedor]={};
+    pivot[r.vendedor][r.negocio] = getCobNegVal(r);
+  });
+
+  const cell = v => {
+    if(v == null) return '<td style="text-align:center;color:var(--muted)">—</td>';
+    const bg = v>=75?'rgba(16,185,129,.18)':v>=50?'rgba(245,158,11,.18)':'rgba(239,68,68,.18)';
+    const cl = v>=75?'var(--green)':v>=50?'var(--amber)':'var(--red)';
+    return `<td style="text-align:center;background:${bg};color:${cl};font-weight:600;font-family:'DM Mono',monospace;font-size:11px">${v.toFixed(0)}%</td>`;
+  };
+
+  const theads = negs.map(n=>`<th style="text-align:center;font-size:9px;white-space:nowrap">${n}</th>`).join('');
+  const trows  = vends.map(vend => {
+    const cells = negs.map(n => cell(pivot[vend]?.[n])).join('');
+    const avgV  = negs.filter(n=>pivot[vend]?.[n]!=null).reduce((s,n)=>s+(pivot[vend][n]||0),0) /
+                  (negs.filter(n=>pivot[vend]?.[n]!=null).length||1);
+    const avgCl = avgV>=75?'var(--green)':avgV>=50?'var(--amber)':'var(--red)';
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">${vend}</td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${avgCl}">${avgV.toFixed(0)}%</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  if($('pivotCobNegContent')){
+    $('pivotCobNegContent').innerHTML = `
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th>Vendedor</th>
+          <th style="text-align:center">Prom.</th>
+          ${theads}
+        </tr></thead>
+        <tbody>${trows}</tbody>
+      </table>`;
+  }
+}
+
+function renderCobNegDetalle(){
+  const neg  = $('selNegocio')?.value;
+  if(!neg) return;
+
+  const rows = STATE.cobNegocio
+    .filter(r => r.negocio === neg && (+r.clientes_maestro||0) > 0)
+    .sort((a,b) => getCobNegVal(b) - getCobNegVal(a));
+
+  const metaLine75det = {
+    id:'metaLine75det',
+    afterDraw(chart){
+      const { ctx, scales:{ x, y } } = chart;
+      const px = x.getPixelForValue(75);
+      ctx.save();
+      ctx.strokeStyle='#EF4444'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(px,y.top); ctx.lineTo(px,y.bottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
+    }
+  };
+
+  dc('chartCobNegDetalle');
+  if($('chartCobNegDetalle') && rows.length){
+    CHARTS.cobNegDet = new Chart($('chartCobNegDetalle'),{
+      type:'bar',
+      plugins:[metaLine75det],
+      data:{
+        labels: rows.map(r => r.vendedor),
+        datasets:[{
+          data: rows.map(r => getCobNegVal(r)),
+          backgroundColor: rows.map(r => {
+            const v=getCobNegVal(r);
+            return v>=75?COLORS.green+'CC':v>=50?COLORS.amber+'CC':COLORS.red+'CC';
+          }),
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>`${pct(c.raw)}  (${rows[c.dataIndex]?.impactados||0} / ${rows[c.dataIndex]?.clientes_maestro||0})`}}
+        },
+        scales:{
+          x:{ beginAtZero:true, max:100, ticks:{callback:v=>v+'%',color:'#94A3B8'}, grid:{color:'rgba(148,163,184,.08)'} },
+          y:{ ticks:{color:'#94A3B8'}, grid:{display:false} }
+        }
+      }
+    });
+  }
+}
 
 function renderCobertura(){
   const data = (STATE.cobertura || [])
