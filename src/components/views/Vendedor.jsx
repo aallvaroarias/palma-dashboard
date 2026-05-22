@@ -425,12 +425,23 @@ export default function Vendedor() {
 
       {nuevosVend.length > 0 ? (
         <div className="table-card mb-4">
+          <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+            <span className="font-display font-bold text-palumar-white" style={{ fontSize: '12px' }}>
+              {nuevosVend.length} cliente{nuevosVend.length !== 1 ? 's' : ''}
+            </span>
+            <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+              {clientesNuevos.desde && clientesNuevos.hasta
+                ? `${clientesNuevos.desde} → ${clientesNuevos.hasta}`
+                : 'Todo el historial'}
+            </span>
+          </div>
           <div className="overflow-x-auto">
             <table className="palma-table">
               <thead>
                 <tr>
-                  <th>Cód. Cliente</th>
-                  <th>Cliente / Razón Social</th>
+                  <th>Cód.</th>
+                  <th>Cliente</th>
+                  <th>Razón Social</th>
                   <th>Fecha Creación</th>
                 </tr>
               </thead>
@@ -440,8 +451,9 @@ export default function Vendedor() {
                     <td className="font-mono-num" style={{ color: 'var(--cyan)', fontWeight: 600 }}>
                       {c.cod_cliente || '—'}
                     </td>
-                    <td>{c.nombre || c.razon_social || '—'}</td>
-                    <td>{c.fecha_creacion || '—'}</td>
+                    <td>{c.nombre || '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>{c.razon_social || '—'}</td>
+                    <td className="font-mono-num" style={{ color: 'var(--muted)' }}>{c.fecha_creacion || '—'}</td>
                   </tr>
                 ))}
               </tbody>

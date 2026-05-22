@@ -26,6 +26,7 @@ export default function Gerencial() {
     cobNegocio,
     efectividad,
     clientesNuevos,
+    clientesCero,
     tendencia,
     marcas,
     skus,
@@ -34,6 +35,15 @@ export default function Gerencial() {
 
   const [negocioFiltro, setNegocioFiltro] = useState('');
   const [vendedorTop10, setVendedorTop10] = useState('');
+  const [ceroVendSel, setCeroVendSel] = useState('');
+
+  // Detalle de clientes cero del vendedor seleccionado
+  const ceroVendDetalle = useMemo(() => {
+    if (!ceroVendSel) return [];
+    return (clientesCero.detalle || []).filter(c =>
+      String(c.vendedor || '').trim() === ceroVendSel
+    );
+  }, [clientesCero, ceroVendSel]);
 
   const vs = useMemo(
     () => [...vendedores].sort((a, b) => (b.venta_neta || 0) - (a.venta_neta || 0)),
@@ -175,6 +185,120 @@ export default function Gerencial() {
               minH={120}
               rowH={36}
             />
+          </div>
+        </>
+      )}
+
+      {/* ── Clientes Sin Compra ── */}
+      {(clientesCero.total > 0) && (
+        <>
+          <SectionTitle>Clientes Sin Compra</SectionTitle>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <KpiCard
+              label="Sin compra este período"
+              value={String(clientesCero.total || 0)}
+              color="red"
+            />
+            {(clientesCero.por_vendedor || []).length > 0 && (
+              <KpiCard
+                label="Vendedor c/más ceros"
+                value={clientesCero.por_vendedor[0]?.vendedor?.split(' ')[0] || '—'}
+                sub={`${clientesCero.por_vendedor[0]?.cantidad} clientes`}
+                color="amber"
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            {/* Resumen por vendedor */}
+            <div className="table-card">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                  Resumen por Vendedor
+                </h3>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                  {(clientesCero.por_vendedor || []).length} vendedores
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th style={{ textAlign: 'right' }}>Clientes cero</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(clientesCero.por_vendedor || []).map((row, i) => (
+                      <tr
+                        key={i}
+                        className="cursor-pointer"
+                        style={{ background: ceroVendSel === row.vendedor ? 'rgba(26,127,166,0.08)' : '' }}
+                        onClick={() => setCeroVendSel(ceroVendSel === row.vendedor ? '' : row.vendedor)}
+                      >
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                            {row.vendedor}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span style={{ color: 'var(--red)', fontWeight: 700 }}>{row.cantidad}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Detalle del vendedor seleccionado */}
+            <div className="table-card">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                  {ceroVendSel ? `Detalle — ${ceroVendSel}` : 'Detalle individual'}
+                </h3>
+                {ceroVendSel && (
+                  <button
+                    onClick={() => setCeroVendSel('')}
+                    className="text-palumar-muted hover:text-palumar-white"
+                    style={{ fontSize: '11px' }}
+                  >
+                    ✕ limpiar
+                  </button>
+                )}
+              </div>
+              {!ceroVendSel ? (
+                <div className="px-5 py-10 text-center text-palumar-muted text-sm">
+                  Haz clic en un vendedor de la tabla para ver sus clientes sin compra
+                </div>
+              ) : ceroVendDetalle.length === 0 ? (
+                <div className="px-5 py-10 text-center text-palumar-muted text-sm">Sin datos</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>Cód.</th>
+                        <th>Cliente</th>
+                        <th>Ciudad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ceroVendDetalle.map((c, i) => (
+                        <tr key={i}>
+                          <td className="font-mono-num" style={{ color: 'var(--red)', fontWeight: 700 }}>
+                            {c.cod_cliente || '—'}
+                          </td>
+                          <td>{c.cliente || c.nom_cliente || '—'}</td>
+                          <td style={{ color: 'var(--muted)' }}>{c.ciudad || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
