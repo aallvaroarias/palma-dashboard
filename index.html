@@ -511,7 +511,215 @@ tr:hover td { background: rgba(37,99,235,.05); }
 
 /* ════ TWO-COL GRID ════ */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-@media(max-width:768px) { .two-col { grid-template-columns: 1fr; } .chart-grid { grid-template-columns: 1fr; } }
+
+/* ════ ANIMATED ORBS ════ */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+.orb-1 {
+  width: 720px; height: 720px;
+  background: radial-gradient(circle, rgba(37,99,235,.16) 0%, transparent 68%);
+  top: -280px; left: -180px;
+  animation: orbFloat1 22s ease-in-out infinite;
+}
+.orb-2 {
+  width: 520px; height: 520px;
+  background: radial-gradient(circle, rgba(139,92,246,.14) 0%, transparent 68%);
+  bottom: -160px; right: -120px;
+  animation: orbFloat2 28s ease-in-out infinite;
+}
+.orb-3 {
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, rgba(6,182,212,.11) 0%, transparent 68%);
+  top: 38%; left: 42%;
+  animation: orbFloat3 19s ease-in-out infinite;
+}
+@keyframes orbFloat1 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%      { transform: translate(45px,-55px) scale(1.06); }
+  66%      { transform: translate(-30px,40px) scale(0.96); }
+}
+@keyframes orbFloat2 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  40%      { transform: translate(-55px,35px) scale(1.08); }
+  70%      { transform: translate(40px,-28px) scale(0.93); }
+}
+@keyframes orbFloat3 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  50%      { transform: translate(-38px,-32px) scale(1.12); }
+}
+
+/* ════ GLASSMORPHISM UPGRADE ════ */
+.kpi-card {
+  background: rgba(18,31,53,.72) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(148,163,184,.14) !important;
+  transition: transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s ease !important;
+}
+.kpi-card:hover { transform: translateY(-5px) scale(1.01) !important; }
+.kpi-card.blue:hover   { box-shadow: 0 16px 48px rgba(37,99,235,.32),  0 0 0 1px rgba(37,99,235,.22); }
+.kpi-card.green:hover  { box-shadow: 0 16px 48px rgba(16,185,129,.32), 0 0 0 1px rgba(16,185,129,.22); }
+.kpi-card.red:hover    { box-shadow: 0 16px 48px rgba(239,68,68,.32),  0 0 0 1px rgba(239,68,68,.22); }
+.kpi-card.amber:hover  { box-shadow: 0 16px 48px rgba(245,158,11,.32), 0 0 0 1px rgba(245,158,11,.22); }
+.kpi-card.purple:hover { box-shadow: 0 16px 48px rgba(139,92,246,.32), 0 0 0 1px rgba(139,92,246,.22); }
+.kpi-card.cyan:hover   { box-shadow: 0 16px 48px rgba(6,182,212,.32),  0 0 0 1px rgba(6,182,212,.22); }
+
+/* ════ KPI ICON ════ */
+.kpi-icon {
+  position: absolute;
+  top: 14px; right: 14px;
+  opacity: .17;
+  transition: opacity .22s, transform .22s;
+  line-height: 0;
+}
+.kpi-card:hover .kpi-icon { opacity: .45; transform: scale(1.12) rotate(-4deg); }
+
+/* ════ CHART CARD GLASS ════ */
+.chart-card {
+  background: rgba(18,31,53,.68) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: box-shadow .22s;
+}
+.chart-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,.28); }
+
+/* ════ TABLE CARD GLASS ════ */
+.table-card {
+  background: rgba(18,31,53,.72) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ════ SKELETON ════ */
+.skel {
+  display: inline-block;
+  background: linear-gradient(90deg, var(--navy-3) 25%, var(--navy-4) 50%, var(--navy-3) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 4px;
+  color: transparent !important;
+  min-width: 72px; min-height: 1em;
+  user-select: none;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ════ VIEW TRANSITIONS ════ */
+.view { display: none; }
+.view.active {
+  display: block;
+  animation: viewIn .3s cubic-bezier(.22,1,.36,1) forwards;
+}
+@keyframes viewIn {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ════ CLICKABLE TABLE ROWS ════ */
+tr[data-cod] { cursor: pointer; }
+tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: background .12s; }
+
+/* ════ BOTTOM NAV (MOBILE) ════ */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 200;
+  background: rgba(11,22,40,.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid var(--border-2);
+  padding: 6px 0 env(safe-area-inset-bottom, 6px);
+}
+.bottom-nav-inner {
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  padding: 0 4px;
+}
+.bottom-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all .15s;
+  min-width: 50px;
+}
+.bottom-nav-btn svg { opacity: .5; transition: opacity .15s; }
+.bottom-nav-btn.active { color: var(--blue-l); background: rgba(37,99,235,.12); }
+.bottom-nav-btn.active svg { opacity: 1; }
+
+/* ════ FILTER TOGGLE (MOBILE) ════ */
+.filter-toggle {
+  display: none;
+  width: 32px; height: 32px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  background: var(--navy-3);
+  color: var(--muted);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.filter-toggle:hover { background: var(--navy-4); }
+.filter-collapsible {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.filter-bar.collapsed .filter-collapsible { display: none; }
+
+/* ════ RESPONSIVE — MOBILE (<640px) ════ */
+@media (max-width: 640px) {
+  .topbar .nav-tabs { display: none; }
+  .topbar-sep { display: none; }
+  .bottom-nav { display: block; }
+  .filter-toggle { display: flex; }
+  .main { padding: 12px 12px 86px; }
+  .kpi-grid { grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 16px; }
+  .kpi-value { font-size: 20px; }
+  .kpi-card { padding: 13px 14px; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .section-title { font-size: 9px; margin: 14px 0 8px; }
+  .table-card table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .chart-card.wide { margin-bottom: 12px !important; }
+}
+
+/* ════ RESPONSIVE — TABLET (641-1024px) ════ */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .kpi-grid { grid-template-columns: repeat(3,1fr); }
+  .main { padding: 16px 16px 40px; }
+  .two-col { grid-template-columns: 1fr; }
+}
+
+/* ════ RESPONSIVE — TV (>1920px) ════ */
+@media (min-width: 1920px) {
+  .main { max-width: 1800px; }
+  .kpi-grid { grid-template-columns: repeat(5,1fr); }
+  .kpi-value { font-size: 30px; }
+  .topbar { height: 68px; }
+  .nav-tab { font-size: 14px; padding: 7px 18px; }
+}
 
 /* ════ LOADING STATE ════ */
 .loading-overlay {
@@ -558,6 +766,11 @@ tr:hover td { background: rgba(37,99,235,.05); }
 </head>
 <body>
 
+<!-- ══ ORBES ══ -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
 <!-- ══ LOADING ══ -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-logo">PAL<span>MA</span></div>
@@ -590,32 +803,67 @@ tr:hover td { background: rgba(37,99,235,.05); }
   </div>
 </div>
 
+<!-- ══ BOTTOM NAV (MOBILE) ══ -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bottom-nav-btn active" onclick="showView('gerencial',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="7" height="7" rx="1"/><rect x="15" y="3" width="7" height="7" rx="1"/><rect x="2" y="14" width="7" height="7" rx="1"/><rect x="15" y="14" width="7" height="7" rx="1"/></svg>
+      General
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('vendedor',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Mi Panel
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('cobertura',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Cobertura
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('efectividad',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Efectividad
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('devoluciones',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/></svg>
+      Devol.
+    </button>
+    <button class="bottom-nav-btn" onclick="showView('clientes',this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Clientes
+    </button>
+  </div>
+</nav>
+
 <!-- ══ FILTROS ══ -->
-<div class="filter-bar">
-  <div class="filter-group">
-    <span class="filter-label">Vendedor</span>
-    <select id="filtroVendedor" onchange="applyFilters()">
-      <option value="">Todos los vendedores</option>
-    </select>
-  </div>
-  <div class="filter-group">
-    <span class="filter-label">Negocio</span>
-    <select id="filtroNegocio" onchange="applyFilters()">
-      <option value="">Todos</option>
-      <option value="01-Carnico">Cárnico</option>
-      <option value="02-Galletas">Galletas</option>
-      <option value="03-Chocolates">Chocolates</option>
-      <option value="04-Café">Café</option>
-      <option value="10-TMLUC">TMLUC</option>
-    </select>
-  </div>
-  <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-    </svg>
-    Actualizar
+<div class="filter-bar" id="filterBar">
+  <button class="filter-toggle" onclick="toggleFilters()" title="Filtros">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
   </button>
-  <span class="filter-right" id="filterInfo">Cargando...</span>
+  <div class="filter-collapsible">
+    <div class="filter-group">
+      <span class="filter-label">Vendedor</span>
+      <select id="filtroVendedor" onchange="applyFilters()">
+        <option value="">Todos los vendedores</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Negocio</span>
+      <select id="filtroNegocio" onchange="applyFilters()">
+        <option value="">Todos</option>
+        <option value="01-Carnico">Cárnico</option>
+        <option value="02-Galletas">Galletas</option>
+        <option value="03-Chocolates">Chocolates</option>
+        <option value="04-Café">Café</option>
+        <option value="10-TMLUC">TMLUC</option>
+      </select>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      Actualizar
+    </button>
+    <span class="filter-right" id="filterInfo">Cargando...</span>
+  </div>
 </div>
 
 <!-- ══ MAIN ══ -->
@@ -634,6 +882,7 @@ tr:hover td { background: rgba(37,99,235,.05); }
     <div class="kpi-card cyan"><div class="kpi-label">Cobertura</div><div class="kpi-value" id="kCob">—</div><div class="kpi-sub" id="kCobSub">clientes</div><div class="kpi-bar"><div class="kpi-bar-fill" id="kCobBar" style="background:var(--green)"></div></div></div>
     <div class="kpi-card amber"><div class="kpi-label">Ticket Promedio</div><div class="kpi-value" id="kTicket">—</div><div class="kpi-sub">por cliente</div></div>
     <div class="kpi-card purple"><div class="kpi-label">Efectividad</div><div class="kpi-value" id="kEfect">—</div><div class="kpi-sub">promedio equipo</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Cuota Equipo</div><div class="kpi-value" id="kCumplPct">—</div><div class="kpi-sub" id="kCumplSub">de —</div><div class="kpi-bar"><div class="kpi-bar-fill" id="kCumplBar" style="background:var(--amber)"></div></div></div>
   </div>
 
   <div class="section-title">Análisis Comercial</div>
@@ -663,7 +912,7 @@ tr:hover td { background: rgba(37,99,235,.05); }
       <div><div class="chart-title">Cobertura Real por Vendedor</div><div class="chart-sub">vs maestra del MAESTRO_CLIENTES · línea roja = meta 75%</div></div>
       <span id="vendsBajoMeta" style="font-size:11px;color:var(--amber);font-weight:600"></span>
     </div>
-    <div class="chart-wrap" style="height:180px">
+    <div class="chart-wrap" style="height:240px">
       <canvas id="chartCobertura"></canvas>
     </div>
   </div>
@@ -704,13 +953,13 @@ tr:hover td { background: rgba(37,99,235,.05); }
     <table>
       <thead><tr>
         <th>#</th><th>Vendedor</th>
-        <th style="text-align:right">Venta Real</th>
+        <th style="text-align:right">Venta Bruta</th>
         <th style="text-align:right">Devol.</th>
         <th style="text-align:right">Dev%</th>
-        <th style="text-align:right">Maestro</th>
-        <th style="text-align:right">Impactos</th>
+        <th style="text-align:right">Venta Neta</th>
         <th style="text-align:right">Cobertura</th>
-        <th style="text-align:right">Efectividad</th>
+        <th style="text-align:right">Cuota</th>
+        <th style="text-align:right">Cumpl%</th>
         <th>Estado</th>
       </tr></thead>
       <tbody id="tbRanking"></tbody>
@@ -721,7 +970,7 @@ tr:hover td { background: rgba(37,99,235,.05); }
 <!-- ── VISTA VENDEDOR ── -->
 <div id="view-vendedor" class="view">
   <div class="section-title">Mis Indicadores</div>
-  <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)" id="vendKpis"></div>
+  <div class="kpi-grid" id="vendKpis"></div>
   <div class="chart-grid">
     <div class="chart-card">
       <div class="chart-header"><div><div class="chart-title" id="vendChartTitle">Venta por Negocio</div></div></div>
@@ -965,7 +1214,7 @@ function cargarSelectVendedores(){
   STATE.vendedores.forEach(v => {
     const opt = document.createElement('option');
     opt.value = v.cod;
-    opt.textContent = `${v.cod} - ${v.nombre}`;
+    opt.textContent = v.nombre;
     sel.appendChild(opt);
   });
 
@@ -989,24 +1238,28 @@ function renderGerencial(){
   const r = STATE.resumen;
   if (!r) return;
 
-  $('kVenta').textContent = fmt(r.venta_bruta ?? r.venta_real ?? 0);
-  $('kDevol').textContent = fmt(r.devolucion_total || 0);
-  $('kDevolPct').innerHTML = `<span class="down">${pct(r.pct_devolucion || 0)}</span> de venta bruta`;
+  countUp($('kVenta'),          r.venta_bruta ?? r.venta_real ?? 0, fmt);
+  countUp($('kDevol'),          r.devolucion_total || 0,            fmt);
+  countUp($('kAverias'),        r.averia_total || 0,                fmt);
+  countUp($('kDescuentoTotal'), r.descuento_total || 0,             fmt);
+  countUp($('kNeta'),           r.venta_neta || 0,                  fmt);
+  countUp($('kCob'),            r.cobertura_pct || 0,               pct);
+  countUp($('kTicket'),         r.ticket_promedio || 0,             fmt);
+  countUp($('kEfect'),          r.efectividad_pct || 0,             pct);
 
-  if ($('kAverias')) $('kAverias').textContent = fmt(r.averia_total || 0);
-  if ($('kAveriasPct')) $('kAveriasPct').innerHTML = `<span class="down">${pct(r.pct_averia || 0)}</span> de venta bruta`;
+  $('kDevolPct').innerHTML       = `<span class="down">${pct(r.pct_devolucion || 0)}</span> de venta bruta`;
+  if ($('kAveriasPct'))          $('kAveriasPct').innerHTML = `<span class="down">${pct(r.pct_averia || 0)}</span> de venta bruta`;
+  if ($('kDescuentoTotalPct'))   $('kDescuentoTotalPct').innerHTML = `<span class="down">${pct(r.pct_descuento_total || 0)}</span> devol. + averías`;
+  $('kCobSub').textContent       = `${r.clientes_impactados} / ${r.clientes_maestro}`;
+  $('kCobBar').style.width       = Math.min(r.cobertura_pct || 0, 100) + '%';
 
-  if ($('kDescuentoTotal')) $('kDescuentoTotal').textContent = fmt(r.descuento_total || 0);
-  if ($('kDescuentoTotalPct')) $('kDescuentoTotalPct').innerHTML = `<span class="down">${pct(r.pct_descuento_total || 0)}</span> devol. + averías`;
+  const pctCumpl    = r.pct_cumplimiento_equipo || 0;
+  const cumplColor  = pctCumpl >= 90 ? 'var(--green)' : pctCumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+  if ($('kCumplPct')) countUp($('kCumplPct'), pctCumpl, pct);
+  if ($('kCumplSub')) $('kCumplSub').textContent = `${fmt(r.venta_bruta || 0)} / ${fmt(r.cuota_total || 0)}`;
+  if ($('kCumplBar')) { $('kCumplBar').style.width = Math.min(pctCumpl, 100) + '%'; $('kCumplBar').style.background = cumplColor; }
 
-  $('kNeta').textContent = fmt(r.venta_neta || 0);
-  $('kCob').textContent = pct(r.cobertura_pct || 0);
-  $('kCobSub').textContent = `${r.clientes_impactados} / ${r.clientes_maestro}`;
-  $('kCobBar').style.width = Math.min(r.cobertura_pct || 0, 100) + '%';
-  $('kTicket').textContent = fmt(r.ticket_promedio);
-  $('kEfect').textContent = pct(r.efectividad_pct);
-
-  const vs = [...STATE.vendedores].sort((a,b) => (b.venta_neta || 0) - (a.venta_neta || 0));
+  const vs = [...STATE.vendedores].sort((a,b) => (b.venta_bruta || 0) - (a.venta_bruta || 0));
 
   dc('chartRanking');
   CHARTS.ranking = new Chart($('chartRanking'), {
@@ -1061,28 +1314,31 @@ function renderGerencial(){
 
   renderTablaRanking(vs);
   renderAlertas();
+  injectKpiIcons();
 }
 
 function renderTablaRanking(vs){
   $('tbRanking').innerHTML = vs.map((v,i) => {
-    const devPct = v.pct_devolucion ?? (v.venta_real > 0 ? (v.devol / v.venta_real * 100) : 0);
-    const cob = +v.cobertura || 0;
-    const estado = cob >= 75
+    const devPct    = v.pct_devolucion ?? (v.venta_bruta > 0 ? (v.devol / v.venta_bruta * 100) : 0);
+    const cob       = +v.cobertura || 0;
+    const cumpl     = +v.pct_cumplimiento || 0;
+    const cumplCls  = cumpl >= 90 ? 'up' : cumpl >= 75 ? 'warn' : 'down';
+    const estado    = cob >= 75
       ? '<span class="badge badge-green">En meta</span>'
       : cob >= 60
       ? '<span class="badge badge-amber">Cerca</span>'
       : '<span class="badge badge-red">Bajo meta</span>';
 
-    return `<tr>
+    return `<tr data-cod="${v.cod}" onclick="clickVendedor('${v.cod}')">
       <td>${i + 1}</td>
-      <td>${v.cod} - ${v.nombre}</td>
-      <td style="text-align:right"><span class="mono">${fmt(v.venta_real)}</span></td>
+      <td>${v.nombre}</td>
+      <td style="text-align:right"><span class="mono">${fmt(v.venta_bruta)}</span></td>
       <td style="text-align:right"><span class="mono down">${fmt(v.devol)}</span></td>
       <td style="text-align:right">${pct(devPct)}</td>
       <td style="text-align:right"><span class="mono up">${fmt(v.venta_neta)}</span></td>
-      <td style="text-align:right">${v.maestro || 0}</td>
-      <td style="text-align:right">${v.clientes_imp || 0}</td>
-      <td style="text-align:right">${pct(v.cobertura)}</td>
+      <td style="text-align:right">${pct(cob)}</td>
+      <td style="text-align:right"><span class="mono">${fmt(v.cuota || 0)}</span></td>
+      <td style="text-align:right"><span class="${cumplCls}">${pct(cumpl)}</span></td>
       <td>${estado}</td>
     </tr>`;
   }).join('');
@@ -1110,13 +1366,31 @@ function renderAlertas(){
 function renderChartsVendedor(v) {
   if (!v) return;
 
-  const negocios = Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio : [];
+  const negocios = Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio.filter(n => (n.venta || 0) > 0) : [];
+
+  const noDataPlugin = {
+    id: 'noData',
+    afterDraw(chart) {
+      const hasData = chart.data.datasets.some(d => d.data && d.data.some(x => x > 0));
+      if (!hasData) {
+        const { ctx, width, height } = chart;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.fillText('Sin datos de venta por negocio', width / 2, height / 2);
+        ctx.restore();
+      }
+    }
+  };
 
   dc('chartVendNeg');
 
   if ($('chartVendNeg')) {
     CHARTS.vendNeg = new Chart($('chartVendNeg'), {
       type: 'doughnut',
+      plugins: [noDataPlugin],
       data: {
         labels: negocios.map(n => n.negocio),
         datasets: [{
@@ -1205,14 +1479,31 @@ function renderVendedor(cod){
 
   const devPct = v.pct_devolucion ?? (v.venta_real > 0 ? (v.devol / v.venta_real * 100) : 0);
 
+  const cumpl      = +v.pct_cumplimiento || 0;
+  const cumplColor = cumpl >= 90 ? 'var(--green)' : cumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+
   $('vendKpis').innerHTML = `
-    <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value">${fmt(v.venta_bruta ?? v.venta_real ?? 0)}</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value">${fmt(v.devol || 0)}</div><div class="kpi-sub">${pct(devPct)}</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value">${fmt(v.averias || 0)}</div><div class="kpi-sub">${pct(v.pct_averia || 0)}</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value">${fmt(v.venta_neta || 0)}</div></div>
-    <div class="kpi-card cyan"><div class="kpi-label">Impactos</div><div class="kpi-value">${v.clientes_imp || 0}</div><div class="kpi-sub">de ${v.maestro || 0}</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">Cobertura</div><div class="kpi-value">${pct(v.cobertura)}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Venta Bruta</div><div class="kpi-value" id="vkVenta">${fmt(v.venta_bruta ?? v.venta_real ?? 0)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Devoluciones</div><div class="kpi-value" id="vkDevol">${fmt(v.devol || 0)}</div><div class="kpi-sub">${pct(devPct)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Averías</div><div class="kpi-value" id="vkAverias">${fmt(v.averias || 0)}</div><div class="kpi-sub">${pct(v.pct_averia || 0)}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Venta Neta</div><div class="kpi-value" id="vkNeta">${fmt(v.venta_neta || 0)}</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Impactos</div><div class="kpi-value" id="vkImp">${v.clientes_imp || 0}</div><div class="kpi-sub">de ${v.maestro || 0}</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Cobertura</div><div class="kpi-value" id="vkCob">${pct(v.cobertura)}</div></div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Cuota Mes</div>
+      <div class="kpi-value" id="vkCumpl" style="color:${cumplColor}">${pct(cumpl)}</div>
+      <div class="kpi-sub">${fmt(v.venta_bruta ?? 0)} / ${fmt(v.cuota || 0)}</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${Math.min(cumpl,100)}%;background:${cumplColor}"></div></div>
+    </div>
   `;
+
+  countUp($('vkVenta'),   +(v.venta_bruta ?? v.venta_real ?? 0), fmt);
+  countUp($('vkDevol'),   +(v.devol || 0),                       fmt);
+  countUp($('vkAverias'), +(v.averias || 0),                     fmt);
+  countUp($('vkNeta'),    +(v.venta_neta || 0),                  fmt);
+  countUp($('vkImp'),     +(v.clientes_imp || 0),                n => Math.round(n).toString());
+  countUp($('vkCob'),     +(v.cobertura || 0),                   pct);
+  countUp($('vkCumpl'),   cumpl,                                 pct);
 
   renderChartsVendedor(v);
 
@@ -1307,17 +1598,48 @@ function renderCobertura(){
     </tr>
   `).join('');
 
+  const bajometa = data.filter(r => getCoberturaValue(r) < 75).length;
+  if ($('vendsBajoMeta')) {
+    $('vendsBajoMeta').textContent = bajometa > 0
+      ? `${bajometa} vendedor${bajometa !== 1 ? 'es' : ''} bajo meta`
+      : '';
+  }
+
   dc('chartCobertura');
 
   if ($('chartCobertura') && data.length) {
+    const barColors = data.map(r => {
+      const v = getCoberturaValue(r);
+      return v >= 75 ? COLORS.green + 'CC' : v >= 60 ? COLORS.amber + 'CC' : COLORS.red + 'CC';
+    });
+
+    const metaLinePlugin = {
+      id: 'metaLine75',
+      afterDraw(chart) {
+        const { ctx, scales: { x, y } } = chart;
+        const px = x.getPixelForValue(75);
+        ctx.save();
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(px, y.top);
+        ctx.lineTo(px, y.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    };
+
     CHARTS.cobertura = new Chart($('chartCobertura'), {
       type: 'bar',
+      plugins: [metaLinePlugin],
       data: {
         labels: data.map(r => getCoberturaVendedor(r)),
         datasets: [{
           label: 'Cobertura real',
           data: data.map(r => getCoberturaValue(r)),
-          backgroundColor: COLORS.blue + 'CC',
+          backgroundColor: barColors,
           borderRadius: 6
         }]
       },
@@ -1436,19 +1758,75 @@ function renderClientes(){
 function applyFilters(){
   const cod = $('filtroVendedor').value;
   if (cod) {
-    showView('vendedor', document.querySelector('.nav-tab:nth-child(2)'));
+    showView('vendedor');
     renderVendedor(cod);
   } else {
-    showView('gerencial', document.querySelector('.nav-tab:nth-child(1)'));
+    showView('gerencial');
     renderGerencial();
   }
 }
 
-function showView(name, btn){
+const VIEW_ORDER = ['gerencial','vendedor','cobertura','efectividad','devoluciones','clientes'];
+
+function showView(name){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-tab, .bottom-nav-btn').forEach(t => t.classList.remove('active'));
   $('view-' + name).classList.add('active');
-  if (btn) btn.classList.add('active');
+  const idx = VIEW_ORDER.indexOf(name);
+  if (idx >= 0) {
+    document.querySelectorAll('.nav-tab')[idx]?.classList.add('active');
+    document.querySelectorAll('.bottom-nav-btn')[idx]?.classList.add('active');
+  }
+}
+
+function toggleFilters(){
+  $('filterBar')?.classList.toggle('collapsed');
+}
+
+function clickVendedor(cod){
+  $('filtroVendedor').value = cod;
+  showView('vendedor');
+  renderVendedor(cod);
+}
+
+function countUp(el, to, formatter, duration){
+  if (!el) return;
+  duration = duration || 850;
+  const t0 = performance.now();
+  function tick(now){
+    const p = Math.min((now - t0) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = formatter(to * eased);
+    if (p < 1) requestAnimationFrame(tick);
+    else el.textContent = formatter(to);
+  }
+  requestAnimationFrame(tick);
+}
+
+const KPI_ICONS = {
+  kVenta:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+  kDevol:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/></svg>`,
+  kAverias:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  kDescuentoTotal:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>`,
+  kNeta:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  kCob:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  kTicket:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>`,
+  kEfect:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  kCumplPct:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
+};
+
+function injectKpiIcons(){
+  Object.entries(KPI_ICONS).forEach(([id, svg]) => {
+    const el = $(id);
+    if (!el) return;
+    const card = el.closest('.kpi-card');
+    if (card && !card.querySelector('.kpi-icon')){
+      const icon = document.createElement('div');
+      icon.className = 'kpi-icon';
+      icon.innerHTML = svg;
+      card.appendChild(icon);
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
