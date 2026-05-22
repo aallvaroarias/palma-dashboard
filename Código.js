@@ -1464,24 +1464,40 @@ function getClientesNuevos(desde, hasta) {
     const h = new Date(hasta + 'T23:59:59');
     if (!isNaN(h.getTime())) fechaHasta = h;
   }
+  const hayFiltro = !!(fechaDesde || fechaHasta);
 
   for (let i = 1; i < data.length; i++) {
     const r      = data[i];
     const estado = String(r[19] || '').trim().toUpperCase();
     const asesor = String(r[20] || '').trim();
     const codA   = obtenerCodAsesor_(asesor);
-    const fechaR = r[27];
+    const fechaR = r[27]; // columna AB = fecha de creación
 
     if (estado !== 'A') continue;
     if (!esVendedorValido_(codA, asesor)) continue;
 
-    let fecha = fechaR instanceof Date ? fechaR : new Date(String(fechaR));
-    if (!fecha || isNaN(fecha.getTime())) continue;
-    if (fechaDesde && fecha < fechaDesde) continue;
-    if (fechaHasta && fecha > fechaHasta) continue;
+    // Intentar parsear fecha de columna AB
+    let fecha = null;
+    if (fechaR instanceof Date && !isNaN(fechaR.getTime())) {
+      fecha = fechaR;
+    } else {
+      const s = String(fechaR || '').trim();
+      if (s) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) fecha = d;
+      }
+    }
 
-    const fechaStr = Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd');
-    const mesStr   = Utilities.formatDate(fecha, TZ, 'yyyy-MM');
+    // Con filtro activo: excluir si no tiene fecha o está fuera del rango
+    if (hayFiltro) {
+      if (!fecha) continue;
+      if (fechaDesde && fecha < fechaDesde) continue;
+      if (fechaHasta && fecha > fechaHasta) continue;
+    }
+    // Sin filtro: incluir TODOS los clientes activos válidos aunque no tengan fecha en AB
+
+    const fechaStr = fecha ? Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd') : '';
+    const mesStr   = fecha ? Utilities.formatDate(fecha, TZ, 'yyyy-MM')    : '';
 
     nuevos.push({
       asesor,
@@ -1492,8 +1508,16 @@ function getClientesNuevos(desde, hasta) {
       fecha_creacion: fechaStr
     });
     porVend[asesor] = (porVend[asesor] || 0) + 1;
-    porMes[mesStr]  = (porMes[mesStr]  || 0) + 1;
+    if (mesStr) porMes[mesStr] = (porMes[mesStr] || 0) + 1;
   }
+
+  // Ordenar: con fecha primero (más reciente arriba), sin fecha al final
+  nuevos.sort((a, b) => {
+    if (!a.fecha_creacion && !b.fecha_creacion) return 0;
+    if (!a.fecha_creacion) return 1;
+    if (!b.fecha_creacion) return -1;
+    return b.fecha_creacion.localeCompare(a.fecha_creacion);
+  });
 
   return {
     total: nuevos.length,
@@ -1505,7 +1529,7 @@ function getClientesNuevos(desde, hasta) {
     por_mes: Object.entries(porMes)
       .map(([mes, cantidad]) => ({ mes, cantidad }))
       .sort((a, b) => a.mes.localeCompare(b.mes)),
-    detalle: nuevos.sort((a, b) => b.fecha_creacion.localeCompare(a.fecha_creacion))
+    detalle: nuevos
   };
 }
 
