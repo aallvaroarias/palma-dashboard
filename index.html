@@ -214,6 +214,38 @@ select, .filter-select {
 }
 select:focus { border-color: var(--blue); }
 
+input[type="date"] {
+  height: 32px;
+  padding: 0 8px;
+  background: var(--navy-3);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  color: var(--white-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  color-scheme: dark;
+}
+input[type="date"]:focus { border-color: var(--blue); }
+
+.quick-btn {
+  height: 26px;
+  padding: 0 10px;
+  background: var(--navy-3);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.quick-btn:hover { border-color: var(--blue); color: var(--blue-l); }
+.quick-btn.active { background: rgba(37,99,235,.18); border-color: rgba(37,99,235,.4); color: var(--blue-l); }
+
 .refresh-btn {
   height: 32px;
   padding: 0 14px;
@@ -856,6 +888,15 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
         <option value="10-TMLUC">TMLUC</option>
       </select>
     </div>
+    <div class="filter-group" id="filterFechasClientes">
+      <span class="filter-label">Clientes Nuevos</span>
+      <input type="date" id="fechaDesde" title="Desde" onchange="refetchClientesNuevos()">
+      <span style="color:var(--muted);font-size:11px">→</span>
+      <input type="date" id="fechaHasta" title="Hasta" onchange="refetchClientesNuevos()">
+      <button class="quick-btn active" id="qbTodo" onclick="setQuickRange('todo')">Todo</button>
+      <button class="quick-btn" id="qb30" onclick="setQuickRange('30d')">30d</button>
+      <button class="quick-btn" id="qbMes" onclick="setQuickRange('mes')">Este mes</button>
+    </div>
     <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -950,6 +991,29 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
     </div>
   </div>
 
+  <div class="section-title">Clientes Nuevos</div>
+  <div class="chart-grid" style="margin-bottom:20px">
+    <div class="kpi-card blue" onclick="showView('clientes')" style="cursor:pointer;display:flex;flex-direction:column;justify-content:center;min-height:120px">
+      <div class="kpi-label">Total Clientes Nuevos</div>
+      <div class="kpi-value" id="gkNuevos">—</div>
+      <div class="kpi-sub" id="gkNuevosSub">en el período</div>
+      <div style="margin-top:10px;font-size:10px;color:var(--muted)">Ver detalle →</div>
+    </div>
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header">
+        <div><div class="chart-title">Nuevos por Vendedor</div><div class="chart-sub" id="gNuevosPeriodo">—</div></div>
+        <div class="chart-total" id="gNuevosTotal">—</div>
+      </div>
+      <div class="chart-wrap" style="height:180px"><canvas id="chartNuevosGer"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header">
+        <div><div class="chart-title">Tendencia Mensual</div><div class="chart-sub">Clientes nuevos por mes</div></div>
+      </div>
+      <div class="chart-wrap" style="height:180px"><canvas id="chartNuevosTrend"></canvas></div>
+    </div>
+  </div>
+
   <div class="section-title">Alertas Automáticas</div>
   <div class="alert-grid" id="alertGrid"></div>
 
@@ -1034,6 +1098,22 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
   <div class="section-title">Alertas</div>
   <div class="alert-grid" id="vendAlerts"></div>
 
+  <div class="section-title">Mis Clientes Nuevos</div>
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Clientes Nuevos</div>
+      <div class="kpi-value" id="vkNuevos">—</div>
+      <div class="kpi-sub" id="vkNuevosSub">en el período</div>
+    </div>
+  </div>
+  <div class="table-card" id="vendClientesNuevosCard">
+    <div class="table-header"><h3>Mis Clientes Nuevos</h3><span id="vendClientesPeriodo">—</span></div>
+    <table>
+      <thead><tr><th>Cliente</th><th>Razón Social</th><th style="text-align:right">Fecha</th></tr></thead>
+      <tbody id="tbVendNuevos"></tbody>
+    </table>
+  </div>
+
   <div class="section-title" id="vendSkusTitle">Mis Top SKUs</div>
   <div class="table-card">
     <div class="table-header"><h3 id="vendSkusHeader">Top productos del período</h3></div>
@@ -1092,22 +1172,40 @@ tr[data-cod]:hover td { background: rgba(37,99,235,.1) !important; transition: b
 
 <!-- ── VISTA CLIENTES ── -->
 <div id="view-clientes" class="view">
-  <div class="section-title">Clientes Nuevos (últimos 30 días)</div>
-  <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
-    <div class="kpi-card blue"><div class="kpi-label">Total Nuevos</div><div class="kpi-value" id="kNuevos">—</div></div>
+  <div class="section-title" id="clientesTitulo">Clientes Nuevos</div>
+
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:20px">
+    <div class="kpi-card blue"><div class="kpi-label">Total Nuevos</div><div class="kpi-value" id="kNuevos">—</div><div class="kpi-sub" id="kNuevosSub">en el período</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Top Vendedor</div><div class="kpi-value" id="kNuevosTop">—</div><div class="kpi-sub" id="kNuevosTopSub">clientes</div></div>
     <div class="kpi-card red"><div class="kpi-label">Clientes Cero</div><div class="kpi-value" id="kCeroCount">—</div></div>
     <div class="kpi-card cyan"><div class="kpi-label">Maestro Total</div><div class="kpi-value" id="kMaestro">—</div></div>
   </div>
+
+  <div class="chart-grid" style="margin-bottom:20px">
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header"><div><div class="chart-title">Nuevos por Vendedor</div><div class="chart-sub" id="clientesRankSub">—</div></div></div>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartNuevosRank"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin:0">
+      <div class="chart-header"><div><div class="chart-title">Tendencia Mensual</div><div class="chart-sub">Clientes nuevos acumulados por mes</div></div></div>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartNuevosMes"></canvas></div>
+    </div>
+  </div>
+
   <div class="two-col">
     <div class="table-card" style="margin:0">
-      <div class="table-header"><h3>Nuevos por Vendedor</h3></div>
-      <table><thead><tr><th>Vendedor</th><th style="text-align:right">Nuevos</th></tr></thead>
-      <tbody id="tbNuevosVend"></tbody></table>
+      <div class="table-header"><h3>Ranking por Vendedor</h3></div>
+      <table>
+        <thead><tr><th>#</th><th>Vendedor</th><th style="text-align:right">Nuevos</th></tr></thead>
+        <tbody id="tbNuevosVend"></tbody>
+      </table>
     </div>
     <div class="table-card" style="margin:0">
-      <div class="table-header"><h3>Lista de Clientes Nuevos</h3></div>
-      <table><thead><tr><th>Asesor</th><th>Cliente</th><th>Fecha</th></tr></thead>
-      <tbody id="tbNuevosLista"></tbody></table>
+      <div class="table-header"><h3>Lista de Clientes Nuevos</h3><span id="tbNuevosCount">—</span></div>
+      <table>
+        <thead><tr><th>Asesor</th><th>Cliente</th><th style="text-align:right">Fecha</th></tr></thead>
+        <tbody id="tbNuevosLista"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -1141,7 +1239,7 @@ let STATE = {
   efectividad:{ por_semana:[], resumen_mes:[] },
   devoluciones:{ total:0, por_concepto:[], por_vendedor:[], detalle:[] },
   clientesCero:{ total:0, por_vendedor:[], detalle:[] },
-  clientesNuevos:{ total:0, por_vendedor:[], detalle:[] },
+  clientesNuevos:{ total:0, por_vendedor:[], por_mes:[], detalle:[], desde:null, hasta:null },
   tendencia:[],
   skus:{ global:[], por_vendedor:[] },
   marcas:[]
@@ -1184,14 +1282,66 @@ function dc(id){
   if (existing) existing.destroy();
 }
 
-async function fetchSheet(sheet){
+async function fetchSheet(sheet, extraParams){
   try {
-    const res = await fetch(`${API_URL}?sheet=${sheet}&t=${Date.now()}`);
+    let url = `${API_URL}?sheet=${sheet}&t=${Date.now()}`;
+    if (extraParams) {
+      Object.entries(extraParams).forEach(([k,v]) => { if (v) url += `&${k}=${encodeURIComponent(v)}`; });
+    }
+    const res = await fetch(url);
     const json = await res.json();
     return json.ok ? json.data : null;
   } catch(e) {
     console.error('Error cargando', sheet, e);
     return null;
+  }
+}
+
+// ── Clientes Nuevos: rango de fechas ──────────────────────────────────
+
+function getClientesFechas(){
+  return { desde: $('fechaDesde')?.value || null, hasta: $('fechaHasta')?.value || null };
+}
+
+function setQuickRange(tipo){
+  const hoy = new Date();
+  const iso  = d => d.toISOString().slice(0,10);
+  document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+  if (tipo === '30d') {
+    const d30 = new Date(hoy); d30.setDate(d30.getDate() - 30);
+    $('fechaDesde').value = iso(d30);
+    $('fechaHasta').value = iso(hoy);
+    $('qb30').classList.add('active');
+  } else if (tipo === 'mes') {
+    const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    $('fechaDesde').value = iso(inicio);
+    $('fechaHasta').value = iso(hoy);
+    $('qbMes').classList.add('active');
+  } else {
+    $('fechaDesde').value = '';
+    $('fechaHasta').value = '';
+    $('qbTodo').classList.add('active');
+  }
+  refetchClientesNuevos();
+}
+
+async function refetchClientesNuevos(){
+  // Actualizar estado visual de quick-btns si el usuario editó manual
+  const desde = $('fechaDesde')?.value || '';
+  const hasta  = $('fechaHasta')?.value || '';
+  if (!desde && !hasta) {
+    document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+    $('qbTodo')?.classList.add('active');
+  }
+
+  const data = await fetchSheet('clientes_nuevos', { desde, hasta });
+  if (data) {
+    STATE.clientesNuevos = data;
+    renderClientesGerencial();
+    renderClientes();
+    // Si hay un vendedor seleccionado, actualizar Mi Panel también
+    const cod = $('filtroVendedor')?.value;
+    if (cod) renderVendedorNuevos(cod);
   }
 }
 
@@ -1273,6 +1423,7 @@ function cargarSelectVendedores(){
 
 function renderAll(){
   renderGerencial();
+  renderClientesGerencial();
   renderTendencia();
   renderMarcasSkus();
   renderCobertura();
@@ -1798,6 +1949,8 @@ function renderVendedor(cod){
       <td style="text-align:right">${s.clientes}</td>
     </tr>
   `).join('');
+
+  renderVendedorNuevos(cod);
 }
 
 function renderTendencia(){
@@ -2186,18 +2339,205 @@ function renderDevoluciones(){
   });
 }
 
+// ── helpers de periodo ───────────────────────────────────────────────
+
+function periodoClientesTexto(){
+  const d = $('fechaDesde')?.value;
+  const h = $('fechaHasta')?.value;
+  if (!d && !h) return 'Todos los registros';
+  if (d && h)   return `${d}  →  ${h}`;
+  if (d)        return `Desde ${d}`;
+  return `Hasta ${h}`;
+}
+
+function shortNombre(vendedorStr){
+  const parts = String(vendedorStr || '').split(' - ');
+  return parts.length > 1 ? parts.slice(1).join(' - ') : vendedorStr;
+}
+
+function mesLabel(mesStr){
+  const [y, mo] = (mesStr || '').split('-');
+  const names = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return (names[parseInt(mo)-1] || mesStr) + ' ' + (y || '').slice(2);
+}
+
+// ── Clientes Nuevos en vista Gerencial ───────────────────────────────
+
+function renderClientesGerencial(){
+  const cn      = STATE.clientesNuevos;
+  const total   = cn.total || 0;
+  const periodo = periodoClientesTexto();
+
+  countUp($('gkNuevos'), total, n => Math.round(n).toString());
+  if ($('gkNuevosSub'))   $('gkNuevosSub').textContent   = periodo;
+  if ($('gNuevosPeriodo'))$('gNuevosPeriodo').textContent = periodo;
+  if ($('gNuevosTotal'))  $('gNuevosTotal').textContent   = total + ' clientes';
+
+  const vends = (cn.por_vendedor || []).slice(0, 8);
+
+  dc('chartNuevosGer');
+  if (vends.length) {
+    CHARTS.nuevosGer = new Chart($('chartNuevosGer'), {
+      type: 'bar',
+      data: {
+        labels: vends.map(v => shortNombre(v.vendedor)),
+        datasets: [{ data: vends.map(v => v.cantidad), backgroundColor: VEND_COLORS.slice(0,vends.length), borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw + ' clientes' } } },
+        scales: {
+          x: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          y: { ticks:{ color:'#94A3B8', font:{ size:11 } } }
+        }
+      }
+    });
+  }
+
+  dc('chartNuevosTrend');
+  const meses = cn.por_mes || [];
+  if (meses.length) {
+    CHARTS.nuevosTrend = new Chart($('chartNuevosTrend'), {
+      type: 'line',
+      data: {
+        labels: meses.map(m => mesLabel(m.mes)),
+        datasets: [{
+          label: 'Clientes nuevos', data: meses.map(m => m.cantidad),
+          borderColor: COLORS.blue, backgroundColor: COLORS.blue + '22',
+          fill: true, tension: 0.4, pointRadius: 5, pointHoverRadius: 7
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false } },
+        scales: {
+          y: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          x: { ticks:{ color:'#94A3B8' } }
+        }
+      }
+    });
+  }
+}
+
+// ── Clientes Nuevos — vista Clientes ─────────────────────────────────
+
 function renderClientes(){
-  $('kNuevos').textContent = STATE.clientesNuevos.total || 0;
+  const cn      = STATE.clientesNuevos;
+  const total   = cn.total || 0;
+  const periodo = periodoClientesTexto();
+
+  if ($('clientesTitulo')) $('clientesTitulo').textContent = 'Clientes Nuevos — ' + periodo;
+
+  countUp($('kNuevos'), total, n => Math.round(n).toString());
+  if ($('kNuevosSub'))  $('kNuevosSub').textContent  = periodo;
   $('kCeroCount').textContent = STATE.clientesCero.total || 0;
-  $('kMaestro').textContent = STATE.resumen?.clientes_maestro || 0;
+  $('kMaestro').textContent   = STATE.resumen?.clientes_maestro || 0;
 
-  $('tbNuevosVend').innerHTML = STATE.clientesNuevos.por_vendedor.map(v => `
-    <tr><td>${v.vendedor}</td><td style="text-align:right">${v.cantidad}</td></tr>
-  `).join('');
+  const top = (cn.por_vendedor || [])[0];
+  if (top) {
+    countUp($('kNuevosTop'), top.cantidad, n => Math.round(n).toString());
+    if ($('kNuevosTopSub')) $('kNuevosTopSub').textContent = shortNombre(top.vendedor);
+  }
 
-  $('tbNuevosLista').innerHTML = STATE.clientesNuevos.detalle.slice(0,30).map(c => `
-    <tr><td>${c.asesor}</td><td>${c.nombre || c.razon_social}</td><td>${c.fecha_creacion}</td></tr>
-  `).join('');
+  if ($('clientesRankSub')) $('clientesRankSub').textContent = periodo;
+
+  // Ranking bar chart
+  dc('chartNuevosRank');
+  const vends = (cn.por_vendedor || []).slice(0, 10);
+  if (vends.length) {
+    CHARTS.nuevosRank = new Chart($('chartNuevosRank'), {
+      type: 'bar',
+      data: {
+        labels: vends.map(v => shortNombre(v.vendedor)),
+        datasets: [{ data: vends.map(v => v.cantidad), backgroundColor: VEND_COLORS.slice(0,vends.length), borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => c.raw + ' clientes' } } },
+        scales: {
+          x: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          y: { ticks:{ color:'#94A3B8', font:{ size:11 } } }
+        }
+      }
+    });
+  }
+
+  // Tendencia mensual line chart
+  dc('chartNuevosMes');
+  const meses = cn.por_mes || [];
+  if (meses.length) {
+    CHARTS.nuevosMes = new Chart($('chartNuevosMes'), {
+      type: 'line',
+      data: {
+        labels: meses.map(m => mesLabel(m.mes)),
+        datasets: [{
+          label: 'Clientes nuevos', data: meses.map(m => m.cantidad),
+          borderColor: COLORS.cyan, backgroundColor: COLORS.cyan + '22',
+          fill: true, tension: 0.4, pointRadius: 5, pointHoverRadius: 7
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false } },
+        scales: {
+          y: { ticks:{ color:'#94A3B8', stepSize:1 }, grid:{ color:'rgba(148,163,184,.1)' } },
+          x: { ticks:{ color:'#94A3B8' } }
+        }
+      }
+    });
+  }
+
+  // Tabla ranking
+  $('tbNuevosVend').innerHTML = (cn.por_vendedor || []).map((v,i) => `
+    <tr>
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td>${shortNombre(v.vendedor)}</td>
+      <td style="text-align:right"><strong>${v.cantidad}</strong></td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">Sin datos</td></tr>';
+
+  // Tabla detalle
+  if ($('tbNuevosCount')) $('tbNuevosCount').textContent = (cn.detalle || []).length + ' registros';
+  $('tbNuevosLista').innerHTML = (cn.detalle || []).map(c => `
+    <tr>
+      <td style="font-size:11px;color:var(--muted)">${shortNombre(c.asesor)}</td>
+      <td>${c.nombre || c.razon_social || '—'}</td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)">${c.fecha_creacion}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">Sin clientes nuevos en el período</td></tr>';
+}
+
+// ── Clientes Nuevos — Mi Panel (vendedor individual) ─────────────────
+
+function renderVendedorNuevos(cod){
+  const cn      = STATE.clientesNuevos;
+  const periodo = periodoClientesTexto();
+
+  // Filtrar detalle por cod_asesor
+  const miDetalle = (cn.detalle || []).filter(c =>
+    String(c.cod_asesor || '').trim() === String(cod)
+  );
+
+  // Buscar en por_vendedor por código (ej: "212 - NOMBRE" → "212")
+  const miRow = (cn.por_vendedor || []).find(v =>
+    String(v.vendedor || '').split(' - ')[0].trim() === String(cod)
+  );
+
+  const miTotal = miRow ? miRow.cantidad : miDetalle.length;
+
+  countUp($('vkNuevos'), miTotal, n => Math.round(n).toString());
+  if ($('vkNuevosSub'))       $('vkNuevosSub').textContent       = periodo;
+  if ($('vendClientesPeriodo'))$('vendClientesPeriodo').textContent = periodo;
+
+  $('tbVendNuevos').innerHTML = miDetalle.length
+    ? miDetalle.map(c => `
+        <tr>
+          <td>${c.nombre || c.razon_social || '—'}</td>
+          <td style="font-size:11px;color:var(--muted)">${c.razon_social && c.nombre ? c.razon_social : '—'}</td>
+          <td style="text-align:right;font-size:11px;color:var(--muted)">${c.fecha_creacion}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">Sin clientes nuevos en el período</td></tr>`;
 }
 
 function applyFilters(){

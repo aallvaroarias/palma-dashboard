@@ -735,7 +735,7 @@ function doGet(e) {
       case 'efectividad':   data = getEfectividad();      break;
       case 'devoluciones':  data = getDevoluciones();     break;
       case 'clientes_cero': data = getClientesCero();     break;
-      case 'clientes_nuevos': data = getClientesNuevos(); break;
+      case 'clientes_nuevos': data = getClientesNuevos(e.parameter.desde, e.parameter.hasta); break;
       case 'tendencia':     data = getTendencia();        break;
       case 'skus':          data = getTopSKUs();          break;
       case 'marcas':        data = getTopMarcas();        break;
@@ -1444,15 +1444,25 @@ function getClientesCero() {
 // CLIENTES NUEVOS
 // ════════════════════════════════════════════════════════════════════
 
-function getClientesNuevos() {
+function getClientesNuevos(desde, hasta) {
   const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
-  if (!hM || hM.getLastRow() < 2) return { total:0, por_vendedor:[], detalle:[] };
+  if (!hM || hM.getLastRow() < 2) return { total:0, por_vendedor:[], por_mes:[], detalle:[], desde:desde||null, hasta:hasta||null };
 
   const data    = hM.getDataRange().getValues();
-  const hoy     = new Date();
-  const hace30  = new Date(hoy.getTime() - 30 * 24 * 60 * 60 * 1000);
   const nuevos  = [];
   const porVend = {};
+  const porMes  = {};
+
+  // Parsear rango de fechas (si se proveen)
+  let fechaDesde = null, fechaHasta = null;
+  if (desde) {
+    const d = new Date(desde + 'T00:00:00');
+    if (!isNaN(d.getTime())) fechaDesde = d;
+  }
+  if (hasta) {
+    const h = new Date(hasta + 'T23:59:59');
+    if (!isNaN(h.getTime())) fechaHasta = h;
+  }
 
   for (let i = 1; i < data.length; i++) {
     const r      = data[i];
@@ -1466,24 +1476,34 @@ function getClientesNuevos() {
 
     let fecha = fechaR instanceof Date ? fechaR : new Date(String(fechaR));
     if (!fecha || isNaN(fecha.getTime())) continue;
-    if (fecha < hace30) continue;
+    if (fechaDesde && fecha < fechaDesde) continue;
+    if (fechaHasta && fecha > fechaHasta) continue;
 
     const fechaStr = Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd');
+    const mesStr   = Utilities.formatDate(fecha, TZ, 'yyyy-MM');
+
     nuevos.push({
       asesor,
+      cod_asesor:     codA,
       cod_cliente:    String(r[0] || '').trim(),
       nombre:         String(r[1] || '').trim(),
       razon_social:   String(r[5] || '').trim(),
       fecha_creacion: fechaStr
     });
     porVend[asesor] = (porVend[asesor] || 0) + 1;
+    porMes[mesStr]  = (porMes[mesStr]  || 0) + 1;
   }
 
   return {
     total: nuevos.length,
+    desde: desde || null,
+    hasta: hasta || null,
     por_vendedor: Object.entries(porVend)
       .map(([vendedor, cantidad]) => ({ vendedor, cantidad }))
       .sort((a, b) => b.cantidad - a.cantidad),
+    por_mes: Object.entries(porMes)
+      .map(([mes, cantidad]) => ({ mes, cantidad }))
+      .sort((a, b) => a.mes.localeCompare(b.mes)),
     detalle: nuevos.sort((a, b) => b.fecha_creacion.localeCompare(a.fecha_creacion))
   };
 }
