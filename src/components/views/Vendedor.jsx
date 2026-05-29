@@ -131,7 +131,10 @@ export default function Vendedor() {
   }
 
   const devPct = v.pct_devolucion ?? (v.venta_real > 0 ? (v.devol / v.venta_real * 100) : 0);
-  const negocios = Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio : [];
+  // Solo negocios con venta neta positiva
+  const negocios = (Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio : [])
+    .filter(n => n.venta > 0)
+    .sort((a, b) => b.venta - a.venta);
 
   return (
     <div className="animate-fade-in">

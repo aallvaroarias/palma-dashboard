@@ -86,9 +86,11 @@ export default function Gerencial() {
     return cobData.reduce((s, r2) => s + getCoberturaValue(r2), 0) / cobData.length;
   }, [cobData]);
 
-  // Venta por negocio ordenada de mayor a menor
+  // Venta NETA por negocio — filtrar negocios con venta > 0, ordenar desc
   const neg = useMemo(
-    () => [...(r?.venta_por_negocio || [])].sort((a, b) => b.venta - a.venta),
+    () => [...(r?.venta_por_negocio || [])]
+      .filter(n => n.venta > 0)
+      .sort((a, b) => b.venta - a.venta),
     [r]
   );
 
@@ -172,10 +174,10 @@ export default function Gerencial() {
           <div className="chart-card mb-6">
             <div className="flex items-center justify-between mb-4">
               <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
-                Venta real del período · ordenado de mayor a menor
+                Venta neta del período · ordenado de mayor a menor
               </span>
               <span className="font-mono-num font-bold text-palumar-white" style={{ fontSize: '17px' }}>
-                {fmt(r.venta_real ?? r.venta_bruta ?? 0)}
+                {fmt(r.venta_neta ?? 0)}
               </span>
             </div>
             <HBarChart

@@ -1189,12 +1189,14 @@ function getVendedores() {
 
     vendMap[cod].venta_neta_vmx += valor;
 
+    // Acumular venta NETA por negocio (incluye positivos y negativos)
+    if (negocio) {
+      vendMap[cod].negocios[negocio] = (vendMap[cod].negocios[negocio] || 0) + valor;
+    }
+
     if (valor > 0) {
       vendMap[cod].venta_positiva_vmx += valor;
       vendMap[cod].clientes.add(String(r[1]));
-      if (negocio) {
-        vendMap[cod].negocios[negocio] = (vendMap[cod].negocios[negocio] || 0) + valor;
-      }
     }
     if (valor < 0) {
       vendMap[cod].venta_negativa_vmx_abs += Math.abs(valor);
