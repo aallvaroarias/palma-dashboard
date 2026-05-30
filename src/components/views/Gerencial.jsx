@@ -195,6 +195,36 @@ export default function Gerencial() {
     return list.slice(0, 6);
   }, [vendedores, r]);
 
+  // Proyección de cierre de mes basada en días hábiles (lun–sáb)
+  const proyeccionCierre = useMemo(() => {
+    if (!r?.venta_neta) return null;
+    const hoy   = new Date();
+    const anio  = hoy.getFullYear();
+    const mes   = hoy.getMonth();
+    const inicio = new Date(anio, mes, 1);
+    const fin    = new Date(anio, mes + 1, 0);
+
+    function diasHabiles(desde, hasta) {
+      let c = 0;
+      const d = new Date(desde);
+      while (d <= hasta) {
+        if (d.getDay() !== 0) c++;   // excluye domingos
+        d.setDate(d.getDate() + 1);
+      }
+      return c;
+    }
+
+    const habilesTotal  = diasHabiles(inicio, fin);
+    const habilesTransc = diasHabiles(inicio, hoy);
+    if (habilesTransc === 0) return null;
+
+    const proyeccion  = Math.round(r.venta_neta / habilesTransc * habilesTotal);
+    const pctAvance   = Math.round(habilesTransc / habilesTotal * 100);
+    const cuota       = r.cuota_total || 0;
+    const pctVsCuota  = cuota > 0 ? Math.round(proyeccion / cuota * 100) : null;
+    return { proyeccion, pctAvance, habilesTransc, habilesTotal, pctVsCuota };
+  }, [r]);
+
   if (!r) {
     return (
       <div className="flex items-center justify-center h-64 text-palumar-muted text-sm">
@@ -228,6 +258,19 @@ export default function Gerencial() {
           color="amber"
         />
         <KpiCard label="Venta Neta" value={fmt(r.venta_neta || 0)} color="green" />
+        {proyeccionCierre && (
+          <KpiCard
+            label="Proyección Cierre"
+            value={fmt(proyeccionCierre.proyeccion)}
+            sub={proyeccionCierre.pctVsCuota != null
+              ? `${proyeccionCierre.pctVsCuota}% de la meta · día ${proyeccionCierre.habilesTransc}/${proyeccionCierre.habilesTotal}`
+              : `Día hábil ${proyeccionCierre.habilesTransc} de ${proyeccionCierre.habilesTotal} · ${proyeccionCierre.pctAvance}% del mes`}
+            color={proyeccionCierre.pctVsCuota == null ? 'cyan'
+              : proyeccionCierre.pctVsCuota >= 100 ? 'green'
+              : proyeccionCierre.pctVsCuota >= 75  ? 'amber'
+              : 'red'}
+          />
+        )}
         <KpiCard
           label="Cobertura"
           value={pct(r.cobertura_pct || 0)}
