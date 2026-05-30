@@ -1563,17 +1563,11 @@ function getClientesNuevos(desde, hasta) {
   const porVend = {};
   const porMes  = {};
 
-  // Parsear rango de fechas (si se proveen)
-  let fechaDesde = null, fechaHasta = null;
-  if (desde) {
-    const d = new Date(desde + 'T00:00:00');
-    if (!isNaN(d.getTime())) fechaDesde = d;
-  }
-  if (hasta) {
-    const h = new Date(hasta + 'T23:59:59');
-    if (!isNaN(h.getTime())) fechaHasta = h;
-  }
-  const hayFiltro = !!(fechaDesde || fechaHasta);
+  // desde / hasta ya vienen como 'YYYY-MM-DD' — comparamos como strings para evitar
+  // cualquier problema de timezone entre el script (UTC) y la hoja (America/Panama)
+  const desdeStr = desde || '';
+  const hastaStr = hasta || '';
+  const hayFiltro = !!(desdeStr || hastaStr);
 
   for (let i = 1; i < data.length; i++) {
     const r      = data[i];
@@ -1585,28 +1579,27 @@ function getClientesNuevos(desde, hasta) {
     if (estado !== 'A') continue;
     if (!esVendedorValido_(codA, asesor)) continue;
 
-    // Intentar parsear fecha de columna AB
-    let fecha = null;
+    // Convertir la celda a string YYYY-MM-DD usando la TZ correcta (America/Panama)
+    let fechaStr = '';
     if (fechaR instanceof Date && !isNaN(fechaR.getTime())) {
-      fecha = fechaR;
+      fechaStr = Utilities.formatDate(fechaR, TZ, 'yyyy-MM-dd');
     } else {
       const s = String(fechaR || '').trim();
       if (s) {
         const d = new Date(s);
-        if (!isNaN(d.getTime())) fecha = d;
+        if (!isNaN(d.getTime())) fechaStr = Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
       }
     }
 
-    // Con filtro activo: excluir si no tiene fecha o está fuera del rango
+    // Filtro por rango: comparación de strings YYYY-MM-DD (evita problemas de timezone)
     if (hayFiltro) {
-      if (!fecha) continue;
-      if (fechaDesde && fecha < fechaDesde) continue;
-      if (fechaHasta && fecha > fechaHasta) continue;
+      if (!fechaStr) continue;
+      if (desdeStr && fechaStr < desdeStr) continue;
+      if (hastaStr && fechaStr > hastaStr) continue;
     }
     // Sin filtro: incluir TODOS los clientes activos válidos aunque no tengan fecha en AB
 
-    const fechaStr = fecha ? Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd') : '';
-    const mesStr   = fecha ? Utilities.formatDate(fecha, TZ, 'yyyy-MM')    : '';
+    const mesStr = fechaStr ? fechaStr.slice(0, 7) : '';
 
     nuevos.push({
       asesor,

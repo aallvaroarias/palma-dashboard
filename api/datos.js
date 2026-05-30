@@ -19,10 +19,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing sheet param' });
   }
 
+  // clientes_nuevos con filtro de fecha: nunca cachear en el servidor
+  // para que el usuario siempre obtenga datos frescos al cambiar el rango
+  const esClientesFiltrado = sheet === 'clientes_nuevos' && (desde || hasta);
+  if (esClientesFiltrado) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+
   const key = `${sheet}|${desde || ''}|${hasta || ''}`;
   const now = Date.now();
 
-  if (cache[key] && now - cache[key].ts < 60000) {
+  if (!esClientesFiltrado && cache[key] && now - cache[key].ts < 60000) {
     res.setHeader('X-Cache', 'HIT');
     return res.json(cache[key].data);
   }
