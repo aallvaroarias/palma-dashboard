@@ -18,7 +18,8 @@ function onOpen() {
     .addSeparator()
     .addItem('2. Cobertura real',              'calcularCobertura')
     .addItem('3. Cobertura por negocio',       'calcularCoberturaNegocio')
-    .addItem('4. Clientes cero',               'calcularClientesCero')
+    .addItem('4. Clientes cero (desde BASE)',  'calcularClientesCero')
+    .addItem('4b. ✅ Clientes cero (desde ECOM)', 'procesarFrecuenciaECOM')
     .addItem('5. Procesar devoluciones',       'procesarDevoluciones')
     .addItem('6. Procesar efectividad',        'procesarEfectividad')
     .addSeparator()
@@ -1417,6 +1418,112 @@ function getDevoluciones() {
 // ════════════════════════════════════════════════════════════════════
 // CLIENTES CERO
 // ════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════
+// CLIENTES CERO DESDE FRECUENCIA ECOM
+// ════════════════════════════════════════════════════════════════════
+// Pega el reporte "Frecuencia" de ECOM en la pestaña FRECUENCIA_ECOM
+// (mismas columnas del Excel: Empresa, Cod Usuario, Usuario, Cod. cliente,
+//  Cliente, Direccion, Telefono, Total Venta, Total Devolucion, Barrio,
+//  Ciudad, Nom Establecimiento)
+// Luego ejecuta este script desde el menú PALMA → 4b.
+
+function procesarFrecuenciaECOM() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const ui  = SpreadsheetApp.getUi();
+  const hF  = ss.getSheetByName('FRECUENCIA_ECOM');
+  if (!hF) {
+    ui.alert('ERROR', 'No existe la pestaña FRECUENCIA_ECOM.\nCreala y pega el reporte de ECOM con sus encabezados originales.', ui.ButtonSet.OK);
+    return;
+  }
+  if (hF.getLastRow() < 2) {
+    ui.alert('ERROR', 'La pestaña FRECUENCIA_ECOM está vacía.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // ── 1. Leer encabezados y datos de FRECUENCIA_ECOM ────────────────
+  const raw     = hF.getDataRange().getValues();
+  const headers = raw[0].map(h => String(h || '').trim().toLowerCase());
+
+  // Índices de columnas del reporte ECOM
+  const iCodUsr  = headers.indexOf('cod usuario');
+  const iUsr     = headers.indexOf('usuario');
+  const iCodCli  = headers.indexOf('cod. cliente');
+  const iCliente = headers.indexOf('cliente');
+  const iDir     = headers.indexOf('direccion');
+  const iBarrio  = headers.indexOf('barrio');
+  const iCiudad  = headers.indexOf('ciudad');
+  const iEstab   = headers.indexOf('nom establecimiento');
+
+  if ([iCodUsr, iUsr, iCodCli, iCliente].some(i => i === -1)) {
+    ui.alert('ERROR', 'No se encontraron las columnas esperadas.\nVerifica que los encabezados coincidan con el reporte de ECOM.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // ── 2. Construir mapa cod_asesor → nom_vendedor desde BASE_ACUMULADA ─
+  const hB       = ss.getSheetByName('BASE_ACUMULADA');
+  const vendNomMap = {};   // '201' → 'ANAYS FUENTES'
+  if (hB && hB.getLastRow() > 1) {
+    hB.getDataRange().getValues().slice(1).forEach(r => {
+      const asesor  = String(r[3] || '').trim();
+      const nombre  = String(r[4] || '').trim();  // columna vendedor
+      const cod     = obtenerCodAsesor_(asesor);
+      if (cod && nombre && !vendNomMap[cod]) vendNomMap[cod] = nombre;
+    });
+  }
+
+  // ── 3. Obtener período actual ──────────────────────────────────────
+  const periodoActual = getPeriodoActualDesdeBase_() || '';
+
+  // ── 4. Procesar filas ECOM ─────────────────────────────────────────
+  const rows = [];
+  for (let i = 1; i < raw.length; i++) {
+    const r       = raw[i];
+    const empresa = String(r[0] || '').trim();
+    // Saltar fila TOTAL y filas sin empresa válida
+    if (empresa.toUpperCase() === 'TOTAL') continue;
+
+    const codUsuario = String(r[iCodUsr] || '').trim().replace(/\.0$/, '');
+    const usuario    = String(r[iUsr]    || '').trim();
+    const codCli     = String(r[iCodCli] || '').trim();
+    const cliente    = String(r[iCliente]|| '').trim();
+
+    if (!codUsuario || !codCli || !cliente) continue;
+
+    // Nombre de vendedor: preferir el de BASE_ACUMULADA, si no usar ECOM
+    const nomVend = vendNomMap[codUsuario] || usuario;
+
+    const dir    = iDir    >= 0 ? String(r[iDir]    || '').trim() : '';
+    const barrio = iBarrio >= 0 ? String(r[iBarrio] || '').trim() : '';
+    const ciudad = iCiudad >= 0 ? String(r[iCiudad] || '').trim() : '';
+    const estab  = iEstab  >= 0 ? String(r[iEstab]  || '').trim() : '';
+
+    rows.push([nomVend, codCli, cliente, estab || cliente, dir, barrio, ciudad, '', periodoActual]);
+  }
+
+  if (!rows.length) {
+    ui.alert('Sin datos', 'No se encontraron clientes cero en FRECUENCIA_ECOM.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // ── 5. Escribir CLIENTES_CERO ──────────────────────────────────────
+  let hCC = ss.getSheetByName('CLIENTES_CERO');
+  if (!hCC) hCC = ss.insertSheet('CLIENTES_CERO');
+  else hCC.clearContents();
+
+  const cabecera = [['Vendedor','Cod Cliente','Cliente','Razon Social','Direccion','Barrio','Ciudad','Fecha Creacion','Período']];
+  hCC.getRange(1, 1, 1, 9).setValues(cabecera)
+     .setBackground('#DC2626').setFontColor('#FFFFFF').setFontWeight('bold');
+
+  rows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  hCC.getRange(2, 1, rows.length, 9).setValues(rows);
+
+  // Resumen por vendedor para el toast
+  const resumen = {};
+  rows.forEach(r => { resumen[r[0]] = (resumen[r[0]] || 0) + 1; });
+  const msg = Object.entries(resumen).sort((a,b) => b[1]-a[1]).map(([v,n]) => `${v}: ${n}`).join('\n');
+  ui.alert('✅ Clientes Cero desde ECOM', `Total: ${rows.length} clientes sin compra\n\n${msg}`, ui.ButtonSet.OK);
+}
 
 function getClientesCero() {
   const raw = sheetToJSON(HOJAS.CLIENTES_CERO)
