@@ -60,6 +60,7 @@ export default function Vendedor() {
   const [desdeN, setDesdeN] = useState('');
   const [hastaN, setHastaN] = useState('');
   const [loadingN, setLoadingN] = useState(false);
+  const [negocioVend, setNegocioVend] = useState('');
 
   const applyNuevos = useCallback(async (d, h) => {
     setLoadingN(true);
@@ -104,6 +105,15 @@ export default function Vendedor() {
       x.cod_vendedor === String(v.cod) || x.nom_vendedor === v.nombre
     );
     return found?.top10 || [];
+  }, [topClientes, v]);
+
+  // Top clientes por negocio de este vendedor
+  const topNegociosVend = useMemo(() => {
+    if (!v) return [];
+    const found = (topClientes.top_por_vendedor_negocio || []).find(x =>
+      x.cod_vendedor === String(v.cod)
+    );
+    return found?.negocios || [];
   }, [topClientes, v]);
 
   if (!cod) {
@@ -486,6 +496,69 @@ export default function Vendedor() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Mis Top Clientes por Negocio ── */}
+      {topNegociosVend.length > 0 && (
+        <>
+          <SectionTitle>Mis Top Clientes por Negocio</SectionTitle>
+          <div className="chart-card mb-4">
+            <div className="flex items-center gap-3 mb-4">
+              <select
+                className="palma-select"
+                value={negocioVend}
+                onChange={e => setNegocioVend(e.target.value)}
+              >
+                <option value="">— Selecciona un negocio —</option>
+                {topNegociosVend.map(nx => (
+                  <option key={nx.negocio} value={nx.negocio}>{nx.negocio}</option>
+                ))}
+              </select>
+            </div>
+            {(() => {
+              const nx = topNegociosVend.find(x => x.negocio === negocioVend);
+              if (!negocioVend) return (
+                <p className="text-center text-palumar-muted text-sm py-6">
+                  Selecciona un negocio para ver tus mejores clientes
+                </p>
+              );
+              if (!nx?.top10?.length) return (
+                <p className="text-center text-palumar-muted text-sm py-6">Sin datos</p>
+              );
+              return (
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Cód.</th>
+                        <th>Cliente</th>
+                        <th style={{ textAlign: 'right' }}>Venta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nx.top10.map(c => (
+                        <tr key={c.cod_cliente}>
+                          <td>
+                            <span className="font-mono-num font-bold"
+                              style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}>
+                              {c.ranking}
+                            </span>
+                          </td>
+                          <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
+                          <td>{c.nombre}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">
+                            <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </>
       )}

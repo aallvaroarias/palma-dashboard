@@ -1871,7 +1871,7 @@ function getTopSKUs() {
       .map(s => ({ sku:s.sku, nombre:s.nombre, negocio:s.negocio,
                    venta:round2_(s.venta), clientes:s.clientes.size }))
       .sort((a, b) => b.venta - a.venta)
-      .slice(0, 5)
+      .slice(0, 15)
   }));
 
   return { global, por_vendedor };
@@ -1885,9 +1885,10 @@ function getTopSKUs() {
 
 function getTopClientes() {
   const mesData   = getBasePeriodoActual_();
-  const globalMap = {};   // cod_cliente → { cod_cliente, nombre, venta, vendedores:{}, negocios:{} }
-  const vendMap   = {};   // cod_asesor  → { cod_vendedor, nom_vendedor, clientes:{} }
-  const negMap    = {};   // negocio     → { cod_cliente → { cod_cliente, nombre, venta } }
+  const globalMap  = {};  // cod_cliente → { cod_cliente, nombre, venta, vendedores:{}, negocios:{} }
+  const vendMap    = {};  // cod_asesor  → { cod_vendedor, nom_vendedor, clientes:{} }
+  const negMap     = {};  // negocio     → { cod_cliente → { cod_cliente, nombre, venta, vendedores:{} } }
+  const vendNegMap = {};  // cod_asesor  → { negocio → { cod_cliente → { cod_cliente, nombre, venta } } }
 
   mesData.forEach(function(r) {
     if (!esFilaBaseValida_(r)) return;
@@ -1913,12 +1914,21 @@ function getTopClientes() {
       vendMap[codAs].clientes[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
     vendMap[codAs].clientes[codCli].venta += valor;
 
-    // Acumulado por negocio
+    // Acumulado por negocio (global)
     if (negocio) {
       if (!negMap[negocio]) negMap[negocio] = {};
       if (!negMap[negocio][codCli]) negMap[negocio][codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0, vendedores: {} };
       negMap[negocio][codCli].venta += valor;
       negMap[negocio][codCli].vendedores[nomVend] = (negMap[negocio][codCli].vendedores[nomVend] || 0) + valor;
+    }
+
+    // Acumulado por vendedor × negocio
+    if (negocio) {
+      if (!vendNegMap[codAs]) vendNegMap[codAs] = {};
+      if (!vendNegMap[codAs][negocio]) vendNegMap[codAs][negocio] = {};
+      if (!vendNegMap[codAs][negocio][codCli])
+        vendNegMap[codAs][negocio][codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
+      vendNegMap[codAs][negocio][codCli].venta += valor;
     }
   });
 
@@ -1971,7 +1981,26 @@ function getTopClientes() {
       };
     });
 
-  return { top_global: top_global, top_por_vendedor: top_por_vendedor, top_por_negocio: top_por_negocio };
+  const top_por_vendedor_negocio = Object.entries(vendNegMap).map(function(entry) {
+    var cod = entry[0], negs = entry[1];
+    return {
+      cod_vendedor: cod,
+      negocios: Object.entries(negs)
+        .sort(function(a, b) { return a[0].localeCompare(b[0]); })
+        .map(function(ne) {
+          var neg = ne[0], clients = ne[1];
+          return {
+            negocio: neg,
+            top10: Object.values(clients)
+              .sort(function(a, b) { return b.venta - a.venta; })
+              .slice(0, 10)
+              .map(function(c, i) { return { ranking: i + 1, cod_cliente: c.cod_cliente, nombre: c.nombre, venta: round2_(c.venta) }; })
+          };
+        })
+    };
+  });
+
+  return { top_global: top_global, top_por_vendedor: top_por_vendedor, top_por_negocio: top_por_negocio, top_por_vendedor_negocio: top_por_vendedor_negocio };
 }
 
 // ════════════════════════════════════════════════════════════════════
