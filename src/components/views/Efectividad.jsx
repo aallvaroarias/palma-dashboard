@@ -2,14 +2,21 @@ import React, { useMemo } from 'react';
 import useDashboardStore from '../../store/dashboardStore';
 import SectionTitle from '../ui/SectionTitle';
 import HBarChart from '../charts/HBarChart';
-import { pct, getCoberturaVendedor } from '../../utils/formatters';
+import { pct, getCoberturaVendedor, esRutaCentral } from '../../utils/formatters';
 import { VEND_COLORS } from '../../utils/colors';
 
 export default function Efectividad() {
   const { efectividad } = useDashboardStore();
 
-  const resMes = useMemo(() => efectividad.resumen_mes || [], [efectividad]);
-  const porSemana = useMemo(() => efectividad.por_semana || [], [efectividad]);
+  // Excluir Ruta Centrales de todas las vistas de efectividad
+  const resMes = useMemo(
+    () => (efectividad.resumen_mes || []).filter(r => !esRutaCentral(getCoberturaVendedor(r))),
+    [efectividad]
+  );
+  const porSemana = useMemo(
+    () => (efectividad.por_semana || []).filter(r => !esRutaCentral(getCoberturaVendedor(r))),
+    [efectividad]
+  );
 
   const efField = useMemo(() => {
     if (!resMes.length) return 'efectividad';

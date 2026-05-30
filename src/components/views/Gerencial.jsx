@@ -6,7 +6,7 @@ import HBarChart from '../charts/HBarChart';
 import LineChart from '../charts/LineChart';
 import {
   fmt, fmtK, pct,
-  getCoberturaVendedor, getCoberturaValue,
+  getCoberturaVendedor, getCoberturaValue, esRutaCentral,
 } from '../../utils/formatters';
 import { VEND_COLORS } from '../../utils/colors';
 
@@ -75,8 +75,9 @@ export default function Gerencial() {
     [cobertura]
   );
 
+  // Efectividad — excluir Ruta Centrales
   const efData = useMemo(
-    () => efectividad.resumen_mes || [],
+    () => (efectividad.resumen_mes || []).filter(r2 => !esRutaCentral(getCoberturaVendedor(r2))),
     [efectividad]
   );
 
@@ -97,6 +98,24 @@ export default function Gerencial() {
     if (!negocioFiltro) return [];
     return cobNegocio.filter(r2 => r2.negocio === negocioFiltro);
   }, [cobNegocio, negocioFiltro]);
+
+  // Mapa nombre→venta_neta para mostrar $ junto a cobertura por vendedor
+  const vendVentaMap = useMemo(() => {
+    const map = {};
+    vendedores.forEach(v => { if (v.nombre) map[v.nombre] = v.venta_neta || 0; });
+    return map;
+  }, [vendedores]);
+
+  // Mapa nombre→venta en el negocio seleccionado (para cobertura por negocio)
+  const cobNegVentaMap = useMemo(() => {
+    if (!negocioFiltro) return {};
+    const map = {};
+    vendedores.forEach(v => {
+      const n = (v.venta_por_negocio || []).find(x => x.negocio === negocioFiltro);
+      if (v.nombre) map[v.nombre] = n ? (n.venta || 0) : 0;
+    });
+    return map;
+  }, [vendedores, negocioFiltro]);
 
   const promEquipoCob = useMemo(() => {
     if (!cobData.length) return 0;
@@ -322,6 +341,59 @@ export default function Gerencial() {
         </>
       )}
 
+      {/* ── Top 20 Clientes ── */}
+      {topClientes.top_global?.length > 0 && (
+        <>
+          <SectionTitle>Top 20 Clientes — Distribuidora</SectionTitle>
+          <div className="table-card mb-4">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                Mejores clientes por venta neta · {r?.periodo || ''}
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cód.</th>
+                    <th>Cliente</th>
+                    <th>Vendedor</th>
+                    <th>Negocio Principal</th>
+                    <th style={{ textAlign: 'right' }}>Venta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topClientes.top_global.map((c) => (
+                    <tr key={c.cod_cliente}>
+                      <td>
+                        <span
+                          className="font-mono-num font-bold"
+                          style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}
+                        >
+                          {c.ranking}
+                        </span>
+                      </td>
+                      <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
+                      <td>{c.nombre}</td>
+                      <td style={{ color: 'var(--muted)' }}>{c.nom_vendedor || '—'}</td>
+                      <td>
+                        {c.negocio_principal
+                          ? <span className="badge badge-blue" style={{ fontSize: '10px' }}>{c.negocio_principal}</span>
+                          : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="font-mono-num">
+                        <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ── Clientes Nuevos ── */}
       {(clientesNuevos.total > 0 || true) && (
         <>
@@ -442,6 +514,43 @@ export default function Gerencial() {
           metaValue={95}
           metaLabel="Meta 95%"
         />
+        {/* Tabla: % + $ por vendedor */}
+        <div className="mt-4 overflow-x-auto">
+          <table className="palma-table">
+            <thead>
+              <tr>
+                <th>Vendedor</th>
+                <th style={{ textAlign: 'right' }}>Cobertura</th>
+                <th style={{ textAlign: 'right' }}>Venta Neta $</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cobData.map((r2, i) => {
+                const nom = getCoberturaVendedor(r2);
+                const cob = getCoberturaValue(r2);
+                const venta = vendVentaMap[nom] ?? 0;
+                return (
+                  <tr key={i}>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                        {nom}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span style={{ color: cob >= 95 ? 'var(--green)' : cob >= 75 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>
+                        {pct(cob)}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="font-mono-num">
+                      <span style={{ color: 'var(--green)' }}>{fmt(venta)}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ── Cobertura por Negocio ── */}
@@ -462,13 +571,52 @@ export default function Gerencial() {
               </select>
             </div>
             {negocioFiltro && cobNegFiltrada.length > 0 ? (
-              <HBarChart
-                labels={cobNegFiltrada.map(r2 => getCoberturaVendedor(r2))}
-                data={cobNegFiltrada.map(r2 => getCoberturaValue(r2))}
-                barColors={cobNegFiltrada.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
-                isPct
-                metaValue={95}
-              />
+              <>
+                <HBarChart
+                  labels={cobNegFiltrada.map(r2 => getCoberturaVendedor(r2))}
+                  data={cobNegFiltrada.map(r2 => getCoberturaValue(r2))}
+                  barColors={cobNegFiltrada.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+                  isPct
+                  metaValue={95}
+                />
+                {/* Tabla: % + $ por vendedor en el negocio */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>Vendedor</th>
+                        <th style={{ textAlign: 'right' }}>Cobertura</th>
+                        <th style={{ textAlign: 'right' }}>Venta en {negocioFiltro} $</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cobNegFiltrada.map((r2, i) => {
+                        const nom = getCoberturaVendedor(r2);
+                        const cob = getCoberturaValue(r2);
+                        const venta = cobNegVentaMap[nom] ?? 0;
+                        return (
+                          <tr key={i}>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                                {nom}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <span style={{ color: cob >= 95 ? 'var(--green)' : cob >= 75 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>
+                                {pct(cob)}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">
+                              <span style={{ color: venta > 0 ? 'var(--green)' : 'var(--muted)' }}>{fmt(venta)}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <div className="text-palumar-muted text-sm text-center py-6">
                 {negocioFiltro ? 'Sin datos para este negocio' : 'Selecciona un negocio para ver el detalle'}
@@ -576,59 +724,6 @@ export default function Gerencial() {
           </div>
         )}
       </div>
-
-      {/* ── Top 20 Clientes ── */}
-      {topClientes.top_global?.length > 0 && (
-        <>
-          <SectionTitle>Top 20 Clientes — Distribuidora</SectionTitle>
-          <div className="table-card mb-4">
-            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
-              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-                Mejores clientes por venta neta · {r?.periodo || ''}
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="palma-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Cód.</th>
-                    <th>Cliente</th>
-                    <th>Vendedor</th>
-                    <th>Negocio Principal</th>
-                    <th style={{ textAlign: 'right' }}>Venta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topClientes.top_global.map((c) => (
-                    <tr key={c.cod_cliente}>
-                      <td>
-                        <span
-                          className="font-mono-num font-bold"
-                          style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}
-                        >
-                          {c.ranking}
-                        </span>
-                      </td>
-                      <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
-                      <td>{c.nombre}</td>
-                      <td style={{ color: 'var(--muted)' }}>{c.nom_vendedor || '—'}</td>
-                      <td>
-                        {c.negocio_principal
-                          ? <span className="badge badge-blue" style={{ fontSize: '10px' }}>{c.negocio_principal}</span>
-                          : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right' }} className="font-mono-num">
-                        <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
 
       {/* ── Top 10 por Vendedor ── */}
       {topClientes.top_por_vendedor?.length > 0 && (

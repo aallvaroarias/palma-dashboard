@@ -30,6 +30,12 @@ export const esBodega = (v) => {
 export const vendedorValido = (v) =>
   v && !esBodega(v.cod) && !esBodega(v.nombre);
 
+/** Detect "Ruta Centrales" accounts (internal distribution route, not a salesperson) */
+export const esRutaCentral = (v) => {
+  const x = norm(v);
+  return x.includes('RUTACENTRAL');
+};
+
 /** Get cobertura vendor name from various field name styles */
 export const getCoberturaVendedor = (row) =>
   String(row.vendedor ?? row.nombre ?? row.nom_vendedor ?? '').trim();

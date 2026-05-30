@@ -6,7 +6,7 @@ import SectionTitle from '../ui/SectionTitle';
 import HBarChart from '../charts/HBarChart';
 import DoughnutChart from '../charts/DoughnutChart';
 import LineChart from '../charts/LineChart';
-import { fmt, pct, getCoberturaValue, getCoberturaVendedor } from '../../utils/formatters';
+import { fmt, pct, getCoberturaValue, getCoberturaVendedor, esRutaCentral } from '../../utils/formatters';
 import { VEND_COLORS, NEG_COLORS, COLORS } from '../../utils/colors';
 
 export default function Vendedor() {
@@ -40,6 +40,7 @@ export default function Vendedor() {
     if (!cod || !v) return [];
     return (efectividad.por_semana || []).filter(r2 => {
       const vnom = getCoberturaVendedor(r2);
+      if (esRutaCentral(vnom)) return false;
       return vnom === v.nombre || vnom === String(v.cod);
     });
   }, [efectividad, cod, v]);
