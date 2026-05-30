@@ -35,6 +35,15 @@ export default function Cobertura() {
       .sort((a, b) => getCoberturaValue(b) - getCoberturaValue(a));
   }, [cobNegocio, vendedorSel]);
 
+  // Mapa cod_vendedor → clientes cero (desde FRECUENCIA_ECOM vía clientesCero)
+  const ceroCodMap = useMemo(() => {
+    const map = {};
+    (clientesCero.por_vendedor || []).forEach(r => {
+      if (r.cod) map[String(r.cod).trim()] = r.cantidad;
+    });
+    return map;
+  }, [clientesCero]);
+
   // Mapa negocio → venta $ del vendedor seleccionado (desde vendedores)
   const ventaNegMap = useMemo(() => {
     if (!vendedorSel) return {};
@@ -97,6 +106,9 @@ export default function Cobertura() {
                 const cob = getCoberturaValue(r);
                 const badgeClass = cob >= 95 ? 'badge-green' : cob >= 75 ? 'badge-amber' : 'badge-red';
                 const badgeLabel = cob >= 95 ? 'En meta' : cob >= 75 ? 'Cerca' : 'Bajo meta';
+                const label     = getCoberturaVendedor(r);
+                const cod       = label.split('-')[0].trim();
+                const sinCompra = ceroCodMap[cod] ?? r.sin_compra ?? 0;
                 return (
                   <tr key={i}>
                     <td>
@@ -105,7 +117,7 @@ export default function Cobertura() {
                           className="w-5 h-5 rounded-full flex-shrink-0"
                           style={{ background: VEND_COLORS[i % VEND_COLORS.length] }}
                         />
-                        {getCoberturaVendedor(r)}
+                        {label}
                       </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>{r.clientes_maestro || 0}</td>
@@ -115,7 +127,9 @@ export default function Cobertura() {
                         {pct(cob)}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>{r.sin_compra || 0}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span style={{ color: sinCompra > 0 ? 'var(--red)' : 'var(--muted)' }}>{sinCompra}</span>
+                    </td>
                     <td><span className={`badge ${badgeClass}`}>{badgeLabel}</span></td>
                   </tr>
                 );
