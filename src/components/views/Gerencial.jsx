@@ -390,15 +390,16 @@ export default function Gerencial() {
         </>
       )}
 
-      {/* ── Top 20 Clientes ── */}
+      {/* ── Top 10 Clientes ── */}
       {topClientes.top_global?.length > 0 && (
         <>
-          <SectionTitle>Top 20 Clientes — Distribuidora</SectionTitle>
+          <SectionTitle>Top 10 Clientes — Distribuidora</SectionTitle>
           <div className="table-card mb-4">
             <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
               <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
                 Mejores clientes por venta neta · {r?.periodo || ''}
               </h3>
+              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>Top 10</span>
             </div>
             <div className="overflow-x-auto">
               <table className="palma-table">
@@ -413,7 +414,7 @@ export default function Gerencial() {
                   </tr>
                 </thead>
                 <tbody>
-                  {topClientes.top_global.map((c) => (
+                  {topClientes.top_global.slice(0, 10).map((c) => (
                     <tr key={c.cod_cliente}>
                       <td>
                         <span
