@@ -276,6 +276,7 @@ body::after {
 .badge-green  { background: rgba(15,169,122,0.15);  color: #34D399; border: 1px solid rgba(15,169,122,0.35); }
 .badge-amber  { background: rgba(200,164,62,0.15);   color: #FCD34D; border: 1px solid rgba(200,164,62,0.35); }
 .badge-red    { background: rgba(224,82,82,0.15);    color: #FCA5A5; border: 1px solid rgba(224,82,82,0.35); }
+.badge-blue   { background: rgba(26,127,166,0.15);   color: #2DC8D8; border: 1px solid rgba(45,200,216,0.35); }
 
 /* ═══════════════════════════════════════════════
    ALERTS

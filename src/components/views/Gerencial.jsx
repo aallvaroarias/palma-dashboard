@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import useDashboardStore from '../../store/dashboardStore';
 import KpiCard from '../ui/KpiCard';
 import SectionTitle from '../ui/SectionTitle';
@@ -31,11 +31,28 @@ export default function Gerencial() {
     marcas,
     skus,
     topClientes,
+    refetchClientes,
   } = useDashboardStore();
 
   const [negocioFiltro, setNegocioFiltro] = useState('');
   const [vendedorTop10, setVendedorTop10] = useState('');
   const [ceroVendSel, setCeroVendSel] = useState('');
+  const [loadingNuevosG, setLoadingNuevosG] = useState(false);
+  const [filtroNuevosLabel, setFiltroNuevosLabel] = useState('Este período');
+
+  const applyNuevosG = useCallback(async (desde, hasta, label) => {
+    setLoadingNuevosG(true);
+    setFiltroNuevosLabel(label);
+    try { await refetchClientes(desde || undefined, hasta || undefined); }
+    finally { setLoadingNuevosG(false); }
+  }, [refetchClientes]);
+
+  // Quick filter helpers
+  const hoy = new Date();
+  const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
+  const hoyStr = hoy.toISOString().slice(0, 10);
+  const hace30 = new Date(hoy); hace30.setDate(hoy.getDate() - 30);
+  const hace30Str = hace30.toISOString().slice(0, 10);
 
   // Detalle de clientes cero del vendedor seleccionado
   const ceroVendDetalle = useMemo(() => {
@@ -306,9 +323,41 @@ export default function Gerencial() {
       )}
 
       {/* ── Clientes Nuevos ── */}
-      {clientesNuevos.total > 0 && (
+      {(clientesNuevos.total > 0 || true) && (
         <>
           <SectionTitle>Clientes Nuevos</SectionTitle>
+
+          {/* Quick date filters */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {[
+              { label: 'Este mes', desde: primerDiaMes, hasta: hoyStr },
+              { label: 'Últ. 30 días', desde: hace30Str, hasta: hoyStr },
+              { label: 'Todo el historial', desde: '', hasta: '' },
+            ].map(({ label, desde, hasta }) => {
+              const isActive = filtroNuevosLabel === label;
+              return (
+                <button
+                  key={label}
+                  onClick={() => applyNuevosG(desde, hasta, label)}
+                  disabled={loadingNuevosG}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150"
+                  style={{
+                    background: isActive ? 'linear-gradient(135deg, rgba(15,169,122,0.2) 0%, rgba(52,211,153,0.1) 100%)' : 'rgba(13,30,43,0.5)',
+                    borderColor: isActive ? 'rgba(15,169,122,0.45)' : 'var(--border-2)',
+                    color: isActive ? 'var(--green)' : 'var(--muted)',
+                  }}
+                >
+                  {loadingNuevosG && isActive ? '…' : label}
+                </button>
+              );
+            })}
+            {clientesNuevos.desde && (
+              <span className="font-mono-num text-palumar-muted" style={{ fontSize: '10px' }}>
+                {clientesNuevos.desde} → {clientesNuevos.hasta || hoyStr}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
             <KpiCard
               label="Nuevos este periodo"
@@ -434,7 +483,7 @@ export default function Gerencial() {
       <div className="chart-card mb-4">
         <div className="mb-1 flex items-center gap-3">
           <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
-            Meta: <strong style={{ color: 'var(--red)' }}>80%</strong>
+            Meta: <strong style={{ color: 'var(--red)' }}>90%</strong>
           </span>
         </div>
         <HBarChart
@@ -442,8 +491,8 @@ export default function Gerencial() {
           data={efData.map(r2 => +r2[efField] || 0)}
           barColors={efData.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
           isPct
-          metaValue={80}
-          metaLabel="Meta 80%"
+          metaValue={90}
+          metaLabel="Meta 90%"
         />
       </div>
 
@@ -456,25 +505,6 @@ export default function Gerencial() {
           </AlertItem>
         ))}
       </div>
-
-      {/* ── Tendencia semanal ── */}
-      {tendencia.length > 0 && (
-        <>
-          <SectionTitle>Tendencia Semanal</SectionTitle>
-          <div className="chart-card mb-4">
-            <LineChart
-              labels={tendencia.map(x => `Sem ${x.semana}`)}
-              datasets={[{
-                label: 'Venta real',
-                data: tendencia.map(x => x.venta),
-                color: '#1A7FA6',
-                fill: true,
-              }]}
-              height={220}
-            />
-          </div>
-        </>
-      )}
 
       {/* ── Top Marcas & SKUs ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -547,10 +577,10 @@ export default function Gerencial() {
         )}
       </div>
 
-      {/* ── Top 10 Clientes ── */}
+      {/* ── Top 20 Clientes ── */}
       {topClientes.top_global?.length > 0 && (
         <>
-          <SectionTitle>Top 10 Clientes — Distribuidora</SectionTitle>
+          <SectionTitle>Top 20 Clientes — Distribuidora</SectionTitle>
           <div className="table-card mb-4">
             <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
               <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
@@ -564,6 +594,8 @@ export default function Gerencial() {
                     <th>#</th>
                     <th>Cód.</th>
                     <th>Cliente</th>
+                    <th>Vendedor</th>
+                    <th>Negocio Principal</th>
                     <th style={{ textAlign: 'right' }}>Venta</th>
                   </tr>
                 </thead>
@@ -580,6 +612,12 @@ export default function Gerencial() {
                       </td>
                       <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
                       <td>{c.nombre}</td>
+                      <td style={{ color: 'var(--muted)' }}>{c.nom_vendedor || '—'}</td>
+                      <td>
+                        {c.negocio_principal
+                          ? <span className="badge badge-blue" style={{ fontSize: '10px' }}>{c.negocio_principal}</span>
+                          : '—'}
+                      </td>
                       <td style={{ textAlign: 'right' }} className="font-mono-num">
                         <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
                       </td>

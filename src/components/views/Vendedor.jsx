@@ -291,8 +291,8 @@ export default function Vendedor() {
               data={efVend.map(r2 => +r2[efField] || 0)}
               color="#0FA97A"
               isPct
-              metaValue={80}
-              metaLabel="Meta 80%"
+              metaValue={90}
+              metaLabel="Meta 90%"
               minH={150}
               rowH={34}
             />

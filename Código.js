@@ -1732,7 +1732,7 @@ function getTopSKUs() {
 
 function getTopClientes() {
   const mesData   = getBasePeriodoActual_();
-  const globalMap = {};   // cod_cliente → { cod_cliente, nombre, venta }
+  const globalMap = {};   // cod_cliente → { cod_cliente, nombre, venta, vendedores:{}, negocios:{} }
   const vendMap   = {};   // cod_asesor  → { cod_vendedor, nom_vendedor, clientes:{} }
 
   mesData.forEach(function(r) {
@@ -1741,14 +1741,17 @@ function getTopClientes() {
     const nomCli  = String(r[2]  || '').trim();
     const codAs   = obtenerCodAsesor_(String(r[3] || ''));
     const nomVend = String(r[4]  || '').trim();
+    const negocio = String(r[8]  || '').trim();
     const valor   = parseFloat(r[14]) || 0;
 
     if (!codCli || !codAs) return;
     if (valor <= 0) return;
 
-    // Acumulado global
-    if (!globalMap[codCli]) globalMap[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
+    // Acumulado global (con vendedor y negocio principal)
+    if (!globalMap[codCli]) globalMap[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0, vendedores: {}, negocios: {} };
     globalMap[codCli].venta += valor;
+    globalMap[codCli].vendedores[nomVend] = (globalMap[codCli].vendedores[nomVend] || 0) + valor;
+    if (negocio) globalMap[codCli].negocios[negocio] = (globalMap[codCli].negocios[negocio] || 0) + valor;
 
     // Acumulado por vendedor
     if (!vendMap[codAs]) vendMap[codAs] = { cod_vendedor: codAs, nom_vendedor: nomVend, clientes: {} };
@@ -1759,8 +1762,23 @@ function getTopClientes() {
 
   const top_global = Object.values(globalMap)
     .sort(function(a, b) { return b.venta - a.venta; })
-    .slice(0, 10)
-    .map(function(c, i) { return { ranking: i + 1, cod_cliente: c.cod_cliente, nombre: c.nombre, venta: round2_(c.venta) }; });
+    .slice(0, 20)
+    .map(function(c, i) {
+      // Vendedor principal = el que más le ha comprado al cliente
+      var vendEntries = Object.entries(c.vendedores).sort(function(a, b) { return b[1] - a[1]; });
+      var nom_vendedor = vendEntries.length ? vendEntries[0][0] : '';
+      // Negocio principal = el negocio con mayor venta para este cliente
+      var negEntries = Object.entries(c.negocios).sort(function(a, b) { return b[1] - a[1]; });
+      var negocio_principal = negEntries.length ? negEntries[0][0] : '';
+      return {
+        ranking: i + 1,
+        cod_cliente: c.cod_cliente,
+        nombre: c.nombre,
+        nom_vendedor: nom_vendedor,
+        negocio_principal: negocio_principal,
+        venta: round2_(c.venta)
+      };
+    });
 
   const top_por_vendedor = Object.entries(vendMap).map(function(entry) {
     var cod = entry[0], v = entry[1];

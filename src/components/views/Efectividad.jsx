@@ -27,7 +27,7 @@ export default function Efectividad() {
             Acumulado Mes
           </div>
           <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
-            Meta: <strong style={{ color: 'var(--red)' }}>80%</strong>
+            Meta: <strong style={{ color: 'var(--red)' }}>90%</strong>
           </span>
         </div>
         {resMes.length > 0 ? (
@@ -36,8 +36,8 @@ export default function Efectividad() {
             data={resMes.map(r => +r[efField] || 0)}
             barColors={resMes.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
             isPct
-            metaValue={80}
-            metaLabel="Meta 80%"
+            metaValue={90}
+            metaLabel="Meta 90%"
           />
         ) : (
           <div className="text-center py-10 text-palumar-muted text-sm">Sin datos disponibles</div>
@@ -67,8 +67,8 @@ export default function Efectividad() {
             <tbody>
               {porSemana.slice(0, 100).map((r, i) => {
                 const ef = +r.efectividad || +r[efField] || 0;
-                const badgeClass = ef >= 80 ? 'badge-green' : ef >= 65 ? 'badge-amber' : 'badge-red';
-                const badgeLabel = ef >= 80 ? 'En meta' : ef >= 65 ? 'Cerca' : 'Bajo meta';
+                const badgeClass = ef >= 90 ? 'badge-green' : ef >= 75 ? 'badge-amber' : 'badge-red';
+                const badgeLabel = ef >= 90 ? 'En meta' : ef >= 75 ? 'Cerca' : 'Bajo meta';
                 return (
                   <tr key={i}>
                     <td>{getCoberturaVendedor(r)}</td>
@@ -76,7 +76,7 @@ export default function Efectividad() {
                     <td style={{ textAlign: 'right' }}>{r.impactos || 0}</td>
                     <td style={{ textAlign: 'right' }}>{r.maestra || r.maestro || 0}</td>
                     <td style={{ textAlign: 'right' }} className="font-mono-num">
-                      <span style={{ color: ef >= 80 ? 'var(--green)' : ef >= 65 ? 'var(--amber)' : 'var(--red)' }}>
+                      <span style={{ color: ef >= 90 ? 'var(--green)' : ef >= 75 ? 'var(--amber)' : 'var(--red)' }}>
                         {pct(ef)}
                       </span>
                     </td>
