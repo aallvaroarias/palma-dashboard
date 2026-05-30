@@ -79,9 +79,12 @@ export default function Vendedor() {
   // Clientes cero de este vendedor
   const ceroVend = useMemo(() => {
     if (!v) return [];
+    const myCod = String(v.cod).trim();
     return (clientesCero.detalle || []).filter(r => {
+      // Preferir cod_vendedor (fuente inequívoca); fallback a nombre
+      if (r.cod_vendedor) return String(r.cod_vendedor).trim() === myCod;
       const nom = String(r.vendedor || r.nom_vendedor || '').trim();
-      return nom === v.nombre || nom === String(v.cod);
+      return nom === v.nombre || nom === myCod;
     });
   }, [clientesCero, v]);
 

@@ -1623,22 +1623,24 @@ function getClientesCero() {
         var ciudad = iCiudad >= 0 ? String(r[iCiudad] || '').trim() : '';
         var estab  = iEstab  >= 0 ? String(r[iEstab]  || '').trim() : '';
 
-        porVendedor[nomVend] = (porVendedor[nomVend] || 0) + 1;
+        // Agrupar por cod para evitar discrepancias por diferencias en nombre
+        if (!porVendedor[codUsr]) porVendedor[codUsr] = { cod: codUsr, vendedor: nomVend, cantidad: 0 };
+        porVendedor[codUsr].cantidad++;
         detalle.push({
-          vendedor:    nomVend,
-          cod_cliente: codCli,
-          cliente:     cliente,
+          cod_vendedor: codUsr,
+          vendedor:     nomVend,
+          cod_cliente:  codCli,
+          cliente:      cliente,
           razon_social: estab || cliente,
-          direccion:   dir,
-          barrio:      barrio,
-          ciudad:      ciudad
+          direccion:    dir,
+          barrio:       barrio,
+          ciudad:       ciudad
         });
       }
 
       return {
         total: detalle.length,
-        por_vendedor: Object.entries(porVendedor)
-          .map(function(e) { return { vendedor: e[0], cantidad: e[1] }; })
+        por_vendedor: Object.values(porVendedor)
           .sort(function(a, b) { return b.cantidad - a.cantidad; }),
         detalle: detalle
       };
@@ -1655,14 +1657,16 @@ function getClientesCero() {
 
   const porVendedor = {};
   fallback.forEach(function(r) {
-    var v = String(r.vendedor || '').trim();
-    if (v) porVendedor[v] = (porVendedor[v] || 0) + 1;
+    var v   = String(r.vendedor || '').trim();
+    var cod = obtenerCodAsesor_(v);
+    if (!v) return;
+    if (!porVendedor[cod]) porVendedor[cod] = { cod: cod, vendedor: v, cantidad: 0 };
+    porVendedor[cod].cantidad++;
   });
 
   return {
     total: fallback.length,
-    por_vendedor: Object.entries(porVendedor)
-      .map(function(e) { return { vendedor: e[0], cantidad: e[1] }; })
+    por_vendedor: Object.values(porVendedor)
       .sort(function(a, b) { return b.cantidad - a.cantidad; }),
     detalle: fallback
   };

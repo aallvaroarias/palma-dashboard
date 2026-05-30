@@ -59,9 +59,10 @@ export default function Gerencial() {
   // Detalle de clientes cero del vendedor seleccionado
   const ceroVendDetalle = useMemo(() => {
     if (!ceroVendSel) return [];
-    return (clientesCero.detalle || []).filter(c =>
-      String(c.vendedor || '').trim() === ceroVendSel
-    );
+    return (clientesCero.detalle || []).filter(c => {
+      if (c.cod_vendedor) return String(c.cod_vendedor).trim() === ceroVendSel;
+      return String(c.vendedor || '').trim() === ceroVendSel;
+    });
   }, [clientesCero, ceroVendSel]);
 
   const vs = useMemo(
@@ -364,8 +365,8 @@ export default function Gerencial() {
                       <tr
                         key={i}
                         className="cursor-pointer"
-                        style={{ background: ceroVendSel === row.vendedor ? 'rgba(26,127,166,0.08)' : '' }}
-                        onClick={() => setCeroVendSel(ceroVendSel === row.vendedor ? '' : row.vendedor)}
+                        style={{ background: ceroVendSel === (row.cod || row.vendedor) ? 'rgba(26,127,166,0.08)' : '' }}
+                        onClick={() => { const key = row.cod || row.vendedor; setCeroVendSel(ceroVendSel === key ? '' : key); }}
                       >
                         <td>
                           <div className="flex items-center gap-2">
