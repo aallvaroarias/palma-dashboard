@@ -37,6 +37,7 @@ export default function Gerencial() {
 
   const [negocioFiltro, setNegocioFiltro] = useState('');
   const [vendedorTop10, setVendedorTop10] = useState('');
+  const [negocioTop10, setNegocioTop10]   = useState('');
   const [ceroVendSel, setCeroVendSel] = useState('');
   const [loadingNuevosG, setLoadingNuevosG] = useState(false);
   const [filtroNuevosLabel, setFiltroNuevosLabel] = useState('Este período');
@@ -440,6 +441,72 @@ export default function Gerencial() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Top 10 por Negocio ── */}
+      {topClientes.top_por_negocio?.length > 0 && (
+        <>
+          <SectionTitle>Top 10 Clientes por Negocio</SectionTitle>
+          <div className="chart-card mb-4">
+            <div className="flex items-center gap-3 mb-4">
+              <select
+                className="palma-select"
+                value={negocioTop10}
+                onChange={e => setNegocioTop10(e.target.value)}
+              >
+                <option value="">— Selecciona un negocio —</option>
+                {topClientes.top_por_negocio.map(nx => (
+                  <option key={nx.negocio} value={nx.negocio}>{nx.negocio}</option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const nx = topClientes.top_por_negocio.find(x => x.negocio === negocioTop10);
+              if (!negocioTop10) return (
+                <p className="text-center text-palumar-muted text-sm py-6">
+                  Selecciona un negocio para ver sus 10 mejores clientes
+                </p>
+              );
+              if (!nx?.top10?.length) return (
+                <p className="text-center text-palumar-muted text-sm py-6">Sin datos</p>
+              );
+              return (
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Cód. Cliente</th>
+                        <th>Cliente</th>
+                        <th style={{ textAlign: 'right' }}>Venta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nx.top10.map(c => (
+                        <tr key={c.cod_cliente}>
+                          <td>
+                            <span className="font-mono-num font-bold"
+                              style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}>
+                              {c.ranking}
+                            </span>
+                          </td>
+                          <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                            {c.cod_cliente}
+                          </td>
+                          <td>{c.nombre}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">
+                            <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </>
       )}

@@ -37,7 +37,7 @@ const useDashboardStore = create((set, get) => ({
   tendencia: [],
   skus: { global: [], por_vendedor: [] },
   marcas: [],
-  topClientes: { top_global: [], top_por_vendedor: [] },
+  topClientes: { top_global: [], top_por_vendedor: [], top_por_negocio: [] },
   cuotas: [],   // [{ cod, asesor, cuota }] — metas mensuales por vendedor
   loading: false,
   lastUpdate: null,
