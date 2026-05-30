@@ -163,7 +163,7 @@ export default function Gerencial() {
       .filter(v => !esRutaCentral(v.nombre))
       .map(v => {
         const cuota = cuotaMap[String(v.cod).trim()] ?? (v.cuota || 0);
-        const venta = v.venta_bruta || v.venta_real || 0;
+        const venta = v.venta_neta || 0;
         const pct_cumplimiento = cuota > 0 ? Math.round(venta / cuota * 1000) / 10 : 0;
         return { ...v, cuota, pct_cumplimiento };
       })
@@ -553,7 +553,7 @@ export default function Gerencial() {
 
             {/* Resumen Total Palumar */}
             {(r.cuota_total || 0) > 0 && (() => {
-              const ventaR = r.venta_bruta ?? r.venta_real ?? 0;
+              const ventaR = r.venta_neta ?? 0;
               const falta  = (r.cuota_total || 0) - ventaR;
               const pctC   = r.pct_cumplimiento_equipo || 0;
               const colorP = pctC >= 100 ? 'var(--green)' : pctC >= 75 ? 'var(--amber)' : 'var(--red)';
@@ -564,7 +564,7 @@ export default function Gerencial() {
                 >
                   {[
                     { label: 'Cuota Equipo', val: fmt(r.cuota_total), color: 'var(--white-2)' },
-                    { label: 'Venta Bruta',  val: fmt(ventaR),        color: 'var(--white-2)' },
+                    { label: 'Venta Neta',   val: fmt(ventaR),        color: 'var(--white-2)' },
                     { label: 'Cumplimiento', val: pct(pctC),           color: colorP },
                     { label: 'Falta para Meta',
                       val: falta <= 0 ? '✓ Superada' : fmt(falta),
@@ -590,7 +590,7 @@ export default function Gerencial() {
               isPct
               metaValue={100}
               metaLabel="Meta"
-              secondaryData={metaData.map(v => (v.cuota || 0) - (v.venta_bruta || v.venta_real || 0))}
+              secondaryData={metaData.map(v => (v.cuota || 0) - (v.venta_neta || 0))}
               secondaryFmt={(v) => v > 0 ? `Falta ${fmtK(v)}` : 'Meta ✓'}
             />
           </div>

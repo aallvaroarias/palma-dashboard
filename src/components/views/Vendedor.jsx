@@ -93,7 +93,7 @@ export default function Vendedor() {
 
   const vPctCumplimiento = useMemo(() => {
     if (!vCuota) return 0;
-    const venta = v?.venta_bruta || v?.venta_real || 0;
+    const venta = v?.venta_neta || 0;
     return Math.round(venta / vCuota * 1000) / 10;
   }, [vCuota, v]);
 
@@ -210,7 +210,7 @@ export default function Vendedor() {
       {/* ── Progreso Meta ── siempre visible, mensaje especial si no hay cuota */}
       {(() => {
         const cuota   = vCuota;
-        const ventaB  = v.venta_bruta || v.venta_real || 0;
+        const ventaB  = v.venta_neta || 0;
         const pctC    = vPctCumplimiento;
         const falta   = cuota - ventaB;
         const barW    = cuota > 0 ? Math.min(pctC, 100) : 0;
@@ -253,7 +253,7 @@ export default function Vendedor() {
                   style={{ borderColor: 'var(--border-2)' }}
                 >
                   {[
-                    { label: 'Venta Bruta',  val: fmt(ventaB), color: 'var(--white-2)' },
+                    { label: 'Venta Neta',   val: fmt(ventaB), color: 'var(--white-2)' },
                     { label: 'Meta Mensual', val: fmt(cuota),  color: 'var(--white-2)' },
                     { label: falta > 0 ? 'Falta para Meta' : 'Meta Superada',
                       val: falta > 0 ? fmt(falta) : `+${fmt(Math.abs(falta))}`,
