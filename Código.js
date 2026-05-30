@@ -1147,7 +1147,7 @@ function getResumen() {
 
     // Cuotas / metas del equipo
     cuota_total:             round2_(cuotaTotal),
-    pct_cumplimiento_equipo: cuotaTotal > 0 ? round2_(ventaBruta / cuotaTotal * 100) : 0
+    pct_cumplimiento_equipo: cuotaTotal > 0 ? round2_(ventaNeta / cuotaTotal * 100) : 0
   };
 }
 
@@ -1294,7 +1294,7 @@ function getVendedores() {
 
         // Cuota / meta mensual
         cuota:            round2_(cuota),
-        pct_cumplimiento: cuota > 0 ? round2_(ventaBruta / cuota * 100) : 0
+        pct_cumplimiento: cuota > 0 ? round2_(ventaNeta / cuota * 100) : 0
       };
     })
     .sort((a, b) => b.venta_bruta - a.venta_bruta);
@@ -1813,6 +1813,7 @@ function getTopClientes() {
   const mesData   = getBasePeriodoActual_();
   const globalMap = {};   // cod_cliente → { cod_cliente, nombre, venta, vendedores:{}, negocios:{} }
   const vendMap   = {};   // cod_asesor  → { cod_vendedor, nom_vendedor, clientes:{} }
+  const negMap    = {};   // negocio     → { cod_cliente → { cod_cliente, nombre, venta } }
 
   mesData.forEach(function(r) {
     if (!esFilaBaseValida_(r)) return;
@@ -1837,6 +1838,14 @@ function getTopClientes() {
     if (!vendMap[codAs].clientes[codCli])
       vendMap[codAs].clientes[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
     vendMap[codAs].clientes[codCli].venta += valor;
+
+    // Acumulado por negocio
+    if (negocio) {
+      if (!negMap[negocio]) negMap[negocio] = {};
+      if (!negMap[negocio][codCli]) negMap[negocio][codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0, vendedores: {} };
+      negMap[negocio][codCli].venta += valor;
+      negMap[negocio][codCli].vendedores[nomVend] = (negMap[negocio][codCli].vendedores[nomVend] || 0) + valor;
+    }
   });
 
   const top_global = Object.values(globalMap)
@@ -1871,7 +1880,24 @@ function getTopClientes() {
     };
   });
 
-  return { top_global: top_global, top_por_vendedor: top_por_vendedor };
+  const top_por_negocio = Object.entries(negMap)
+    .sort(function(a, b) { return a[0].localeCompare(b[0]); })
+    .map(function(entry) {
+      var neg = entry[0], clients = entry[1];
+      return {
+        negocio: neg,
+        top10: Object.values(clients)
+          .sort(function(a, b) { return b.venta - a.venta; })
+          .slice(0, 10)
+          .map(function(c, i) {
+            var vendEntries = Object.entries(c.vendedores).sort(function(a, b) { return b[1] - a[1]; });
+            var nom_vendedor = vendEntries.length ? vendEntries[0][0] : '';
+            return { ranking: i + 1, cod_cliente: c.cod_cliente, nombre: c.nombre, nom_vendedor: nom_vendedor, venta: round2_(c.venta) };
+          })
+      };
+    });
+
+  return { top_global: top_global, top_por_vendedor: top_por_vendedor, top_por_negocio: top_por_negocio };
 }
 
 // ════════════════════════════════════════════════════════════════════

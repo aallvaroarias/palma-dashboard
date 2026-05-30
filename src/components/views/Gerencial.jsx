@@ -481,6 +481,7 @@ export default function Gerencial() {
                         <th>#</th>
                         <th>Cód. Cliente</th>
                         <th>Cliente</th>
+                        <th>Vendedor</th>
                         <th style={{ textAlign: 'right' }}>Venta</th>
                       </tr>
                     </thead>
@@ -497,6 +498,7 @@ export default function Gerencial() {
                             {c.cod_cliente}
                           </td>
                           <td>{c.nombre}</td>
+                          <td style={{ color: 'var(--muted)' }}>{c.nom_vendedor || '—'}</td>
                           <td style={{ textAlign: 'right' }} className="font-mono-num">
                             <span style={{ color: 'var(--green)' }}>{fmt(c.venta)}</span>
                           </td>
