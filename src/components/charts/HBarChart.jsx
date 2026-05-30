@@ -45,8 +45,11 @@ export default function HBarChart({
   isPct = false,
   minH = 200,
   rowH = 36,
+  secondaryData,    // optional: array of secondary values (one per bar)
+  secondaryFmt,     // optional: formatter for secondary value
 }) {
-  const height = Math.max(minH, labels.length * rowH + 48);
+  const effectiveRowH = secondaryData ? Math.max(rowH, 44) : rowH;
+  const height = Math.max(minH, labels.length * effectiveRowH + 48);
 
   const backgroundColor = useMemo(() => {
     if (barColors && barColors.length) {
@@ -99,6 +102,8 @@ export default function HBarChart({
       barDataLabels: {
         formatValue: tooltipFmt,
         isPct,
+        secondaryData,
+        secondaryFmt,
       },
     },
     scales: {

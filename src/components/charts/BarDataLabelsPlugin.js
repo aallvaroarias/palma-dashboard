@@ -1,12 +1,18 @@
 /**
  * Chart.js plugin that draws value labels at the end of each horizontal bar.
  *
- * - If the bar is wide enough (> 72px): label goes INSIDE, right-aligned, white text.
- * - If the bar is short: label goes OUTSIDE to the right, muted text.
+ * Primary label (always): the bar's own value (coverage %, venta $, etc.)
+ * Secondary label (optional): a second value shown on a second line inside the bar
+ *   — e.g. Venta Neta $ while the primary is coverage %.
  *
  * Usage in chart options:
  *   plugins: {
- *     barDataLabels: { formatValue: fmtK, isPct: false }
+ *     barDataLabels: {
+ *       formatValue:   fmtK,         // formatter for primary value
+ *       isPct:         false,
+ *       secondaryData: [1234, 5678],  // optional: one value per bar
+ *       secondaryFmt:  fmtK,          // optional: formatter for secondary value
+ *     }
  *   }
  */
 export const barDataLabelsPlugin = {
@@ -15,7 +21,7 @@ export const barDataLabelsPlugin = {
     const { ctx, chartArea } = chart;
     if (!opts || !chartArea) return;
 
-    const { formatValue, isPct } = opts;
+    const { formatValue, isPct, secondaryData, secondaryFmt } = opts;
 
     chart.data.datasets.forEach((dataset, di) => {
       const meta = chart.getDatasetMeta(di);
@@ -25,30 +31,66 @@ export const barDataLabelsPlugin = {
         const raw = dataset.data[i];
         if (raw == null || raw === 0) return;
 
-        const label = formatValue
+        // ── primary label ──────────────────────────────────────────
+        const label1 = formatValue
           ? formatValue(raw)
           : isPct
             ? raw.toFixed(1) + '%'
             : raw.toLocaleString();
 
-        const barW = Math.abs(bar.x - bar.base);
-        const inside = barW > 72;
+        // ── secondary label ────────────────────────────────────────
+        const hasSecondary = Array.isArray(secondaryData) && secondaryData[i] != null;
+        const raw2   = hasSecondary ? secondaryData[i] : null;
+        const label2 = raw2 != null
+          ? (secondaryFmt ? secondaryFmt(raw2) : ('$' + Math.abs(+raw2 || 0).toLocaleString('en', { maximumFractionDigits: 0 })))
+          : null;
+
+        const barW  = Math.abs(bar.x - bar.base);
+        const inside = barW > (label2 ? 90 : 72);
 
         ctx.save();
-        ctx.font = '500 10px "DM Mono", monospace';
         ctx.textBaseline = 'middle';
 
         if (inside) {
-          // Inside bar, near right edge
-          ctx.textAlign = 'right';
-          ctx.fillStyle = 'rgba(237,244,251,0.92)';
-          ctx.fillText(label, Math.min(bar.x - 6, chartArea.right - 4), bar.y);
+          const xPos = Math.min(bar.x - 7, chartArea.right - 4);
+
+          if (label2) {
+            // line 1: coverage %
+            ctx.font      = '600 10px "DM Mono", monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(237,244,251,0.95)';
+            ctx.fillText(label1, xPos, bar.y - 5);
+
+            // line 2: venta $ — cyan tint to contrast with the bar
+            ctx.font      = '500 9px "DM Mono", monospace';
+            ctx.fillStyle = 'rgba(45,200,216,0.88)';
+            ctx.fillText(label2, xPos, bar.y + 6);
+          } else {
+            ctx.font      = '500 10px "DM Mono", monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(237,244,251,0.92)';
+            ctx.fillText(label1, xPos, bar.y);
+          }
         } else {
-          // Outside bar, just after right edge
-          ctx.textAlign = 'left';
-          ctx.fillStyle = '#7A9BB8';
-          const x = Math.min(bar.x + 5, chartArea.right - 4);
-          ctx.fillText(label, x, bar.y);
+          // Outside bar
+          const xPos = Math.min(bar.x + 5, chartArea.right - 4);
+
+          if (label2) {
+            ctx.textAlign = 'left';
+
+            ctx.font      = '600 10px "DM Mono", monospace';
+            ctx.fillStyle = '#7A9BB8';
+            ctx.fillText(label1, xPos, bar.y - 5);
+
+            ctx.font      = '500 9px "DM Mono", monospace';
+            ctx.fillStyle = 'rgba(45,200,216,0.70)';
+            ctx.fillText(label2, xPos, bar.y + 6);
+          } else {
+            ctx.font      = '500 10px "DM Mono", monospace';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#7A9BB8';
+            ctx.fillText(label1, xPos, bar.y);
+          }
         }
 
         ctx.restore();

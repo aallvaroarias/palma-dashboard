@@ -513,44 +513,9 @@ export default function Gerencial() {
           isPct
           metaValue={95}
           metaLabel="Meta 95%"
+          secondaryData={cobData.map(r2 => vendVentaMap[getCoberturaVendedor(r2)] ?? 0)}
+          secondaryFmt={fmtK}
         />
-        {/* Tabla: % + $ por vendedor */}
-        <div className="mt-4 overflow-x-auto">
-          <table className="palma-table">
-            <thead>
-              <tr>
-                <th>Vendedor</th>
-                <th style={{ textAlign: 'right' }}>Cobertura</th>
-                <th style={{ textAlign: 'right' }}>Venta Neta $</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cobData.map((r2, i) => {
-                const nom = getCoberturaVendedor(r2);
-                const cob = getCoberturaValue(r2);
-                const venta = vendVentaMap[nom] ?? 0;
-                return (
-                  <tr key={i}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
-                        {nom}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span style={{ color: cob >= 95 ? 'var(--green)' : cob >= 75 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>
-                        {pct(cob)}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }} className="font-mono-num">
-                      <span style={{ color: 'var(--green)' }}>{fmt(venta)}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {/* ── Cobertura por Negocio ── */}
@@ -571,52 +536,15 @@ export default function Gerencial() {
               </select>
             </div>
             {negocioFiltro && cobNegFiltrada.length > 0 ? (
-              <>
-                <HBarChart
-                  labels={cobNegFiltrada.map(r2 => getCoberturaVendedor(r2))}
-                  data={cobNegFiltrada.map(r2 => getCoberturaValue(r2))}
-                  barColors={cobNegFiltrada.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
-                  isPct
-                  metaValue={95}
-                />
-                {/* Tabla: % + $ por vendedor en el negocio */}
-                <div className="mt-4 overflow-x-auto">
-                  <table className="palma-table">
-                    <thead>
-                      <tr>
-                        <th>Vendedor</th>
-                        <th style={{ textAlign: 'right' }}>Cobertura</th>
-                        <th style={{ textAlign: 'right' }}>Venta en {negocioFiltro} $</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cobNegFiltrada.map((r2, i) => {
-                        const nom = getCoberturaVendedor(r2);
-                        const cob = getCoberturaValue(r2);
-                        const venta = cobNegVentaMap[nom] ?? 0;
-                        return (
-                          <tr key={i}>
-                            <td>
-                              <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
-                                {nom}
-                              </div>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <span style={{ color: cob >= 95 ? 'var(--green)' : cob >= 75 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>
-                                {pct(cob)}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }} className="font-mono-num">
-                              <span style={{ color: venta > 0 ? 'var(--green)' : 'var(--muted)' }}>{fmt(venta)}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+              <HBarChart
+                labels={cobNegFiltrada.map(r2 => getCoberturaVendedor(r2))}
+                data={cobNegFiltrada.map(r2 => getCoberturaValue(r2))}
+                barColors={cobNegFiltrada.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+                isPct
+                metaValue={95}
+                secondaryData={cobNegFiltrada.map(r2 => cobNegVentaMap[getCoberturaVendedor(r2)] ?? 0)}
+                secondaryFmt={fmtK}
+              />
             ) : (
               <div className="text-palumar-muted text-sm text-center py-6">
                 {negocioFiltro ? 'Sin datos para este negocio' : 'Selecciona un negocio para ver el detalle'}
