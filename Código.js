@@ -1570,27 +1570,101 @@ function procesarFrecuenciaECOM() {
 }
 
 function getClientesCero() {
-  const raw = sheetToJSON(HOJAS.CLIENTES_CERO)
-    .filter(r => {
-      const v   = String(r.vendedor || '').trim();
-      const cod = obtenerCodAsesor_(v);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // ── Leer directo desde FRECUENCIA_ECOM si existe y tiene datos ──────
+  const hF = ss.getSheetByName('FRECUENCIA_ECOM');
+  if (hF && hF.getLastRow() > 1) {
+    const raw     = hF.getDataRange().getValues();
+    const headers = raw[0].map(h => String(h || '').trim().toLowerCase());
+
+    const iCodUsr  = headers.indexOf('cod usuario');
+    const iUsr     = headers.indexOf('usuario');
+    const iCodCli  = headers.indexOf('cod. cliente');
+    const iCliente = headers.indexOf('cliente');
+    const iDir     = headers.indexOf('direccion');
+    const iBarrio  = headers.indexOf('barrio');
+    const iCiudad  = headers.indexOf('ciudad');
+    const iEstab   = headers.indexOf('nom establecimiento');
+
+    // Si las columnas del reporte ECOM están presentes, procesamos en vivo
+    if (![iCodUsr, iUsr, iCodCli, iCliente].some(i => i === -1)) {
+      // Mapa cod_asesor → nom_vendedor desde BASE_ACUMULADA
+      const hB = ss.getSheetByName('BASE_ACUMULADA');
+      const vendNomMap = {};
+      if (hB && hB.getLastRow() > 1) {
+        hB.getDataRange().getValues().slice(1).forEach(function(r) {
+          const cod    = obtenerCodAsesor_(String(r[3] || '').trim());
+          const nombre = String(r[4] || '').trim();
+          if (cod && nombre && !vendNomMap[cod]) vendNomMap[cod] = nombre;
+        });
+      }
+
+      const detalle     = [];
+      const porVendedor = {};
+
+      for (var i = 1; i < raw.length; i++) {
+        var r       = raw[i];
+        var empresa = String(r[0] || '').trim();
+        if (empresa.toUpperCase() === 'TOTAL') continue;
+
+        var codUsr  = String(r[iCodUsr] || '').trim().replace(/\.0$/, '');
+        var usuario = String(r[iUsr]    || '').trim();
+        var codCli  = String(r[iCodCli] || '').trim();
+        var cliente = String(r[iCliente]|| '').trim();
+
+        if (!codUsr || !codCli || !cliente) continue;
+
+        var nomVend = vendNomMap[codUsr] || usuario;
+        if (!esVendedorValido_(codUsr, nomVend)) continue;
+
+        var dir    = iDir    >= 0 ? String(r[iDir]    || '').trim() : '';
+        var barrio = iBarrio >= 0 ? String(r[iBarrio] || '').trim() : '';
+        var ciudad = iCiudad >= 0 ? String(r[iCiudad] || '').trim() : '';
+        var estab  = iEstab  >= 0 ? String(r[iEstab]  || '').trim() : '';
+
+        porVendedor[nomVend] = (porVendedor[nomVend] || 0) + 1;
+        detalle.push({
+          vendedor:    nomVend,
+          cod_cliente: codCli,
+          cliente:     cliente,
+          razon_social: estab || cliente,
+          direccion:   dir,
+          barrio:      barrio,
+          ciudad:      ciudad
+        });
+      }
+
+      return {
+        total: detalle.length,
+        por_vendedor: Object.entries(porVendedor)
+          .map(function(e) { return { vendedor: e[0], cantidad: e[1] }; })
+          .sort(function(a, b) { return b.cantidad - a.cantidad; }),
+        detalle: detalle
+      };
+    }
+  }
+
+  // ── Fallback: leer desde hoja CLIENTES_CERO (procesada manualmente) ─
+  const fallback = sheetToJSON(HOJAS.CLIENTES_CERO)
+    .filter(function(r) {
+      var v   = String(r.vendedor || '').trim();
+      var cod = obtenerCodAsesor_(v);
       return esVendedorValido_(cod, v);
     });
 
   const porVendedor = {};
-  raw.forEach(r => {
-    const v   = String(r.vendedor || '').trim();
-    const cod = obtenerCodAsesor_(v);
-    if (!v || !esVendedorValido_(cod, v)) return;
-    porVendedor[v] = (porVendedor[v] || 0) + 1;
+  fallback.forEach(function(r) {
+    var v = String(r.vendedor || '').trim();
+    if (v) porVendedor[v] = (porVendedor[v] || 0) + 1;
   });
 
   return {
-    total: raw.length,
+    total: fallback.length,
     por_vendedor: Object.entries(porVendedor)
-      .map(([vendedor, cantidad]) => ({ vendedor, cantidad }))
-      .sort((a, b) => b.cantidad - a.cantidad),
-    detalle: raw
+      .map(function(e) { return { vendedor: e[0], cantidad: e[1] }; })
+      .sort(function(a, b) { return b.cantidad - a.cantidad; }),
+    detalle: fallback
   };
 }
 
