@@ -11,18 +11,6 @@ const COLOR_MAP = {
   teal:   { bar: 'linear-gradient(90deg, #1A7FA6, #2AAED9)' },
 };
 
-/**
- * KpiCard
- * Props:
- *   label     {string}  — card title
- *   value     {string}  — main value
- *   sub       {string}  — optional subtitle
- *   color     {string}  — 'blue'|'green'|'red'|'amber'|'purple'|'cyan'
- *   barValue  {number}  — 0-100 percentage for the mini progress bar
- *   barColor  {string}  — CSS color for bar fill (defaults to color gradient)
- *   onClick   {fn}      — optional click handler
- *   icon      {ReactNode} — optional icon element
- */
 export default function KpiCard({
   label,
   value,
@@ -43,27 +31,23 @@ export default function KpiCard({
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => e.key === 'Enter' && onClick(e) : undefined}
     >
-      {/* Top accent line is done via CSS ::before */}
-
-      {/* Header */}
+      {/* Label row */}
       <div className="flex items-start justify-between mb-2">
         <span
           className="font-sans font-bold uppercase tracking-wider text-palumar-muted"
-          style={{ fontSize: '10px', letterSpacing: '0.6px' }}
+          style={{ fontSize: '10px', letterSpacing: '0.65px' }}
         >
           {label}
         </span>
         {icon && (
-          <span className="text-palumar-muted opacity-60 text-sm">
-            {icon}
-          </span>
+          <span className="text-palumar-muted opacity-50 text-sm">{icon}</span>
         )}
       </div>
 
       {/* Main value */}
       <div
-        className="font-mono-num font-medium leading-none text-palumar-white"
-        style={{ fontSize: '26px', letterSpacing: '-1px' }}
+        className="font-mono-num font-semibold leading-none text-palumar-white"
+        style={{ fontSize: '28px', letterSpacing: '-1.5px' }}
       >
         {value ?? '—'}
       </div>
@@ -71,23 +55,24 @@ export default function KpiCard({
       {/* Subtitle */}
       {sub !== undefined && sub !== null && (
         <div
-          className="text-palumar-muted mt-1.5"
-          style={{ fontSize: '11px' }}
+          className="text-palumar-muted mt-2"
+          style={{ fontSize: '11px', lineHeight: 1.4 }}
           dangerouslySetInnerHTML={{ __html: sub }}
         />
       )}
 
-      {/* Mini progress bar */}
+      {/* Progress bar — 3px, rounded, with glow */}
       {barValue !== undefined && (
         <div
-          className="mt-2.5 h-0.5 rounded-full overflow-hidden"
-          style={{ background: 'var(--navy-4)' }}
+          className="mt-3 rounded-full overflow-hidden"
+          style={{ height: '3px', background: 'rgba(90,145,185,0.15)' }}
         >
           <div
             className="h-full rounded-full transition-all duration-700"
             style={{
               width: `${Math.min(barValue, 100)}%`,
               background: barColor || colorConf.bar,
+              boxShadow: `0 0 6px ${barColor || 'rgba(26,127,166,0.6)'}`,
             }}
           />
         </div>

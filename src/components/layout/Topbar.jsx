@@ -22,6 +22,7 @@ export default function Topbar({ onRefresh }) {
   return (
     <header
       className="glass-dark sticky top-0 z-50 h-16 flex items-center gap-5 px-4 sm:px-6"
+      style={{ boxShadow: '0 1px 0 rgba(90,145,185,0.1), 0 4px 24px rgba(0,0,0,0.3)' }}
     >
       {/* Brand */}
       <div className="flex items-center gap-3 flex-shrink-0">
@@ -75,18 +76,19 @@ export default function Topbar({ onRefresh }) {
             <Link
               key={tab.path}
               to={tab.path}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
+              className={`relative px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                 isActive
-                  ? 'text-teal-light border'
-                  : 'text-palumar-muted hover:text-palumar-white-2 hover:bg-navy-3'
+                  ? 'text-white'
+                  : 'text-palumar-muted hover:text-palumar-white'
               }`}
               style={
                 isActive
                   ? {
-                      background: 'rgba(26,127,166,0.18)',
-                      borderColor: 'rgba(26,127,166,0.35)',
+                      background: 'linear-gradient(135deg, rgba(26,127,166,0.22) 0%, rgba(45,200,216,0.1) 100%)',
+                      boxShadow: 'inset 0 1px 0 rgba(45,200,216,0.2), 0 0 12px rgba(26,127,166,0.15)',
+                      border: '1px solid rgba(45,200,216,0.25)',
                     }
-                  : {}
+                  : { border: '1px solid transparent' }
               }
             >
               {tab.label}
