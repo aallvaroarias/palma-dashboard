@@ -5,7 +5,7 @@ import SectionTitle from '../ui/SectionTitle';
 import HBarChart from '../charts/HBarChart';
 import LineChart from '../charts/LineChart';
 import {
-  fmt, fmtK, pct,
+  fmt, fmtK, pct, norm,
   getCoberturaVendedor, getCoberturaValue, esRutaCentral,
 } from '../../utils/formatters';
 import { VEND_COLORS } from '../../utils/colors';
@@ -31,6 +31,7 @@ export default function Gerencial() {
     marcas,
     skus,
     topClientes,
+    cuotas,
     refetchClientes,
   } = useDashboardStore();
 
@@ -99,20 +100,38 @@ export default function Gerencial() {
     return cobNegocio.filter(r2 => r2.negocio === negocioFiltro);
   }, [cobNegocio, negocioFiltro]);
 
-  // Mapa nombre→venta_neta para mostrar $ junto a cobertura por vendedor
+  // Mapas de venta por vendedor para las barras de cobertura.
+  //
+  // El label de cobertura viene como "201 - ANAYS" (código + nombre).
+  // v.cod = "201" y v.nombre = "ANAYS" vienen de fuentes separadas.
+  // La clave más robusta es norm(cod + nombre) = "201ANAYS",
+  // porque norm("201 - ANAYS") también da "201ANAYS" (elimina espacios y guiones).
+  // Así coinciden sin importar el separador que use cada fuente.
   const vendVentaMap = useMemo(() => {
     const map = {};
-    vendedores.forEach(v => { if (v.nombre) map[v.nombre] = v.venta_neta || 0; });
+    vendedores.forEach(v => {
+      const venta  = v.venta_neta || 0;
+      const cod    = String(v.cod    || '').trim();
+      const nombre = String(v.nombre || '').trim();
+      if (cod && nombre) map[norm(cod + nombre)] = venta;  // "201ANAYS"  ← clave principal
+      if (cod)           map[cod]                = venta;  // "201"        ← fallback
+      if (nombre)        map[norm(nombre)]       = venta;  // "ANAYS"      ← fallback
+    });
     return map;
   }, [vendedores]);
 
-  // Mapa nombre→venta en el negocio seleccionado (para cobertura por negocio)
+  // Mapa equivalente para venta en el negocio seleccionado (cobertura por negocio)
   const cobNegVentaMap = useMemo(() => {
     if (!negocioFiltro) return {};
     const map = {};
     vendedores.forEach(v => {
-      const n = (v.venta_por_negocio || []).find(x => x.negocio === negocioFiltro);
-      if (v.nombre) map[v.nombre] = n ? (n.venta || 0) : 0;
+      const n     = (v.venta_por_negocio || []).find(x => x.negocio === negocioFiltro);
+      const venta = n ? (n.venta || 0) : 0;
+      const cod    = String(v.cod    || '').trim();
+      const nombre = String(v.nombre || '').trim();
+      if (cod && nombre) map[norm(cod + nombre)] = venta;
+      if (cod)           map[cod]                = venta;
+      if (nombre)        map[norm(nombre)]       = venta;
     });
     return map;
   }, [vendedores, negocioFiltro]);
@@ -121,6 +140,36 @@ export default function Gerencial() {
     if (!cobData.length) return 0;
     return cobData.reduce((s, r2) => s + getCoberturaValue(r2), 0) / cobData.length;
   }, [cobData]);
+
+  // Resumen total cobertura para el negocio seleccionado
+  const cobNegResumen = useMemo(() => {
+    if (!cobNegFiltrada.length) return null;
+    const totalImp = cobNegFiltrada.reduce((s, r2) => s + (Number(r2.impactados) || 0), 0);
+    const totalMae = cobNegFiltrada.reduce((s, r2) => s + (Number(r2.clientes_maestro) || 0), 0);
+    const pctTotal = totalMae > 0 ? totalImp / totalMae * 100 : 0;
+    return { totalImp, totalMae, pctTotal };
+  }, [cobNegFiltrada]);
+
+  // Mapa cod→cuota desde la hoja CUOTAS (fuente directa, independiente del join en backend)
+  const cuotaMap = useMemo(() => {
+    const map = {};
+    cuotas.forEach(c => { if (c.cod) map[String(c.cod).trim()] = c.cuota || 0; });
+    return map;
+  }, [cuotas]);
+
+  // Vendedores con cuota configurada, ordenados por % cumplimiento desc
+  const metaData = useMemo(() => {
+    return [...vendedores]
+      .filter(v => !esRutaCentral(v.nombre))
+      .map(v => {
+        const cuota = cuotaMap[String(v.cod).trim()] ?? (v.cuota || 0);
+        const venta = v.venta_bruta || v.venta_real || 0;
+        const pct_cumplimiento = cuota > 0 ? Math.round(venta / cuota * 1000) / 10 : 0;
+        return { ...v, cuota, pct_cumplimiento };
+      })
+      .filter(v => v.cuota > 0)
+      .sort((a, b) => b.pct_cumplimiento - a.pct_cumplimiento);
+  }, [vendedores, cuotaMap]);
 
   // Venta NETA por negocio — filtrar negocios con venta > 0, ordenar desc
   const neg = useMemo(
@@ -192,10 +241,10 @@ export default function Gerencial() {
           color="purple"
           barValue={r.efectividad_pct || 0}
         />
-        {r.cuota && (
+        {r.cuota_total > 0 && (
           <KpiCard
-            label="Cuota"
-            value={fmt(r.cuota)}
+            label="Cuota Equipo"
+            value={fmt(r.cuota_total)}
             sub={`${pct(r.pct_cumplimiento_equipo || 0)} cumplimiento`}
             color="gold"
             barValue={r.pct_cumplimiento_equipo || 0}
@@ -495,6 +544,58 @@ export default function Gerencial() {
         />
       </div>
 
+      {/* ── Metas y Cumplimiento ── */}
+      {metaData.length > 0 && (
+        <>
+          <SectionTitle>Metas y Cumplimiento</SectionTitle>
+          <div className="chart-card mb-4">
+
+            {/* Resumen Total Palumar */}
+            {(r.cuota_total || 0) > 0 && (() => {
+              const ventaR = r.venta_bruta ?? r.venta_real ?? 0;
+              const falta  = (r.cuota_total || 0) - ventaR;
+              const pctC   = r.pct_cumplimiento_equipo || 0;
+              const colorP = pctC >= 100 ? 'var(--green)' : pctC >= 75 ? 'var(--amber)' : 'var(--red)';
+              return (
+                <div
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 pb-5 border-b"
+                  style={{ borderColor: 'var(--border-2)' }}
+                >
+                  {[
+                    { label: 'Cuota Equipo', val: fmt(r.cuota_total), color: 'var(--white-2)' },
+                    { label: 'Venta Bruta',  val: fmt(ventaR),        color: 'var(--white-2)' },
+                    { label: 'Cumplimiento', val: pct(pctC),           color: colorP },
+                    { label: 'Falta para Meta',
+                      val: falta <= 0 ? '✓ Superada' : fmt(falta),
+                      color: falta <= 0 ? 'var(--green)' : 'var(--red)' },
+                  ].map(({ label, val, color }) => (
+                    <div key={label} className="text-center px-2">
+                      <div className="text-palumar-muted mb-1" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                      <div className="font-mono-num font-bold" style={{ fontSize: '18px', color }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Barra por vendedor: % cumplimiento + falta en $ */}
+            <div className="text-palumar-muted mb-2" style={{ fontSize: '11px' }}>
+              Ordenado por % de cumplimiento · Meta <strong style={{ color: 'var(--red)' }}>100%</strong>
+            </div>
+            <HBarChart
+              labels={metaData.map(v => v.nombre)}
+              data={metaData.map(v => Math.min(v.pct_cumplimiento || 0, 120))}
+              barColors={metaData.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+              isPct
+              metaValue={100}
+              metaLabel="Meta"
+              secondaryData={metaData.map(v => (v.cuota || 0) - (v.venta_bruta || v.venta_real || 0))}
+              secondaryFmt={(v) => v > 0 ? `Falta ${fmtK(v)}` : 'Meta ✓'}
+            />
+          </div>
+        </>
+      )}
+
       {/* ── Cobertura por vendedor ── */}
       <SectionTitle>Cobertura Real por Vendedor</SectionTitle>
       <div className="chart-card mb-4">
@@ -513,7 +614,10 @@ export default function Gerencial() {
           isPct
           metaValue={95}
           metaLabel="Meta 95%"
-          secondaryData={cobData.map(r2 => vendVentaMap[getCoberturaVendedor(r2)] ?? 0)}
+          secondaryData={cobData.map(r2 => {
+            const lbl = getCoberturaVendedor(r2);
+            return vendVentaMap[norm(lbl)] ?? vendVentaMap[lbl.split('-')[0].trim()] ?? 0;
+          })}
           secondaryFmt={fmtK}
         />
       </div>
@@ -535,6 +639,44 @@ export default function Gerencial() {
                 ))}
               </select>
             </div>
+            {/* Resumen total del negocio seleccionado */}
+            {negocioFiltro && cobNegResumen && (
+              <div
+                className="flex flex-wrap items-center gap-5 mb-4 px-4 py-3 rounded-lg"
+                style={{ background: 'rgba(45,174,217,0.07)', border: '1px solid rgba(45,174,217,0.18)' }}
+              >
+                <div>
+                  <div className="text-palumar-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cobertura total en {negocioFiltro}</div>
+                  <div
+                    className="font-mono-num font-bold"
+                    style={{
+                      fontSize: '22px',
+                      color: cobNegResumen.pctTotal >= 90 ? 'var(--green)'
+                           : cobNegResumen.pctTotal >= 70 ? 'var(--amber)'
+                           : 'var(--red)',
+                    }}
+                  >
+                    {pct(cobNegResumen.pctTotal)}
+                  </div>
+                </div>
+                <div className="w-px h-8 flex-shrink-0" style={{ background: 'rgba(45,174,217,0.25)' }} />
+                <div>
+                  <div className="text-palumar-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Clientes impactados</div>
+                  <div className="font-mono-num font-bold text-palumar-white" style={{ fontSize: '18px' }}>
+                    {cobNegResumen.totalImp}
+                    <span className="text-palumar-muted font-normal" style={{ fontSize: '13px' }}> / {cobNegResumen.totalMae}</span>
+                  </div>
+                </div>
+                <div className="w-px h-8 flex-shrink-0" style={{ background: 'rgba(45,174,217,0.25)' }} />
+                <div>
+                  <div className="text-palumar-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sin impacto</div>
+                  <div className="font-mono-num font-bold" style={{ fontSize: '18px', color: 'var(--red)' }}>
+                    {cobNegResumen.totalMae - cobNegResumen.totalImp}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {negocioFiltro && cobNegFiltrada.length > 0 ? (
               <HBarChart
                 labels={cobNegFiltrada.map(r2 => getCoberturaVendedor(r2))}
@@ -542,7 +684,10 @@ export default function Gerencial() {
                 barColors={cobNegFiltrada.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
                 isPct
                 metaValue={95}
-                secondaryData={cobNegFiltrada.map(r2 => cobNegVentaMap[getCoberturaVendedor(r2)] ?? 0)}
+                secondaryData={cobNegFiltrada.map(r2 => {
+                  const lbl = getCoberturaVendedor(r2);
+                  return cobNegVentaMap[norm(lbl)] ?? cobNegVentaMap[lbl.split('-')[0].trim()] ?? 0;
+                })}
                 secondaryFmt={fmtK}
               />
             ) : (

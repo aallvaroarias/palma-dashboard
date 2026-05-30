@@ -741,8 +741,10 @@ function doGet(e) {
       case 'skus':          data = getTopSKUs();          break;
       case 'marcas':        data = getTopMarcas();        break;
       case 'top_clientes':  data = getTopClientes();      break;
-      case 'cuotas':        data = getCuotas();           break;  // ← nuevo
+      case 'cuotas':        data = getCuotas();           break;
+      case 'cuota_debug':   data = getCuotaDebug_();      break;
       case 'diagnostico':   data = getDiagnosticoAPI();   break;
+      case 'fechas_debug':  data = getFechasDebug_();      break;
       default:              data = getResumen();          break;
     }
 
@@ -917,8 +919,8 @@ function getCuotasMap_() {
     if (!asesorRaw) continue;
 
     const cod   = obtenerCodAsesor_(asesorRaw);
-    // Acepta tanto número como texto con comas ("40,683.00")
-    const cuota = parseFloat(String(cuotaRaw || '0').replace(/,/g, '')) || 0;
+    // Acepta número, texto con comas ("40,683.00") o con símbolo "$" ("$40,683.00")
+    const cuota = parseFloat(String(cuotaRaw || '0').replace(/[$,]/g, '')) || 0;
     if (cod) map[cod] = cuota;
   }
 
@@ -934,7 +936,7 @@ function getCuotas() {
     .filter(r => String(r[0] || '').trim())
     .map(r => {
       const asesorRaw = String(r[0] || '').trim();
-      const cuota     = parseFloat(String(r[1] || '0').replace(/,/g, '')) || 0;
+      const cuota     = parseFloat(String(r[1] || '0').replace(/[$,]/g, '')) || 0;
       return {
         cod:    obtenerCodAsesor_(asesorRaw),
         asesor: asesorRaw,
@@ -1322,6 +1324,48 @@ function getCoberturaNegocios() {
     });
 }
 
+// Diagnóstico: muestra qué ve el script en CUOTAS y cómo cruza con vendedores
+function getCuotaDebug_() {
+  const h = getSheet_(HOJAS.CUOTAS);
+  const rawRows = [];
+  if (h && h.getLastRow() > 1) {
+    const vals = h.getDataRange().getValues();
+    for (let i = 1; i < Math.min(vals.length, 20); i++) {
+      const asesorRaw   = String(vals[i][0] || '').trim();
+      const cuotaRaw    = vals[i][1];
+      const cuotaParsed = parseFloat(String(cuotaRaw || '0').replace(/[$,]/g, '')) || 0;
+      rawRows.push({
+        fila:         i + 1,
+        asesor_raw:   asesorRaw,
+        cod_extraido: obtenerCodAsesor_(asesorRaw),
+        cuota_raw:    cuotaRaw,
+        tipo_raw:     typeof cuotaRaw,
+        cuota_parsed: cuotaParsed,
+      });
+    }
+  }
+
+  const cuotaMap = getCuotasMap_();
+
+  const mesData = getBasePeriodoActual_();
+  const vendCods = {};
+  mesData.forEach(r => {
+    const cod = obtenerCodAsesor_(r[3]);
+    if (cod && !vendCods[cod]) {
+      vendCods[cod] = { cod, r3_raw: String(r[3]).trim(), cuota_en_mapa: cuotaMap[cod] || 0 };
+    }
+  });
+
+  return {
+    hoja_encontrada: !!h,
+    nombre_buscado:  HOJAS.CUOTAS,
+    filas_en_hoja:   h ? h.getLastRow() - 1 : 0,
+    cuota_map:       cuotaMap,
+    raw_rows:        rawRows,
+    vendedores_cods: Object.values(vendCods).slice(0, 15),
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════
 // EFECTIVIDAD
 // ════════════════════════════════════════════════════════════════════
@@ -1554,6 +1598,57 @@ function getClientesCero() {
 // CLIENTES NUEVOS
 // ════════════════════════════════════════════════════════════════════
 
+/**
+ * Convierte cualquier valor de fecha de Google Sheets a string 'YYYY-MM-DD'.
+ * Maneja:
+ *   1. Objeto Date real (celda fecha de Sheets) → Utilities.formatDate con TZ Panama
+ *   2. Número (serial de fecha de Sheets, poco común vía getValues) → idem
+ *   3. Texto 'M/D/YYYY' o 'MM/DD/YYYY' (formato Mes/Día/Año)  ← caso actual del usuario
+ *   4. Texto 'YYYY-MM-DD' (ISO) → ya correcto
+ *   5. Cualquier otro texto parseable por Date() → fallback
+ * Devuelve '' si no se puede parsear.
+ */
+function parseFechaCreacion_(valor) {
+  // 1. Objeto Date real de Google Sheets
+  if (valor instanceof Date && !isNaN(valor.getTime())) {
+    return Utilities.formatDate(valor, TZ, 'yyyy-MM-dd');
+  }
+
+  const s = String(valor || '').trim();
+  if (!s) return '';
+
+  // 2. Ya en formato ISO YYYY-MM-DD (o YYYY-MM-DDThh:mm:ss...)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10); // retorna solo la parte fecha
+  }
+
+  // 3. Formato MM/DD/YYYY o M/D/YYYY (Mes/Día/Año — American)
+  //    Ejemplo: '5/15/2026' → '2026-05-15'
+  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdy) {
+    const mm = mdy[1].padStart(2, '0');
+    const dd = mdy[2].padStart(2, '0');
+    const yyyy = mdy[3];
+    // Validar que sea una fecha real
+    const prueba = new Date(yyyy + '-' + mm + '-' + dd);
+    if (!isNaN(prueba.getTime())) return yyyy + '-' + mm + '-' + dd;
+  }
+
+  // 4. Número de serie (días desde 30-dic-1899, base de Excel/Sheets)
+  //    Sheets raramente devuelve números puros para fechas, pero cubrimos el caso
+  const num = parseFloat(s);
+  if (!isNaN(num) && num > 1 && num < 100000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30) + num * 86400000);
+    if (!isNaN(epoch.getTime())) return Utilities.formatDate(epoch, TZ, 'yyyy-MM-dd');
+  }
+
+  // 5. Fallback: dejar que V8 intente parsear (cubre 'Jan 15, 2026', etc.)
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
+
+  return '';
+}
+
 function getClientesNuevos(desde, hasta) {
   const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
   if (!hM || hM.getLastRow() < 2) return { total:0, por_vendedor:[], por_mes:[], detalle:[], desde:desde||null, hasta:hasta||null };
@@ -1579,17 +1674,8 @@ function getClientesNuevos(desde, hasta) {
     if (estado !== 'A') continue;
     if (!esVendedorValido_(codA, asesor)) continue;
 
-    // Convertir la celda a string YYYY-MM-DD usando la TZ correcta (America/Panama)
-    let fechaStr = '';
-    if (fechaR instanceof Date && !isNaN(fechaR.getTime())) {
-      fechaStr = Utilities.formatDate(fechaR, TZ, 'yyyy-MM-dd');
-    } else {
-      const s = String(fechaR || '').trim();
-      if (s) {
-        const d = new Date(s);
-        if (!isNaN(d.getTime())) fechaStr = Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
-      }
-    }
+    // Convertir la celda a string YYYY-MM-DD
+    const fechaStr = parseFechaCreacion_(fechaR);
 
     // Filtro por rango: comparación de strings YYYY-MM-DD (evita problemas de timezone)
     if (hayFiltro) {
@@ -1821,6 +1907,25 @@ function getTopMarcas() {
 // ════════════════════════════════════════════════════════════════════
 // DIAGNÓSTICO DE API
 // ════════════════════════════════════════════════════════════════════
+
+// Diagnóstico: muestra qué valores tiene la columna AB (fecha creación) en MAESTRO_CLIENTES
+function getFechasDebug_() {
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (!hM || hM.getLastRow() < 2) return { error: 'Hoja no encontrada o vacía' };
+  const data = hM.getDataRange().getValues();
+  const muestra = [];
+  for (let i = 1; i < Math.min(data.length, 21); i++) { // primeras 20 filas
+    const fechaR = data[i][27]; // columna AB
+    muestra.push({
+      fila: i + 1,
+      tipo: typeof fechaR,
+      esDate: fechaR instanceof Date,
+      valorRaw: String(fechaR).slice(0, 30),
+      parsedStr: parseFechaCreacion_(fechaR),
+    });
+  }
+  return { total_filas: data.length - 1, muestra };
+}
 
 function getDiagnosticoAPI() {
   const ss = getSS_();

@@ -38,6 +38,7 @@ const useDashboardStore = create((set, get) => ({
   skus: { global: [], por_vendedor: [] },
   marcas: [],
   topClientes: { top_global: [], top_por_vendedor: [] },
+  cuotas: [],   // [{ cod, asesor, cuota }] — metas mensuales por vendedor
   loading: false,
   lastUpdate: null,
   error: null,
@@ -49,7 +50,7 @@ const useDashboardStore = create((set, get) => ({
       const [
         resumen, vendedores, cobertura, cobNegocio,
         efectividad, devoluciones, cero, nuevos,
-        tendencia, skus, marcas, topClientes,
+        tendencia, skus, marcas, topClientes, cuotas,
       ] = await Promise.all([
         fetchSheet('resumen'),
         fetchSheet('vendedores'),
@@ -63,6 +64,7 @@ const useDashboardStore = create((set, get) => ({
         fetchSheet('skus'),
         fetchSheet('marcas'),
         fetchSheet('top_clientes'),
+        fetchSheet('cuotas'),
       ]);
 
       set({
@@ -84,6 +86,7 @@ const useDashboardStore = create((set, get) => ({
         skus: skus || get().skus,
         marcas: marcas || get().marcas,
         topClientes: topClientes || get().topClientes,
+        cuotas: cuotas || get().cuotas,
         loading: false,
         lastUpdate: new Date(),
       });

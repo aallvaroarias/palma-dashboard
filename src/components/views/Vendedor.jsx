@@ -14,7 +14,7 @@ export default function Vendedor() {
   const cod = params.get('v');
 
   const { vendedores, cobertura, cobNegocio, efectividad, skus, clientesNuevos,
-          clientesCero, topClientes, refetchClientes } = useDashboardStore();
+          clientesCero, topClientes, cuotas, refetchClientes } = useDashboardStore();
 
   const v = useMemo(
     () => vendedores.find(x => String(x.cod) === String(cod)),
@@ -83,6 +83,19 @@ export default function Vendedor() {
       return nom === v.nombre || nom === String(v.cod);
     });
   }, [clientesCero, v]);
+
+  // Cuota del vendedor: busca en el array cuotas por cod (fuente directa de la hoja CUOTAS)
+  const vCuota = useMemo(() => {
+    if (!v) return 0;
+    const found = cuotas.find(c => String(c.cod).trim() === String(v.cod).trim());
+    return found ? (found.cuota || 0) : (v.cuota || 0);
+  }, [cuotas, v]);
+
+  const vPctCumplimiento = useMemo(() => {
+    if (!vCuota) return 0;
+    const venta = v?.venta_bruta || v?.venta_real || 0;
+    return Math.round(venta / vCuota * 1000) / 10;
+  }, [vCuota, v]);
 
   // Top 10 clientes de este vendedor
   const top10Vend = useMemo(() => {
@@ -164,7 +177,7 @@ export default function Vendedor() {
 
       {/* KPIs */}
       <SectionTitle>Mis Métricas</SectionTitle>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
         <KpiCard label="Venta Real" value={fmt(v.venta_real)} color="blue" />
         <KpiCard
           label="Devoluciones"
@@ -185,7 +198,92 @@ export default function Vendedor() {
           value={fmt(v.ticket_promedio || (v.venta_neta / (v.clientes_imp || 1)))}
           color="purple"
         />
+        <KpiCard
+          label="Mi Meta"
+          value={vCuota > 0 ? fmt(vCuota) : 'Sin meta'}
+          sub={vCuota > 0 ? `${pct(vPctCumplimiento)} logrado` : 'Configura en hoja CUOTAS'}
+          color="gold"
+          barValue={vCuota > 0 ? Math.min(vPctCumplimiento, 100) : 0}
+        />
       </div>
+
+      {/* ── Progreso Meta ── siempre visible, mensaje especial si no hay cuota */}
+      {(() => {
+        const cuota   = vCuota;
+        const ventaB  = v.venta_bruta || v.venta_real || 0;
+        const pctC    = vPctCumplimiento;
+        const falta   = cuota - ventaB;
+        const barW    = cuota > 0 ? Math.min(pctC, 100) : 0;
+        const colorBar = pctC >= 100 ? 'var(--green)' : pctC >= 75 ? 'var(--amber)' : 'var(--red)';
+        return (
+          <div className="chart-card mb-6">
+            {/* Título + estado */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                Meta del Período
+              </div>
+              {cuota > 0 && (
+                <div className="font-mono-num font-bold" style={{ fontSize: '22px', color: colorBar }}>
+                  {pct(pctC)}
+                </div>
+              )}
+            </div>
+
+            {cuota > 0 ? (
+              <>
+                {/* Barra de progreso */}
+                <div
+                  className="w-full rounded-full mb-1"
+                  style={{ height: '10px', background: 'rgba(90,145,185,0.12)' }}
+                >
+                  <div
+                    className="rounded-full"
+                    style={{ width: `${barW}%`, height: '10px', background: colorBar, transition: 'width 0.6s ease' }}
+                  />
+                </div>
+                <div className="text-right mb-4" style={{ fontSize: '10px', color: colorBar, fontWeight: 600 }}>
+                  {falta > 0
+                    ? `Faltan ${fmt(falta)} para alcanzar la meta`
+                    : `✓ Meta superada — excediste por ${fmt(Math.abs(falta))}`}
+                </div>
+
+                {/* Tres stats */}
+                <div
+                  className="grid grid-cols-3 gap-4 pt-3 border-t"
+                  style={{ borderColor: 'var(--border-2)' }}
+                >
+                  {[
+                    { label: 'Venta Bruta',  val: fmt(ventaB), color: 'var(--white-2)' },
+                    { label: 'Meta Mensual', val: fmt(cuota),  color: 'var(--white-2)' },
+                    { label: falta > 0 ? 'Falta para Meta' : 'Meta Superada',
+                      val: falta > 0 ? fmt(falta) : `+${fmt(Math.abs(falta))}`,
+                      color: colorBar },
+                  ].map(({ label, val, color }) => (
+                    <div key={label}>
+                      <div className="text-palumar-muted mb-1"
+                        style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {label}
+                      </div>
+                      <div className="font-mono-num font-bold" style={{ fontSize: '16px', color }}>
+                        {val}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 gap-2">
+                <div className="text-palumar-muted text-sm">
+                  Este vendedor no tiene una meta configurada para este período.
+                </div>
+                <div className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                  Agrega a <strong style={{ color: 'var(--white-2)' }}>{v.cod}</strong> en la hoja <strong style={{ color: 'var(--white-2)' }}>CUOTAS</strong> del Google Sheets.
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
