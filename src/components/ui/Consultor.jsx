@@ -105,13 +105,16 @@ export default function Consultor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pregunta, contexto }),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data;
+      try { data = JSON.parse(rawText); }
+      catch { data = { error: `HTTP ${res.status}: ${rawText.slice(0, 200)}` }; }
       setMessages(prev => [...prev, {
         role: 'bot',
-        text: data.respuesta || data.error || 'Sin respuesta.'
+        text: data.respuesta || `⚠️ ${data.details || data.error || 'Sin respuesta.'}`
       }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'bot', text: 'Error al conectar con el consultor. Intenta de nuevo.' }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'bot', text: `⚠️ ${err.message}` }]);
     } finally {
       setLoading(false);
     }
