@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Topbar from './components/layout/Topbar';
 import BottomNav from './components/layout/BottomNav';
 import LoadingOverlay from './components/ui/LoadingOverlay';
+import Consultor from './components/ui/Consultor';
 import { useDashboard } from './hooks/useDashboard';
 import useDashboardStore from './store/dashboardStore';
 
@@ -62,6 +63,9 @@ export default function App() {
         {/* Mobile bottom nav */}
         <BottomNav />
       </div>
+
+      {/* Consultor IA — flotante en todas las vistas */}
+      <Consultor />
     </>
   );
 }
