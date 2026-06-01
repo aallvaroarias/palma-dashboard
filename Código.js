@@ -2167,8 +2167,17 @@ function getCartera() {
     const dashAs     = asesorRaw.indexOf(' - ');
     const nomAs      = dashAs >= 0 ? asesorRaw.substring(dashAs + 3).trim() : asesorRaw;
 
-    const valorStr   = String(row[iValor] || '0').replace(/,/g, '');
-    const valor      = parseFloat(valorStr) || 0;
+    // Formato español: punto = miles, coma = decimal (ej: "1.234,56" → 1234.56)
+    var valorRaw = row[iValor];
+    var valor;
+    if (typeof valorRaw === 'number') {
+      valor = valorRaw;
+    } else {
+      var valorStr = String(valorRaw || '0').trim()
+        .replace(/\./g, '')   // quitar separador de miles
+        .replace(/,/g, '.');  // coma decimal → punto
+      valor = parseFloat(valorStr) || 0;
+    }
     if (valor <= 0) return;
 
     var fechaObj = row[iFecha];
