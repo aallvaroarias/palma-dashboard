@@ -20,6 +20,14 @@ const TRAMO_LABELS = {
   '+90':   '+90 días',
 };
 
+// Combina cod y nombre tal como aparece en col E del sheet
+function clienteLabel(c) {
+  if (c.cliente) return c.cliente;
+  return c.cod_cliente
+    ? `${c.cod_cliente}${c.nom_cliente ? ' - ' + c.nom_cliente : ''}`
+    : (c.nom_cliente || '—');
+}
+
 export default function Cartera() {
   const { cartera } = useDashboardStore();
   const [vendedorSel, setVendedorSel] = useState('');
@@ -34,7 +42,6 @@ export default function Cartera() {
 
   const mayorDeudor = top_clientes?.[0];
 
-  // Detalle del vendedor seleccionado
   const detalleVend = useMemo(() => {
     if (!vendedorSel) return detalle || [];
     return (detalle || []).filter(r => r.cod_asesor === vendedorSel);
@@ -63,19 +70,11 @@ export default function Cartera() {
       {/* ── KPIs ── */}
       <SectionTitle>Cartera Pendiente</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <KpiCard
-          label="Total Pendiente"
-          value={`$${fmt(total_pendiente)}`}
-          color="red"
-        />
-        <KpiCard
-          label="Facturas Pendientes"
-          value={String(total_facturas)}
-          color="amber"
-        />
+        <KpiCard label="Total Pendiente"     value={fmt(total_pendiente)} color="red" />
+        <KpiCard label="Facturas Pendientes" value={String(total_facturas)} color="amber" />
         <KpiCard
           label="Cartera Vencida"
-          value={`$${fmt(montoVencido)}`}
+          value={fmt(montoVencido)}
           sub={`${pct(pctVencido)} del total`}
           color={pctVencido > 30 ? 'red' : 'amber'}
           barValue={pctVencido}
@@ -83,14 +82,14 @@ export default function Cartera() {
         {mayorDeudor && (
           <KpiCard
             label="Mayor Deudor"
-            value={`$${fmt(mayorDeudor.total)}`}
-            sub={mayorDeudor.nom_cliente}
+            value={fmt(mayorDeudor.total)}
+            sub={clienteLabel(mayorDeudor)}
             color="blue"
           />
         )}
       </div>
 
-      {/* ── Aging (tramos) ── */}
+      {/* ── Aging ── */}
       <SectionTitle>Antigüedad de Cartera</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {(por_tramo || []).map(t => (
@@ -99,12 +98,11 @@ export default function Cartera() {
               {TRAMO_LABELS[t.tramo] || t.tramo}
             </div>
             <div className="font-mono-num font-bold" style={{ fontSize: '20px', color: TRAMO_COLORS[t.tramo] || 'var(--white)' }}>
-              ${fmt(t.monto)}
+              {fmt(t.monto)}
             </div>
             <div className="text-palumar-muted" style={{ fontSize: '11px', marginTop: '2px' }}>
               {total_pendiente > 0 ? pct(t.monto / total_pendiente * 100) : '—'}
             </div>
-            {/* mini barra */}
             <div style={{ marginTop: '8px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.07)' }}>
               <div style={{
                 height: '100%', borderRadius: '2px',
@@ -128,9 +126,7 @@ export default function Cartera() {
       </div>
       <div className="table-card mb-6">
         <div className="px-5 py-3.5 border-b" style={{ borderColor: 'var(--border-2)' }}>
-          <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-            Detalle por Vendedor
-          </h3>
+          <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Detalle por Vendedor</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="palma-table">
@@ -142,7 +138,7 @@ export default function Cartera() {
                 <th style={{ textAlign: 'right' }}>61-90 d</th>
                 <th style={{ textAlign: 'right' }}>+90 d</th>
                 <th style={{ textAlign: 'right' }}>Total</th>
-                <th style={{ textAlign: 'right' }}>Facturas</th>
+                <th style={{ textAlign: 'right' }}>Fact.</th>
               </tr>
             </thead>
             <tbody>
@@ -155,21 +151,21 @@ export default function Cartera() {
                     </div>
                   </td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
-                    <span style={{ color: 'var(--cyan)' }}>{v.tramos?.['0-30'] > 0 ? `$${fmt(v.tramos['0-30'])}` : '—'}</span>
+                    <span style={{ color: 'var(--cyan)' }}>{v.tramos?.['0-30'] > 0 ? fmt(v.tramos['0-30']) : '—'}</span>
                   </td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
-                    <span style={{ color: 'var(--amber)' }}>{v.tramos?.['31-60'] > 0 ? `$${fmt(v.tramos['31-60'])}` : '—'}</span>
+                    <span style={{ color: 'var(--amber)' }}>{v.tramos?.['31-60'] > 0 ? fmt(v.tramos['31-60']) : '—'}</span>
                   </td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
-                    <span style={{ color: 'var(--orange, #F97316)' }}>{v.tramos?.['61-90'] > 0 ? `$${fmt(v.tramos['61-90'])}` : '—'}</span>
+                    <span style={{ color: '#F97316' }}>{v.tramos?.['61-90'] > 0 ? fmt(v.tramos['61-90']) : '—'}</span>
                   </td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
-                    <span style={{ color: 'var(--red)' }}>{v.tramos?.['+90'] > 0 ? `$${fmt(v.tramos['+90'])}` : '—'}</span>
+                    <span style={{ color: 'var(--red)' }}>{v.tramos?.['+90'] > 0 ? fmt(v.tramos['+90']) : '—'}</span>
                   </td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
-                    <strong style={{ color: 'var(--white)' }}>${fmt(v.total)}</strong>
+                    <strong style={{ color: 'var(--white)' }}>{fmt(v.total)}</strong>
                   </td>
-                  <td style={{ textAlign: 'right' }} className="font-mono-num" style={{ color: 'var(--muted)' }}>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)' }} className="font-mono-num">
                     {v.facturas}
                   </td>
                 </tr>
@@ -192,12 +188,11 @@ export default function Cartera() {
             <thead>
               <tr>
                 <th>#</th>
-                <th>Cód.</th>
                 <th>Cliente</th>
                 <th>Vendedor</th>
-                <th style={{ textAlign: 'right' }}>Facturas</th>
-                <th style={{ textAlign: 'right' }}>Pendiente $</th>
-                <th style={{ textAlign: 'right' }}>% del total</th>
+                <th style={{ textAlign: 'right' }}>Fact.</th>
+                <th style={{ textAlign: 'right' }}>Pendiente</th>
+                <th style={{ textAlign: 'right' }}>% total</th>
               </tr>
             </thead>
             <tbody>
@@ -206,12 +201,11 @@ export default function Cartera() {
                 return (
                   <tr key={i}>
                     <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{i + 1}</td>
-                    <td className="font-mono-num" style={{ color: 'var(--muted)' }}>{c.cod_cliente}</td>
-                    <td style={{ fontWeight: 500 }}>{c.nom_cliente}</td>
+                    <td style={{ fontWeight: 500 }}>{clienteLabel(c)}</td>
                     <td style={{ color: 'var(--muted)', fontSize: '12px' }}>{c.asesor}</td>
-                    <td style={{ textAlign: 'right' }} className="font-mono-num" style={{ color: 'var(--muted)' }}>{c.facturas}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--muted)' }} className="font-mono-num">{c.facturas}</td>
                     <td style={{ textAlign: 'right' }} className="font-mono-num">
-                      <strong style={{ color: pctT > 15 ? 'var(--red)' : 'var(--white)' }}>${fmt(c.total)}</strong>
+                      <strong style={{ color: pctT > 15 ? 'var(--red)' : 'var(--white)' }}>{fmt(c.total)}</strong>
                     </td>
                     <td style={{ textAlign: 'right' }} className="font-mono-num">
                       <span style={{ color: pctT > 15 ? 'var(--red)' : 'var(--muted)' }}>{pct(pctT)}</span>
@@ -228,9 +222,7 @@ export default function Cartera() {
       <SectionTitle>Detalle de Facturas</SectionTitle>
       <div className="table-card mb-8">
         <div className="px-5 py-3.5 border-b flex items-center gap-3 flex-wrap" style={{ borderColor: 'var(--border-2)' }}>
-          <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-            Facturas pendientes
-          </h3>
+          <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Facturas pendientes</h3>
           <select
             className="palma-select ml-auto"
             value={vendedorSel}
@@ -253,20 +245,17 @@ export default function Cartera() {
                 <th style={{ textAlign: 'right' }}>Fecha</th>
                 <th style={{ textAlign: 'right' }}>Días</th>
                 <th>Tramo</th>
-                <th style={{ textAlign: 'right' }}>Valor $</th>
+                <th style={{ textAlign: 'right' }}>Valor</th>
               </tr>
             </thead>
             <tbody>
               {detalleVend.map((r, i) => (
                 <tr key={i}>
                   <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{r.nro_ruc}</td>
-                  <td style={{ fontSize: '12px' }}>
-                    <div style={{ fontWeight: 500 }}>{r.nom_cliente}</div>
-                    <div style={{ color: 'var(--muted)', fontSize: '10px' }}>{r.cod_cliente}</div>
-                  </td>
+                  <td style={{ fontSize: '12px', fontWeight: 500 }}>{clienteLabel(r)}</td>
                   <td style={{ color: 'var(--muted)', fontSize: '11px' }}>{r.nom_asesor}</td>
                   <td style={{ color: 'var(--muted)', fontSize: '11px' }}>{r.ciudad?.split('(')[0].trim() || '—'}</td>
-                  <td style={{ textAlign: 'right' }} className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{r.fecha}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)', fontSize: '11px' }} className="font-mono-num">{r.fecha}</td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
                     <span style={{ color: r.dias_vencido > 60 ? 'var(--red)' : r.dias_vencido > 30 ? 'var(--amber)' : 'var(--muted)' }}>
                       {r.dias_vencido}d
@@ -279,7 +268,7 @@ export default function Cartera() {
                   </td>
                   <td style={{ textAlign: 'right' }} className="font-mono-num">
                     <strong style={{ color: r.tramo === '+90' || r.tramo === '61-90' ? 'var(--red)' : 'var(--white)' }}>
-                      ${fmt(r.valor)}
+                      {fmt(r.valor)}
                     </strong>
                   </td>
                 </tr>

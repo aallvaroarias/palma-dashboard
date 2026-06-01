@@ -2195,6 +2195,7 @@ function getCartera() {
 
     pendientes.push({
       nro_ruc:      String(row[iRuc] || '').trim(),
+      cliente:      clienteRaw,
       cod_cliente:  codCli,
       nom_cliente:  nomCli,
       cod_asesor:   codAs,
