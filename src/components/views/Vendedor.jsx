@@ -191,7 +191,7 @@ export default function Vendedor() {
       {/* KPIs */}
       <SectionTitle>Mis Métricas</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        <KpiCard label="Venta Real" value={fmt(v.venta_real)} color="blue" />
+        <KpiCard label="Venta Bruta" value={fmt(v.venta_real)} color="blue" />
         <KpiCard
           label="Devoluciones"
           value={fmt(v.devol)}
