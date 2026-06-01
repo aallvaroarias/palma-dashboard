@@ -14,7 +14,7 @@ export default function Vendedor() {
   const cod = params.get('v');
 
   const { vendedores, cobertura, cobNegocio, efectividad, skus, clientesNuevos,
-          clientesCero, topClientes, cuotas, refetchClientes } = useDashboardStore();
+          clientesCero, topClientes, cuotas, devoluciones, refetchClientes } = useDashboardStore();
 
   const v = useMemo(
     () => vendedores.find(x => String(x.cod) === String(cod)),
@@ -109,6 +109,30 @@ export default function Vendedor() {
     );
     return found?.top10 || [];
   }, [topClientes, v]);
+
+  // Top 10 clientes con más devoluciones de este vendedor
+  const topDevolucionesVend = useMemo(() => {
+    if (!v) return [];
+    const myCod = String(v.cod).trim();
+    // Fuente primaria: por_cliente_por_vendedor del backend
+    const found = (devoluciones.por_cliente_por_vendedor || []).find(x =>
+      String(x.cod_asesor).trim() === myCod
+    );
+    if (found?.top10?.length) return found.top10;
+    // Fallback: computar desde detalle
+    const map = {};
+    (devoluciones.detalle || []).forEach(r => {
+      if (String(r.cod_asesor).trim() !== myCod) return;
+      const key = r.cod_cliente || r.nom_cliente;
+      if (!key) return;
+      if (!map[key]) map[key] = { cod_cliente: r.cod_cliente, nom_cliente: r.nom_cliente, total: 0 };
+      map[key].total += parseFloat(r.vlr_devolucion) || 0;
+    });
+    return Object.values(map)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10)
+      .map(x => ({ ...x, total: Math.round(x.total * 100) / 100 }));
+  }, [devoluciones, v]);
 
   // Top clientes por negocio de este vendedor
   const topNegociosVend = useMemo(() => {
@@ -428,6 +452,56 @@ export default function Vendedor() {
           {pct(v.cobertura)} — Meta 95%
         </div>
       </div>
+
+      {/* ── Top Devoluciones por Cliente ── */}
+      {topDevolucionesVend.length > 0 && (
+        <>
+          <SectionTitle>Top Clientes con Devoluciones</SectionTitle>
+          <div className="table-card mb-4">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                Top {topDevolucionesVend.length} por monto devuelto
+              </h3>
+              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                Total: <span style={{ color: 'var(--red)', fontWeight: 600 }}>${fmt(v.devol)}</span>
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cód.</th>
+                    <th>Cliente</th>
+                    <th style={{ textAlign: 'right' }}>Devolucion $</th>
+                    <th style={{ textAlign: 'right' }}>% del total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topDevolucionesVend.map((c, i) => {
+                    const pctTotal = v.devol > 0 ? (c.total / v.devol * 100) : 0;
+                    return (
+                      <tr key={i}>
+                        <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{i + 1}</td>
+                        <td className="font-mono-num" style={{ color: 'var(--muted)' }}>{c.cod_cliente || '—'}</td>
+                        <td style={{ fontWeight: 500 }}>{c.nom_cliente || '—'}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: 'var(--red)', fontWeight: 600 }}>${fmt(c.total)}</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: pctTotal > 20 ? 'var(--red)' : 'var(--muted)' }}>
+                            {pct(pctTotal)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Clientes Cero ── */}
       {ceroVend.length > 0 && (

@@ -1445,6 +1445,31 @@ function getDevoluciones() {
 
   const total = detalle.reduce((s, r) => s + (parseFloat(r.vlr_devolucion) || 0), 0);
 
+  // Top 10 clientes con más devoluciones por vendedor
+  const cliVendMap = {};
+  raw.forEach(function(r) {
+    const cod    = obtenerCodAsesor_(r[1]);
+    const vend   = String(r[2] || '').trim();
+    const codCli = String(r[3] || '').trim();
+    const nomCli = String(r[4] || '').trim();
+    const monto  = Math.abs(parseFloat(r[10]) || 0);
+    if (!cod || !vend || !codCli) return;
+    if (!esVendedorValido_(cod, vend)) return;
+    if (!cliVendMap[cod]) cliVendMap[cod] = {};
+    if (!cliVendMap[cod][codCli])
+      cliVendMap[cod][codCli] = { cod_cliente: codCli, nom_cliente: nomCli, total: 0 };
+    cliVendMap[cod][codCli].total += monto;
+  });
+  const por_cliente_por_vendedor = Object.keys(cliVendMap).map(function(cod) {
+    return {
+      cod_asesor: cod,
+      top10: Object.values(cliVendMap[cod])
+        .sort(function(a, b) { return b.total - a.total; })
+        .slice(0, 10)
+        .map(function(c) { return { cod_cliente: c.cod_cliente, nom_cliente: c.nom_cliente, total: round2_(c.total) }; })
+    };
+  });
+
   return {
     total: round2_(total),
     por_concepto: Object.entries(conceptoMap)
@@ -1453,9 +1478,10 @@ function getDevoluciones() {
     por_vendedor: Object.entries(vendedorMap)
       .map(([vendedor, monto]) => ({ vendedor, monto: round2_(monto) }))
       .sort((a, b) => b.monto - a.monto),
+    por_cliente_por_vendedor,
     detalle: detalle
       .sort((a, b) => b.vlr_devolucion - a.vlr_devolucion)
-      .slice(0, 300)
+      .slice(0, 500)
   };
 }
 
