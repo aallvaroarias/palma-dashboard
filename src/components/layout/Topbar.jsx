@@ -9,6 +9,7 @@ const TABS = [
   { label: 'Efectividad', path: '/efectividad' },
   { label: 'Devoluciones', path: '/devoluciones' },
   { label: 'Clientes', path: '/clientes' },
+  { label: 'Cartera', path: '/cartera' },
 ];
 
 export default function Topbar({ onRefresh }) {

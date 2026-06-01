@@ -712,7 +712,8 @@ const HOJAS = {
   CLIENTES_CERO:      'CLIENTES_CERO',
   CLIENTES_NUEVOS:    'CLIENTES_NUEVOS',
   MAESTRO_CLIENTES:   'MAESTRO_CLIENTES',
-  CUOTAS:             'CUOTAS'            // metas mensuales por asesor
+  CUOTAS:             'CUOTAS',           // metas mensuales por asesor
+  CARTERA:            'CARTERA'           // reporte CxC (pegar desde sistema)
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -742,6 +743,7 @@ function doGet(e) {
       case 'marcas':        data = getTopMarcas();        break;
       case 'top_clientes':  data = getTopClientes();      break;
       case 'cuotas':        data = getCuotas();           break;
+      case 'cartera':       data = getCartera();          break;
       case 'cuota_debug':   data = getCuotaDebug_();      break;
       case 'diagnostico':   data = getDiagnosticoAPI();   break;
       case 'fechas_debug':  data = getFechasDebug_();      break;
@@ -2112,5 +2114,147 @@ function getDiagnosticoAPI() {
     vendedores_con_devolucion: devoluciones.por_vendedor.length,
     cuotas_configuradas:     cuotas.length,
     cuota_total_equipo:      cuotas.reduce((s, c) => s + c.cuota, 0)
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CARTERA (CxC PENDIENTE)
+// Pega el reporte CxC exportado desde el sistema en la hoja CARTERA.
+// Columnas esperadas: N°. RUC, Tipo documento, Documento cliente,
+// Cliente, Nombre corregimiento, Sucursal, Valor RUC, Valor Anticipo,
+// Estado cxc, Estado efectivo, N° Recaudo, Recibo, Asesor, Fecha Cxc,
+// Consignación Anticipo, Ref anticipo
+// ════════════════════════════════════════════════════════════════════
+function getCartera() {
+  const h = getSheet_(HOJAS.CARTERA);
+  if (!h || h.getLastRow() < 2) {
+    return { total_pendiente: 0, total_facturas: 0, por_vendedor: [], por_tramo: [], top_clientes: [], detalle: [] };
+  }
+
+  const raw     = h.getDataRange().getValues();
+  const rawHdrs = raw[0].map(function(v) {
+    return String(v || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[°\.\s]+/g, '_').replace(/[^a-z0-9_]/g, '');
+  });
+
+  // Localizar columnas de forma flexible
+  function col(kws) {
+    return rawHdrs.findIndex(function(h) { return kws.some(function(k) { return h.includes(k); }); });
+  }
+  const iRuc    = col(['n__ruc', 'ruc']);
+  const iCli    = col(['cliente']);
+  const iAsesor = col(['asesor']);
+  const iValor  = col(['valor_ruc', 'valor']);
+  const iEstado = col(['estado_cxc', 'estado']);
+  const iFecha  = col(['fecha_cxc', 'fecha']);
+  const iCorr   = col(['corregimiento', 'nombre_corregimiento']);
+
+  const hoy = new Date();
+  const pendientes = [];
+
+  raw.slice(1).forEach(function(row) {
+    const estado = String(row[iEstado] || '').trim().toLowerCase();
+    if (estado !== 'pendiente') return;
+
+    const clienteRaw = String(row[iCli] || '').trim();
+    const dashIdx    = clienteRaw.indexOf(' - ');
+    const codCli     = dashIdx >= 0 ? clienteRaw.substring(0, dashIdx).trim() : clienteRaw;
+    const nomCli     = dashIdx >= 0 ? clienteRaw.substring(dashIdx + 3).trim() : '';
+
+    const asesorRaw  = String(row[iAsesor] || '').trim();
+    const codAs      = obtenerCodAsesor_(asesorRaw);
+    const dashAs     = asesorRaw.indexOf(' - ');
+    const nomAs      = dashAs >= 0 ? asesorRaw.substring(dashAs + 3).trim() : asesorRaw;
+
+    const valorStr   = String(row[iValor] || '0').replace(/,/g, '');
+    const valor      = parseFloat(valorStr) || 0;
+    if (valor <= 0) return;
+
+    var fechaObj = row[iFecha];
+    if (!(fechaObj instanceof Date)) {
+      fechaObj = new Date(String(fechaObj));
+    }
+    if (isNaN(fechaObj.getTime())) return;
+
+    const diasVencido = Math.floor((hoy - fechaObj) / 86400000);
+    var tramo;
+    if      (diasVencido <= 30) tramo = '0-30';
+    else if (diasVencido <= 60) tramo = '31-60';
+    else if (diasVencido <= 90) tramo = '61-90';
+    else                        tramo = '+90';
+
+    pendientes.push({
+      nro_ruc:      String(row[iRuc] || '').trim(),
+      cod_cliente:  codCli,
+      nom_cliente:  nomCli,
+      cod_asesor:   codAs,
+      nom_asesor:   nomAs,
+      asesor:       asesorRaw,
+      valor:        round2_(valor),
+      fecha:        Utilities.formatDate(fechaObj, TZ, 'yyyy-MM-dd'),
+      dias_vencido: diasVencido,
+      tramo:        tramo,
+      ciudad:       String(iCorr >= 0 ? (row[iCorr] || '') : '').trim()
+    });
+  });
+
+  const total_pendiente = round2_(pendientes.reduce(function(s, r) { return s + r.valor; }, 0));
+
+  // Por vendedor con desglose por tramo
+  const vendMap = {};
+  pendientes.forEach(function(r) {
+    if (!vendMap[r.cod_asesor]) {
+      vendMap[r.cod_asesor] = { cod_asesor: r.cod_asesor, asesor: r.asesor, nom_asesor: r.nom_asesor, total: 0, facturas: 0,
+        tramos: { '0-30': 0, '31-60': 0, '61-90': 0, '+90': 0 } };
+    }
+    vendMap[r.cod_asesor].total        += r.valor;
+    vendMap[r.cod_asesor].facturas     += 1;
+    vendMap[r.cod_asesor].tramos[r.tramo] += r.valor;
+  });
+  const por_vendedor = Object.values(vendMap).map(function(v) {
+    return {
+      cod_asesor: v.cod_asesor, asesor: v.asesor, nom_asesor: v.nom_asesor,
+      total: round2_(v.total), facturas: v.facturas,
+      tramos: {
+        '0-30':  round2_(v.tramos['0-30']),
+        '31-60': round2_(v.tramos['31-60']),
+        '61-90': round2_(v.tramos['61-90']),
+        '+90':   round2_(v.tramos['+90'])
+      }
+    };
+  }).sort(function(a, b) { return b.total - a.total; });
+
+  // Totales por tramo
+  const tramoAcc = { '0-30': 0, '31-60': 0, '61-90': 0, '+90': 0 };
+  pendientes.forEach(function(r) { tramoAcc[r.tramo] += r.valor; });
+  const por_tramo = [
+    { tramo: '0-30',  label: '0-30 días',  monto: round2_(tramoAcc['0-30'])  },
+    { tramo: '31-60', label: '31-60 días', monto: round2_(tramoAcc['31-60']) },
+    { tramo: '61-90', label: '61-90 días', monto: round2_(tramoAcc['61-90']) },
+    { tramo: '+90',   label: '+90 días',   monto: round2_(tramoAcc['+90'])   }
+  ];
+
+  // Top 15 clientes por monto pendiente
+  const cliMap = {};
+  pendientes.forEach(function(r) {
+    if (!cliMap[r.cod_cliente]) {
+      cliMap[r.cod_cliente] = { cod_cliente: r.cod_cliente, nom_cliente: r.nom_cliente, total: 0, facturas: 0, asesor: r.nom_asesor };
+    }
+    cliMap[r.cod_cliente].total   += r.valor;
+    cliMap[r.cod_cliente].facturas += 1;
+  });
+  const top_clientes = Object.values(cliMap)
+    .sort(function(a, b) { return b.total - a.total; })
+    .slice(0, 15)
+    .map(function(c) { return { cod_cliente: c.cod_cliente, nom_cliente: c.nom_cliente, total: round2_(c.total), facturas: c.facturas, asesor: c.asesor }; });
+
+  return {
+    total_pendiente: total_pendiente,
+    total_facturas:  pendientes.length,
+    por_vendedor:    por_vendedor,
+    por_tramo:       por_tramo,
+    top_clientes:    top_clientes,
+    detalle:         pendientes.sort(function(a, b) { return b.valor - a.valor; }).slice(0, 300)
   };
 }
