@@ -173,59 +173,99 @@ export default function Gerencial() {
       .sort((a, b) => b.pct_cumplimiento - a.pct_cumplimiento);
   }, [vendedores, cuotaMap]);
 
+  // ── Normalización de nombres de negocio ──────────────────────────────────
+  // Unifica nombres que vienen con código ("03-Chocolates"), sin tildes ("Cafe"),
+  // con caracteres dañados ("Caf�"), en mayúsculas, etc.
+  const MAPA_NEGOCIOS = {
+    'CHOCOLATES':       'Chocolates',
+    'CHOCOLATE':        'Chocolates',
+    'GALLETAS':         'Galletas',
+    'GALLETA':          'Galletas',
+    'CARNICO':          'Cárnico',
+    'CARNICOS':         'Cárnico',
+    'CARNICA':          'Cárnico',
+    'CAFE':             'Café',
+    'CAF':              'Café',
+    'BEBIDAS TMLUC':    'Bebidas TMLUC',
+    'BEBIDAS':          'Bebidas TMLUC',
+    'TMLUC':            'Bebidas TMLUC',
+    'SNACKS TMLUC':     'Snacks TMLUC',
+    'SNACKS':           'Snacks TMLUC',
+    'OTROS TMLUC':      'Otros TMLUC',
+    'OTROS':            'Otros TMLUC',
+    'NUTRICION EXPERTA':'Nutrición Experta',
+    'NUTRICION':        'Nutrición Experta',
+    'BARRAS CORTAS':    'Barras Cortas',
+    'BARRAS':           'Barras Cortas',
+    'TAJADOS':          'Tajados',
+    'TAJADO':           'Tajados',
+  };
+
+  function normNeg(nombre) {
+    if (!nombre) return '';
+    let s = String(nombre).trim();
+    // Quitar código inicial: "03-", "01 -", "003_", "10-" etc.
+    s = s.replace(/^\d{1,3}\s*[-_]\s*/, '');
+    // Normalizar Unicode: quitar acentos y caracteres corruptos
+    s = s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '');
+    s = s.toUpperCase().replace(/\s+/g, ' ').trim();
+    return MAPA_NEGOCIOS[s] ? MAPA_NEGOCIOS[s] : (nombre.trim() || nombre);
+  }
+
   // Metas por negocio: suma cuotas de todos los vendedores cruzada con venta real por negocio
   const metasPorNegocio = useMemo(() => {
-    // Acumular meta total por negocio desde cuotas[].por_negocio
+    // Acumular meta total por negocio normalizado desde cuotas[].por_negocio
     const metaMap = {};
     cuotas.forEach(c => {
       (c.por_negocio || []).forEach(({ negocio, meta }) => {
-        if (negocio && meta > 0) metaMap[negocio] = (metaMap[negocio] || 0) + meta;
+        const key = normNeg(negocio);
+        if (key) metaMap[key] = (metaMap[key] || 0) + (meta || 0);
       });
     });
     if (!Object.keys(metaMap).length) return [];
 
-    // Acumular venta real por negocio desde vendedores[].venta_por_negocio
+    // Venta por negocio desde r.venta_por_negocio (misma fuente que el KPI principal)
     const ventaMap = {};
-    vendedores.forEach(v => {
-      (v.venta_por_negocio || []).forEach(({ negocio, venta }) => {
-        if (negocio) ventaMap[negocio] = (ventaMap[negocio] || 0) + (venta || 0);
-      });
+    (r?.venta_por_negocio || []).forEach(({ negocio, venta }) => {
+      const key = normNeg(negocio);
+      if (key) ventaMap[key] = (ventaMap[key] || 0) + (venta || 0);
     });
 
-    // Factor de proyección (días hábiles)
-    const hoy = new Date();
-    const anio = hoy.getFullYear();
-    const mes  = hoy.getMonth();
-    const inicio = new Date(anio, mes, 1);
-    const fin    = new Date(anio, mes + 1, 0);
+    // Factor de proyección (días hábiles lun-sáb)
+    const hoy2 = new Date();
+    const inicio = new Date(hoy2.getFullYear(), hoy2.getMonth(), 1);
+    const fin    = new Date(hoy2.getFullYear(), hoy2.getMonth() + 1, 0);
     function diasHab(a, b) {
       let n = 0, d = new Date(a);
       while (d <= b) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
       return n;
     }
-    const hTotal = diasHab(inicio, fin);
-    const hTransc = diasHab(inicio, hoy);
-    const factor = hTransc > 0 ? hTotal / hTransc : 1;
+    const hTotal  = diasHab(inicio, fin);
+    const hTransc = diasHab(inicio, hoy2);
+    const factor  = hTransc > 0 ? hTotal / hTransc : 1;
 
-    // Negocios con meta
-    const conMeta = Object.entries(metaMap).map(([negocio, meta]) => {
-      const venta     = ventaMap[negocio] || 0;
-      const proyec    = Math.round(venta * factor);
-      const pctC      = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
-      const falta     = Math.round(meta - venta);
-      return { negocio, meta: Math.round(meta), venta: Math.round(venta), proyec, pctC, falta, conMeta: true };
-    }).sort((a, b) => b.meta - a.meta);
+    // Unión de todos los negocios (con meta Y con venta)
+    const allKeys = new Set([...Object.keys(metaMap), ...Object.keys(ventaMap)]);
+    const rows = [...allKeys].map(key => {
+      const meta  = metaMap[key] || 0;
+      const venta = ventaMap[key] || 0;
+      const proyec = Math.round(venta * factor);
+      const pctC  = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
+      const falta = Math.round(meta - venta);
+      return { negocio: key, meta: Math.round(meta), venta: Math.round(venta), proyec, pctC, falta, conMeta: meta > 0 };
+    }).sort((a, b) => b.meta - a.meta || b.venta - a.venta);
 
-    // Negocios SIN meta pero con venta
-    const sinMeta = Object.entries(ventaMap)
-      .filter(([neg]) => !metaMap[neg] && ventaMap[neg] > 0)
-      .map(([negocio, venta]) => ({
-        negocio, meta: 0, venta: Math.round(venta),
-        proyec: Math.round(venta * factor), pctC: 0, falta: 0, conMeta: false
-      }));
+    // Validación en consola
+    const ventaKPI   = r?.venta_neta ?? 0;
+    const ventaTabla = rows.reduce((s, row) => s + row.venta, 0);
+    const ventaTotalRaw = (r?.venta_por_negocio || []).reduce((s, n) => s + (n.venta || 0), 0);
+    console.log('[MetasPorNegocio] Venta KPI principal:', ventaKPI);
+    console.log('[MetasPorNegocio] Venta total tabla:', ventaTabla);
+    console.log('[MetasPorNegocio] Venta total r.venta_por_negocio (sin normalizar):', ventaTotalRaw);
+    console.log('[MetasPorNegocio] Diferencia KPI vs tabla:', ventaKPI - ventaTabla);
 
-    return [...conMeta, ...sinMeta];
-  }, [cuotas, vendedores]);
+    return rows;
+  }, [cuotas, r]);
 
   // Venta NETA por negocio — filtrar negocios con venta > 0, ordenar desc
   const neg = useMemo(
