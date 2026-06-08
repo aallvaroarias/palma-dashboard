@@ -177,39 +177,48 @@ export default function Gerencial() {
   // Unifica nombres que vienen con código ("03-Chocolates"), sin tildes ("Cafe"),
   // con caracteres dañados ("Caf�"), en mayúsculas, etc.
   const MAPA_NEGOCIOS = {
-    'CHOCOLATES':       'Chocolates',
-    'CHOCOLATE':        'Chocolates',
-    'GALLETAS':         'Galletas',
-    'GALLETA':          'Galletas',
-    'CARNICO':          'Cárnico',
-    'CARNICOS':         'Cárnico',
-    'CARNICA':          'Cárnico',
-    'CAFE':             'Café',
-    'CAF':              'Café',
-    'BEBIDAS TMLUC':    'Bebidas TMLUC',
-    'BEBIDAS':          'Bebidas TMLUC',
-    'TMLUC':            'Bebidas TMLUC',
-    'SNACKS TMLUC':     'Snacks TMLUC',
-    'SNACKS':           'Snacks TMLUC',
-    'OTROS TMLUC':      'Otros TMLUC',
-    'OTROS':            'Otros TMLUC',
-    'NUTRICION EXPERTA':'Nutrición Experta',
-    'NUTRICION':        'Nutrición Experta',
-    'BARRAS CORTAS':    'Barras Cortas',
-    'BARRAS':           'Barras Cortas',
-    'TAJADOS':          'Tajados',
-    'TAJADO':           'Tajados',
+    'CHOCOLATES':        'Chocolates',
+    'CHOCOLATE':         'Chocolates',
+    'GALLETAS':          'Galletas',
+    'GALLETA':           'Galletas',
+    'CARNICO':           'Cárnico',
+    'CARNICOS':          'Cárnico',
+    'CARNICA':           'Cárnico',
+    'CAFE':              'Café',
+    'CAF':               'Café',
+    'BEBIDAS TMLUC':     'Bebidas TMLUC',
+    'BEBIDAS':           'Bebidas TMLUC',
+    'TMLUC':             'Bebidas TMLUC',
+    'SNACKS TMLUC':      'Snacks TMLUC',
+    'SNACKS':            'Snacks TMLUC',
+    'OTROS TMLUC':       'Otros TMLUC',
+    'OTROS':             'Otros TMLUC',
+    'NUTRICION EXPERTA': 'Nutrición Experta',
+    'NUTRICION':         'Nutrición Experta',
+    'BARRAS CORTAS':     'Barras Cortas',
+    'BARRAS':            'Barras Cortas',
+    'TAJADOS':           'Tajados',
+    'TAJADO':            'Tajados',
+    'SABORIZADAS':       'Saborizadas',
+    'SALUDABLES':        'Saludables',
   };
 
   function normNeg(nombre) {
     if (!nombre) return '';
     let s = String(nombre).trim();
-    // Quitar código inicial: "03-", "01 -", "003_", "10-" etc.
-    s = s.replace(/^\d{1,3}\s*[-_]\s*/, '');
-    // Normalizar Unicode: quitar acentos y caracteres corruptos
-    s = s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '');
+    // Reparar Mojibake MacRoman: bytes UTF-8 leídos como Mac Roman
+    // é → √©   ó → √≥   ú → √∫   á → √°   í → √≠   ñ → √±
+    s = s.replace(/√©/g, 'e').replace(/√≥/g, 'o').replace(/√∫/g, 'u')
+         .replace(/√°/g, 'a').replace(/√±/g, 'n').replace(/√≠/g, 'i');
+    // Quitar código inicial con cualquier cantidad de dígitos: "241-", "03-", "001 -"
+    s = s.replace(/^\d+\s*[-_]\s*/, '');
+    // Guardar versión limpia (sin código) para el fallback
+    const limpio = s.trim();
+    // Quitar acentos y caracteres corruptos para lookup en mapa
+    s = s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '').replace(/\?/g, '');
     s = s.toUpperCase().replace(/\s+/g, ' ').trim();
-    return MAPA_NEGOCIOS[s] ? MAPA_NEGOCIOS[s] : (nombre.trim() || nombre);
+    // Si está en el mapa usar el nombre canónico, si no usar el nombre limpio (sin código)
+    return MAPA_NEGOCIOS[s] ? MAPA_NEGOCIOS[s] : limpio;
   }
 
   // Metas por negocio: suma cuotas de todos los vendedores cruzada con venta real por negocio
@@ -261,42 +270,42 @@ export default function Gerencial() {
       return !MAPA_NEGOCIOS[s]; // no estaba en el mapa, se usó nombre crudo
     });
 
-    // Unión de todos los negocios (con meta Y con venta)
+    // Unión de todos los negocios (con meta Y con venta) — floats internos, sin redondear
     const allKeys = new Set([...Object.keys(metaMap), ...Object.keys(ventaMap)]);
     const rows = [...allKeys].map(key => {
       const meta  = metaMap[key] || 0;
-      const venta = ventaMap[key] || 0;
-      const proyec = Math.round(venta * factor);
-      const pctC  = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
-      const falta = Math.round(meta - venta);
-      return { negocio: key, meta: Math.round(meta), venta: Math.round(venta), proyec, pctC, falta, conMeta: meta > 0 };
+      const venta = ventaMap[key] || 0;   // float real, sin redondear
+      const proyec = venta * factor;
+      const pctC   = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
+      const falta  = meta - venta;
+      return { negocio: key, meta, venta, proyec, pctC, falta, conMeta: meta > 0 };
     }).sort((a, b) => b.meta - a.meta || b.venta - a.venta);
 
-    const ventaTabla = rows.reduce((s, row) => s + row.venta, 0);
-
-    // Fila "Sin negocio identificado" si hay diferencia > $1
-    if (Math.abs(ventaSinNegocio) > 1) {
+    // Fila "Sin negocio identificado" si diferencia > $0.50
+    if (Math.abs(ventaSinNegocio) > 0.5) {
       rows.push({
         negocio: 'Sin negocio identificado',
-        meta: 0, venta: Math.round(ventaSinNegocio),
-        proyec: Math.round(ventaSinNegocio * factor),
+        meta: 0, venta: ventaSinNegocio,
+        proyec: ventaSinNegocio * factor,
         pctC: 0, falta: 0, conMeta: false, sinIdentificar: true,
       });
     }
 
+    const ventaTablaCentavos = rows.reduce((s, row) => s + row.venta, 0);
+
     // ── Log de auditoría ──────────────────────────────────────────────────────
     console.group('[MetasPorNegocio] Auditoría diferencia KPI vs tabla');
     console.table({
-      ventaKpiPrincipal:               ventaKPI,
-      sumaNegociosEnBASE:              Math.round(ventaTotalRaw * 100) / 100,
-      ventaSinNegocioEnBASE:           ventaSinNegocio,
-      totalVentaTablaNegocios:         ventaTabla,
-      diferenciaTrasFilaSinNegocio:    Math.round((ventaKPI - ventaTabla - ventaSinNegocio) * 100) / 100,
+      ventaKpiPrincipal:                              ventaKPI,
+      sumaNegociosEnBASE:                             ventaTotalRaw,
+      ventaSinNegocioEnBASE:                          ventaSinNegocio,
+      totalVentaTablaNegociosIncluyendoSinNegocio:    ventaTablaCentavos,
+      diferenciaFinal:                                ventaKPI - ventaTablaCentavos,
     });
     console.log('Negocios crudos en r.venta_por_negocio:', negociosCrudos);
     console.table(negociosNormalizados);
     if (noHomologados.length) {
-      console.warn('⚠ Negocios NO homologados (usando nombre crudo):', noHomologados);
+      console.warn('⚠ Negocios NO homologados:', noHomologados);
     } else {
       console.log('✅ Todos los negocios fueron homologados');
     }
