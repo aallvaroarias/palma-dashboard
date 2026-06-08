@@ -244,6 +244,23 @@ export default function Gerencial() {
     const hTransc = diasHab(inicio, hoy2);
     const factor  = hTransc > 0 ? hTotal / hTransc : 1;
 
+    // ── Auditoría de negocios crudos vs normalizados ──────────────────────────
+    const rawEntries    = r?.venta_por_negocio || [];
+    const ventaKPI      = r?.venta_neta ?? 0;
+    const ventaTotalRaw = rawEntries.reduce((s, n) => s + (n.venta || 0), 0);
+    // Diferencia entre KPI y suma de r.venta_por_negocio = filas sin negocio en BASE
+    const ventaSinNegocio = Math.round((ventaKPI - ventaTotalRaw) * 100) / 100;
+
+    // Mapa crudo → normalizado para detectar no-homologados
+    const negociosCrudos      = rawEntries.map(n => n.negocio);
+    const negociosNormalizados = rawEntries.map(n => ({ crudo: n.negocio, normalizado: normNeg(n.negocio) }));
+    const noHomologados = negociosNormalizados.filter(n => {
+      const s = n.crudo.trim().replace(/^\d{1,3}\s*[-_]\s*/, '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '')
+        .toUpperCase().replace(/\s+/g, ' ').trim();
+      return !MAPA_NEGOCIOS[s]; // no estaba en el mapa, se usó nombre crudo
+    });
+
     // Unión de todos los negocios (con meta Y con venta)
     const allKeys = new Set([...Object.keys(metaMap), ...Object.keys(ventaMap)]);
     const rows = [...allKeys].map(key => {
@@ -255,14 +272,35 @@ export default function Gerencial() {
       return { negocio: key, meta: Math.round(meta), venta: Math.round(venta), proyec, pctC, falta, conMeta: meta > 0 };
     }).sort((a, b) => b.meta - a.meta || b.venta - a.venta);
 
-    // Validación en consola
-    const ventaKPI   = r?.venta_neta ?? 0;
     const ventaTabla = rows.reduce((s, row) => s + row.venta, 0);
-    const ventaTotalRaw = (r?.venta_por_negocio || []).reduce((s, n) => s + (n.venta || 0), 0);
-    console.log('[MetasPorNegocio] Venta KPI principal:', ventaKPI);
-    console.log('[MetasPorNegocio] Venta total tabla:', ventaTabla);
-    console.log('[MetasPorNegocio] Venta total r.venta_por_negocio (sin normalizar):', ventaTotalRaw);
-    console.log('[MetasPorNegocio] Diferencia KPI vs tabla:', ventaKPI - ventaTabla);
+
+    // Fila "Sin negocio identificado" si hay diferencia > $1
+    if (Math.abs(ventaSinNegocio) > 1) {
+      rows.push({
+        negocio: 'Sin negocio identificado',
+        meta: 0, venta: Math.round(ventaSinNegocio),
+        proyec: Math.round(ventaSinNegocio * factor),
+        pctC: 0, falta: 0, conMeta: false, sinIdentificar: true,
+      });
+    }
+
+    // ── Log de auditoría ──────────────────────────────────────────────────────
+    console.group('[MetasPorNegocio] Auditoría diferencia KPI vs tabla');
+    console.table({
+      ventaKpiPrincipal:               ventaKPI,
+      sumaNegociosEnBASE:              Math.round(ventaTotalRaw * 100) / 100,
+      ventaSinNegocioEnBASE:           ventaSinNegocio,
+      totalVentaTablaNegocios:         ventaTabla,
+      diferenciaTrasFilaSinNegocio:    Math.round((ventaKPI - ventaTabla - ventaSinNegocio) * 100) / 100,
+    });
+    console.log('Negocios crudos en r.venta_por_negocio:', negociosCrudos);
+    console.table(negociosNormalizados);
+    if (noHomologados.length) {
+      console.warn('⚠ Negocios NO homologados (usando nombre crudo):', noHomologados);
+    } else {
+      console.log('✅ Todos los negocios fueron homologados');
+    }
+    console.groupEnd();
 
     return rows;
   }, [cuotas, r]);
@@ -442,9 +480,9 @@ export default function Gerencial() {
                     const exceso = row.falta < 0;
                     return (
                       <tr key={i}>
-                        <td style={{ fontWeight: 600 }}>
+                        <td style={{ fontWeight: 600, color: row.sinIdentificar ? 'var(--muted)' : 'inherit', fontStyle: row.sinIdentificar ? 'italic' : 'normal' }}>
                           {row.negocio}
-                          {!row.conMeta && <span className="text-palumar-muted" style={{ fontSize: '10px', marginLeft: '6px' }}>sin meta</span>}
+                          {!row.conMeta && !row.sinIdentificar && <span className="text-palumar-muted" style={{ fontSize: '10px', marginLeft: '6px' }}>sin meta</span>}
                         </td>
                         <td style={{ textAlign: 'right' }} className="font-mono-num">
                           {row.conMeta ? fmt(row.meta) : '—'}
