@@ -314,13 +314,30 @@ export default function Gerencial() {
     return rows;
   }, [cuotas, r]);
 
-  // Venta NETA por negocio — filtrar negocios con venta > 0, ordenar desc
-  const neg = useMemo(
-    () => [...(r?.venta_por_negocio || [])]
-      .filter(n => n.venta > 0)
-      .sort((a, b) => b.venta - a.venta),
-    [r]
-  );
+  // Venta NETA por negocio — normalizada con normNeg, agrupada, sin códigos ni chars dañados
+  const neg = useMemo(() => {
+    const grouped = {};
+    (r?.venta_por_negocio || []).forEach(({ negocio, venta }) => {
+      const key = normNeg(negocio);
+      if (!key) return;
+      grouped[key] = (grouped[key] || 0) + (venta || 0);
+    });
+
+    const result = Object.entries(grouped)
+      .filter(([, venta]) => venta > 0)
+      .map(([negocio, venta]) => ({ negocio, venta }))
+      .sort((a, b) => b.venta - a.venta);
+
+    // Validación temporal en consola
+    const labels = result.map(n => n.negocio);
+    const dirty  = labels.filter(l => /^\d+-/.test(l) || /[√�]/.test(l) || !l);
+    console.log('[VentaPorNegocio] labels normalizados:', labels);
+    console.log('[VentaPorNegocio] dataset agrupado:', result);
+    if (dirty.length) console.warn('[VentaPorNegocio] ⚠ Labels con problema:', dirty);
+    else              console.log('[VentaPorNegocio] ✅ Todos los labels están limpios');
+
+    return result;
+  }, [r]);
 
   // Alerts
   const alerts = useMemo(() => {
