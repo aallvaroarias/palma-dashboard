@@ -173,6 +173,60 @@ export default function Gerencial() {
       .sort((a, b) => b.pct_cumplimiento - a.pct_cumplimiento);
   }, [vendedores, cuotaMap]);
 
+  // Metas por negocio: suma cuotas de todos los vendedores cruzada con venta real por negocio
+  const metasPorNegocio = useMemo(() => {
+    // Acumular meta total por negocio desde cuotas[].por_negocio
+    const metaMap = {};
+    cuotas.forEach(c => {
+      (c.por_negocio || []).forEach(({ negocio, meta }) => {
+        if (negocio && meta > 0) metaMap[negocio] = (metaMap[negocio] || 0) + meta;
+      });
+    });
+    if (!Object.keys(metaMap).length) return [];
+
+    // Acumular venta real por negocio desde vendedores[].venta_por_negocio
+    const ventaMap = {};
+    vendedores.forEach(v => {
+      (v.venta_por_negocio || []).forEach(({ negocio, venta }) => {
+        if (negocio) ventaMap[negocio] = (ventaMap[negocio] || 0) + (venta || 0);
+      });
+    });
+
+    // Factor de proyección (días hábiles)
+    const hoy = new Date();
+    const anio = hoy.getFullYear();
+    const mes  = hoy.getMonth();
+    const inicio = new Date(anio, mes, 1);
+    const fin    = new Date(anio, mes + 1, 0);
+    function diasHab(a, b) {
+      let n = 0, d = new Date(a);
+      while (d <= b) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
+      return n;
+    }
+    const hTotal = diasHab(inicio, fin);
+    const hTransc = diasHab(inicio, hoy);
+    const factor = hTransc > 0 ? hTotal / hTransc : 1;
+
+    // Negocios con meta
+    const conMeta = Object.entries(metaMap).map(([negocio, meta]) => {
+      const venta     = ventaMap[negocio] || 0;
+      const proyec    = Math.round(venta * factor);
+      const pctC      = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
+      const falta     = Math.round(meta - venta);
+      return { negocio, meta: Math.round(meta), venta: Math.round(venta), proyec, pctC, falta, conMeta: true };
+    }).sort((a, b) => b.meta - a.meta);
+
+    // Negocios SIN meta pero con venta
+    const sinMeta = Object.entries(ventaMap)
+      .filter(([neg]) => !metaMap[neg] && ventaMap[neg] > 0)
+      .map(([negocio, venta]) => ({
+        negocio, meta: 0, venta: Math.round(venta),
+        proyec: Math.round(venta * factor), pctC: 0, falta: 0, conMeta: false
+      }));
+
+    return [...conMeta, ...sinMeta];
+  }, [cuotas, vendedores]);
+
   // Venta NETA por negocio — filtrar negocios con venta > 0, ordenar desc
   const neg = useMemo(
     () => [...(r?.venta_por_negocio || [])]
@@ -317,6 +371,93 @@ export default function Gerencial() {
               minH={120}
               rowH={36}
             />
+          </div>
+        </>
+      )}
+
+      {/* ── Metas por Negocio ── */}
+      {metasPorNegocio.length > 0 && (
+        <>
+          <SectionTitle>Metas por Negocio</SectionTitle>
+          <div className="table-card mb-6">
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>Negocio</th>
+                    <th style={{ textAlign: 'right' }}>Meta</th>
+                    <th style={{ textAlign: 'right' }}>Venta Real</th>
+                    <th style={{ textAlign: 'right' }}>Proyección</th>
+                    <th style={{ minWidth: '140px' }}>Cumplimiento</th>
+                    <th style={{ textAlign: 'right' }}>Falta / Exceso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metasPorNegocio.map((row, i) => {
+                    const col = !row.conMeta ? 'var(--cyan)'
+                      : row.pctC >= 100 ? 'var(--green)'
+                      : row.pctC >= 75  ? 'var(--amber)'
+                      : 'var(--red)';
+                    const barW = row.conMeta ? Math.min(row.pctC, 100) : 0;
+                    const exceso = row.falta < 0;
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>
+                          {row.negocio}
+                          {!row.conMeta && <span className="text-palumar-muted" style={{ fontSize: '10px', marginLeft: '6px' }}>sin meta</span>}
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          {row.conMeta ? fmt(row.meta) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--cyan)' }} className="font-mono-num">{fmt(row.venta)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--muted)' }} className="font-mono-num">{fmt(row.proyec)}</td>
+                        <td>
+                          {row.conMeta ? (
+                            <div className="flex items-center gap-2">
+                              <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)', position: 'relative' }}>
+                                <div style={{ height: '100%', borderRadius: '99px', width: `${barW}%`, background: col, transition: 'width 0.4s ease' }} />
+                              </div>
+                              <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{row.pctC.toFixed(1)}%</span>
+                            </div>
+                          ) : <span className="text-palumar-muted">—</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: !row.conMeta ? 'var(--muted)' : exceso ? 'var(--green)' : 'var(--red)' }} className="font-mono-num">
+                          {!row.conMeta ? '—' : exceso ? `+${fmt(Math.abs(row.falta))} exceso` : fmt(row.falta) + ' falta'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Fila total */}
+                  {metasPorNegocio.some(r2 => r2.conMeta) && (() => {
+                    const totalMeta  = metasPorNegocio.filter(r2 => r2.conMeta).reduce((s, r2) => s + r2.meta, 0);
+                    const totalVenta = metasPorNegocio.reduce((s, r2) => s + r2.venta, 0);
+                    const totalProyec= metasPorNegocio.reduce((s, r2) => s + r2.proyec, 0);
+                    const totalPct   = totalMeta > 0 ? Math.round(totalVenta / totalMeta * 1000) / 10 : 0;
+                    const totalFalta = totalMeta - totalVenta;
+                    const col2 = totalPct >= 100 ? 'var(--green)' : totalPct >= 75 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <tr style={{ borderTop: '2px solid var(--border-2)', fontWeight: 700 }}>
+                        <td>TOTAL</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(totalMeta)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--cyan)' }} className="font-mono-num">{fmt(totalVenta)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--muted)' }} className="font-mono-num">{fmt(totalProyec)}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
+                              <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(totalPct, 100)}%`, background: col2 }} />
+                            </div>
+                            <span style={{ color: col2, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{totalPct.toFixed(1)}%</span>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right', color: totalFalta <= 0 ? 'var(--green)' : 'var(--red)' }} className="font-mono-num">
+                          {totalFalta <= 0 ? `+${fmt(Math.abs(totalFalta))} exceso` : fmt(totalFalta) + ' falta'}
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
