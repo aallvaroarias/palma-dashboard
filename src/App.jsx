@@ -15,6 +15,8 @@ const Efectividad  = React.lazy(() => import('./components/views/Efectividad'));
 const Devoluciones = React.lazy(() => import('./components/views/Devoluciones'));
 const Clientes     = React.lazy(() => import('./components/views/Clientes'));
 const Cartera      = React.lazy(() => import('./components/views/Cartera'));
+const Nomina       = React.lazy(() => import('./components/views/Nomina'));
+const Inventario   = React.lazy(() => import('./components/views/Inventario'));
 
 function ViewFallback() {
   return (
@@ -25,18 +27,19 @@ function ViewFallback() {
 }
 
 export default function App() {
-  // Kick off data loading + polling
   useDashboard();
 
   const { loading, loadAll, resumen } = useDashboardStore();
   const [initialLoad, setInitialLoad] = React.useState(true);
 
-  // Hide initial overlay once data arrives
+  // Quitar overlay cuando resumen carga, o tras timeout de 30s si falla
   React.useEffect(() => {
-    if (resumen && initialLoad) {
-      setInitialLoad(false);
-    }
+    if (resumen && initialLoad) setInitialLoad(false);
   }, [resumen, initialLoad]);
+  React.useEffect(() => {
+    const t = setTimeout(() => setInitialLoad(false), 30000);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <>
@@ -57,7 +60,9 @@ export default function App() {
               <Route path="/devoluciones"  element={<Devoluciones />} />
               <Route path="/clientes"      element={<Clientes />} />
               <Route path="/cartera"       element={<Cartera />} />
-              <Route path="*"              element={<Navigate to="/" replace />} />
+              <Route path="/nomina"        element={<Nomina />} />
+              <Route path="/inventario"   element={<Inventario />} />
+              <Route path="*"             element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </main>

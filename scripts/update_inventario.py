@@ -22,131 +22,135 @@ if len(sys.argv) > 1:
     excel_path = sys.argv[1]
 else:
     patron = os.path.expanduser('~/Downloads/*INVENTARIO*.XLS*')
-    archivos = sorted(glob.glob(patron, recursive=False), key=os.path.getmtime, reverse=True)
+    archivos = sorted(glob.glob(patron), key=os.path.getmtime, reverse=True)
     if not archivos:
         patron2 = os.path.expanduser('~/Downloads/*inventario*.xls*')
         archivos = sorted(glob.glob(patron2), key=os.path.getmtime, reverse=True)
     if not archivos:
-        print("No se encontró ningún archivo INVENTARIO en ~/Downloads.")
-        print("Uso: python3 scripts/update_inventario.py ruta/al/archivo.xlsx")
+        print("❌  No se encontró ningún archivo INVENTARIO en ~/Downloads.")
+        print("    Descárgalo primero o pasa la ruta como argumento.")
         sys.exit(1)
     excel_path = archivos[0]
-    print(f"Archivo encontrado: {os.path.basename(excel_path)}")
+    print(f"📂  Archivo: {os.path.basename(excel_path)}")
 
 if not os.path.exists(excel_path):
-    print(f"Archivo no encontrado: {excel_path}")
+    print(f"❌  Archivo no encontrado: {excel_path}")
     sys.exit(1)
 
-# ── Configuración ─────────────────────────────────────────────────────────────
-SHEETS = {
-    'PANAMA':    'panama',
-    'CENTRALES': 'centrales',
-    'CHIRIQUI':  'chiriqui',
-    'INV. FRIO': 'frio',
-}
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def safe_float(v, default=None):
+    try:
+        f = float(v)
+        return None if (f != f) else round(abs(f), 4)
+    except Exception:
+        return default
 
-COL_MAP = {
-    'Material':               'codigo',
-    'Descripción Material':   'nombre',
-    'UMB':                    'unidad',
-    'Inv. Disponible':        'inv',
-    'Venta Mes':              'venta_mes',
-    'Stock En Pedido':        'pedido',
-    'Cobertura Sin Transito': 'cobertura',
-    'Buffer':                 'buffer',
-    'Codigo de Barras':       'cod_barras',
-    'ADU (Consumo Promedio)': 'adu',
-    'Inv. TLA':               'inv_tla',
-    'Proveedor':              'proveedor',
-    'UN X DISP.':             'un_x_disp',
-}
+def safe_str(v):
+    s = str(v).strip() if pd.notna(v) else ''
+    return '' if s == 'nan' else s
 
-# ── Extraer fecha del archivo ─────────────────────────────────────────────────
-def extraer_fecha(path):
-    nombre = os.path.basename(path)
-    for part in nombre.split('_'):
-        part = part.replace('-', '')
-        if len(part) == 8 and part.isdigit():
-            try:
-                return datetime.strptime(part, '%Y%m%d').strftime('%Y-%m-%d')
-            except ValueError:
-                pass
-    return datetime.today().strftime('%Y-%m-%d')
+# ── Leer hojas de secos ───────────────────────────────────────────────────────
+def leer_secos(excel, sheet):
+    df = pd.read_excel(excel, sheet_name=sheet, header=None)
+    # Fecha en fila 2 (índice 2), columna 2
+    fecha_raw = df.iloc[2][2]
+    if isinstance(fecha_raw, datetime):
+        fecha = fecha_raw.strftime('%Y-%m-%d')
+    else:
+        fecha = str(fecha_raw)[:10]
 
-fecha = extraer_fecha(excel_path)
+    productos = []
+    for _, r in df.iloc[5:].iterrows():
+        cod = safe_str(r[0])
+        if not cod or cod in ('nan', 'Material', ''):
+            continue
+        productos.append({
+            'codigo':    cod,
+            'nombre':    safe_str(r[1]),
+            'unidad':    safe_float(r[2], 1),
+            'inv':       safe_float(r[3], 0),
+            'venta_mes': safe_float(r[4], 0),
+            'pedido':    safe_float(r[5], 0),
+            'cobertura': safe_float(r[6], 0),
+            'buffer':    safe_float(r[7], 0),
+            'cod_barras':safe_float(r[8]),
+            'inv_tla':   safe_float(r[10], 0),
+            'proveedor': safe_str(r[11]),
+        })
+    return fecha, productos
 
-# ── Leer hojas ────────────────────────────────────────────────────────────────
+# ── Leer hoja de frío ─────────────────────────────────────────────────────────
+def leer_frio(excel):
+    df = pd.read_excel(excel, sheet_name='INV. FRIO', header=None)
+    productos = []
+    for _, r in df.iloc[5:].iterrows():
+        linea = safe_str(r[0])
+        cod   = safe_str(r[1])
+        if not cod or cod in ('nan', 'Material', ''):
+            continue
+        productos.append({
+            'linea':         linea,
+            'codigo':        cod,
+            'nombre':        safe_str(r[2]),
+            'forecast':      safe_float(r[3], 0),
+            'venta_mes':     safe_float(r[4], 0),
+            'cumplimiento':  safe_float(r[5], 0),
+            'inv_centrales': safe_float(r[6], 0),
+            'inv_chiriqui':  safe_float(r[7], 0),
+            'inv_planta':    safe_float(r[8], 0),
+            'inv_br24':      safe_float(r[9], 0),
+            'transito_br21': safe_float(r[10], 0),
+            'cod_barras':    safe_float(r[11]),
+            'estatus':       safe_str(r[12]),
+        })
+    return productos
+
+# ── Procesar ──────────────────────────────────────────────────────────────────
 xl = pd.ExcelFile(excel_path)
-hojas_disponibles = xl.sheet_names
-result = {'fecha': fecha}
+hojas = xl.sheet_names
 
-for sheet, key in SHEETS.items():
-    if sheet not in hojas_disponibles:
-        print(f"  Hoja '{sheet}' no encontrada, se omite.")
-        result[key] = []
-        continue
+fecha_c, centrales = leer_secos(excel_path, 'CENTRALES') if 'CENTRALES' in hojas else ('', [])
+fecha_q, chiriqui  = leer_secos(excel_path, 'CHIRIQUI')  if 'CHIRIQUI'  in hojas else ('', [])
+frio               = leer_frio(excel_path)               if 'INV. FRIO' in hojas else []
+fecha = fecha_c or fecha_q
 
-    df_raw = pd.read_excel(excel_path, sheet_name=sheet, header=None)
-
-    # Encontrar fila de encabezado (la que tiene 'Material')
-    hdr_row = None
-    for i, row in df_raw.iterrows():
-        if 'Material' in row.values:
-            hdr_row = i
-            break
-
-    if hdr_row is None:
-        print(f"  Hoja '{sheet}': no se encontró encabezado, se omite.")
-        result[key] = []
-        continue
-
-    df = pd.read_excel(excel_path, sheet_name=sheet, header=hdr_row)
-    df = df.dropna(how='all')
-    df = df[pd.to_numeric(df['Material'], errors='coerce').notna()]
-
-    records = []
-    for _, row in df.iterrows():
-        rec = {}
-        for col_orig, col_new in COL_MAP.items():
-            val = row.get(col_orig, 0.0) if col_orig in df.columns else 0.0
-            if pd.isna(val):
-                val = 0.0
-            elif isinstance(val, float):
-                # venta_mes y adu vienen negativos como convención de salida
-                if col_new in ('venta_mes', 'adu'):
-                    val = round(abs(val), 6)
-                else:
-                    val = round(val, 6)
-            rec[col_new] = val
-        # Cobertura puede venir como string ("Sin Forecats") → 0
-        if not isinstance(rec.get('cobertura'), (int, float)):
-            rec['cobertura'] = 0.0
-        records.append(rec)
-
-    result[key] = records
-    print(f"  {sheet}: {len(records)} productos")
+data = {
+    'fecha':     fecha,
+    'centrales': centrales,
+    'chiriqui':  chiriqui,
+    'frio':      frio,
+}
 
 # ── Guardar JSON ──────────────────────────────────────────────────────────────
-script_dir = os.path.dirname(os.path.abspath(__file__))
-output_path = os.path.join(script_dir, '..', 'api', 'inventario_data.json')
-output_path = os.path.normpath(output_path)
+script_dir  = os.path.dirname(os.path.abspath(__file__))
+repo_dir    = os.path.normpath(os.path.join(script_dir, '..'))
+output_path = os.path.join(repo_dir, 'api', 'inventario_data.json')
 
 with open(output_path, 'w', encoding='utf-8') as f:
-    json.dump(result, f, ensure_ascii=False, indent=2)
+    json.dump(data, f, ensure_ascii=False, indent=2)
 
-print(f"\nJSON actualizado: {output_path}")
-print(f"Fecha: {fecha}")
-total = sum(len(v) for v in result.values() if isinstance(v, list))
-print(f"Total productos: {total}")
+print(f"✅  JSON generado — Corte: {fecha}")
+print(f"    Centrales: {len(centrales)} | Chiriquí: {len(chiriqui)} | Frío: {len(frio)}")
 
-# ── Git commit + push automático ─────────────────────────────────────────────
-repo_dir = os.path.join(script_dir, '..')
-print("\nSubiendo a Vercel...")
+# ── Deploy a Vercel ───────────────────────────────────────────────────────────
+print("\n🚀  Desplegando a Vercel...")
 try:
-    subprocess.check_call(['git', 'add', 'api/inventario_data.json'], cwd=repo_dir)
-    subprocess.check_call(['git', 'commit', '-m', f'inventario: actualización {fecha}'], cwd=repo_dir)
-    subprocess.check_call(['git', 'push'], cwd=repo_dir)
-    print("Listo. Vercel desplegará en ~1 minuto.")
-except subprocess.CalledProcessError as e:
-    print(f"Error en git: {e}")
-    print("Puedes hacer el push manualmente: git add api/inventario_data.json && git commit -m 'inventario' && git push")
+    result = subprocess.run(
+        ['npx', 'vercel', '--prod', '--yes'],
+        cwd=repo_dir,
+        capture_output=False
+    )
+    if result.returncode == 0:
+        print("\n✅  ¡Inventario actualizado en el dashboard!")
+    else:
+        raise Exception("vercel retornó error")
+except Exception:
+    print("⚠️   Deploy via Vercel CLI falló. Intentando con git push...")
+    try:
+        subprocess.check_call(['git', 'add', 'api/inventario_data.json'], cwd=repo_dir)
+        subprocess.check_call(['git', 'commit', '-m', f'inventario: {fecha}'], cwd=repo_dir)
+        subprocess.check_call(['git', 'push'], cwd=repo_dir)
+        print("✅  Subido via git push. Vercel desplegará en ~1 minuto.")
+    except Exception as e:
+        print(f"❌  Error: {e}")
+        print("    Corre manualmente: npx vercel --prod --yes")

@@ -713,7 +713,8 @@ const HOJAS = {
   CLIENTES_NUEVOS:    'CLIENTES_NUEVOS',
   MAESTRO_CLIENTES:   'MAESTRO_CLIENTES',
   CUOTAS:             'CUOTAS',           // metas mensuales por asesor
-  CARTERA:            'CARTERA'           // reporte CxC (pegar desde sistema)
+  CARTERA:            'CARTERA',          // reporte CxC (pegar desde sistema)
+  PRODUCTOS_CLAVE:    'PRODUCTOS_CLAVE'  // catálogo: Nombre|Detalle|GTINSE|SAP|Negocio|TR|Estado
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -725,34 +726,72 @@ function doGet(e) {
 
   const callback = e.parameter.callback || '';
   const sheet    = String(e.parameter.sheet || 'resumen').toLowerCase();
+  const t0       = Date.now();
 
   try {
     let data;
 
     switch (sheet) {
-      case 'resumen':       data = getResumen();          break;
-      case 'vendedores':    data = getVendedores();       break;
-      case 'cobertura':     data = getCobertura();        break;
-      case 'cob_negocio':   data = getCoberturaNegocios(); break;
-      case 'efectividad':   data = getEfectividad();      break;
-      case 'devoluciones':  data = getDevoluciones();     break;
-      case 'clientes_cero': data = getClientesCero();     break;
+      // ── Rápidos: leen hojas pre-computadas (<3 s) ──────────────────────────
+      case 'cobertura':       data = getCobertura();           break;
+      case 'cob_negocio':     data = getCoberturaNegocios();   break;
+      case 'efectividad':     data = getEfectividad();         break;
+      case 'cuotas':          data = getCuotas();              break;
+      case 'cartera':         data = getCartera();             break;
+      case 'clientes_cero':   data = getClientesCero();        break;
       case 'clientes_nuevos': data = getClientesNuevos(e.parameter.desde, e.parameter.hasta); break;
-      case 'tendencia':     data = getTendencia();        break;
-      case 'skus':          data = getTopSKUs();          break;
-      case 'marcas':        data = getTopMarcas();        break;
-      case 'top_clientes':  data = getTopClientes();      break;
-      case 'cuotas':        data = getCuotas();           break;
-      case 'cartera':       data = getCartera();          break;
-      case 'cuota_debug':   data = getCuotaDebug_();      break;
-      case 'diagnostico':   data = getDiagnosticoAPI();   break;
-      case 'fechas_debug':  data = getFechasDebug_();      break;
-      default:              data = getResumen();          break;
+      case 'productos_clave': data = getProductosClave_();     break;
+
+      // ── Pesados: leen BASE_ACUMULADA — con cache 300 s ────────────────────
+      case 'resumen':
+        data = withCache_('resumen',      300, getResumen);      break;
+      case 'vendedores':
+        data = withCache_('vendedores',   300, getVendedores);   break;
+      case 'devoluciones':
+        data = withCache_('devoluciones', 300, getDevoluciones); break;
+      case 'tendencia':
+        data = withCache_('tendencia',    300, getTendencia);    break;
+      case 'marcas':
+        data = withCache_('marcas',       300, getTopMarcas);    break;
+      case 'skus':
+        data = withCache_('skus',         300, getTopSKUs);      break;
+      case 'top_clientes':
+        data = withCache_('top_clientes', 300, getTopClientes);  break;
+      case 'necesidad_cliente':
+        data = withCache_('necesidad',    300, getNecesidadCliente); break;
+      case 'dn_marcas':
+        data = withCache_('dn_marcas',    300, getDNMarcas);     break;
+
+      // ── Productos clave (pesados) ─────────────────────────────────────────
+      case 'cobertura_productos_clave':
+        data = withCache_('cob_pc',          300, getCoberturaProductosClave_);         break;
+      case 'cobertura_pc_vendedor':
+        data = withCache_('cob_pc_vend',     300, getCoberturaProductosClaveVendedor_); break;
+      case 'clientes_sin_pc':
+        data = withCache_('clientes_sin_pc', 300, getClientesSinProductosClave_);       break;
+      case 'pc_detalle':
+        data = withCache_('pc_detalle',      300, getProductosClaveDetalle_);           break;
+
+      // ── Utilidades ────────────────────────────────────────────────────────
+      case 'warm_cache':
+        warmCache_();
+        data = { ok: true, ms: Date.now() - t0 };
+        break;
+      case 'invalidar_cache':
+        invalidarCache_();
+        data = { ok: true };
+        break;
+      case 'cuota_debug':   data = getCuotaDebug_();     break;
+      case 'diagnostico':   data = getDiagnosticoAPI();  break;
+      case 'fechas_debug':  data = getFechasDebug_();    break;
+      default:              data = getResumen();         break;
     }
 
+    Logger.log('[doGet] sheet=' + sheet + ' ms=' + (Date.now() - t0));
     return output_({ ok: true, data, ts: new Date().toISOString() }, callback);
 
   } catch (err) {
+    Logger.log('[doGet ERROR] sheet=' + sheet + ' ms=' + (Date.now() - t0) + ' err=' + (err && err.message));
     return output_({
       ok:    false,
       error: err && err.message ? err.message : String(err),
@@ -789,11 +828,10 @@ function normalizarTexto_(v) {
     .replace(/\s+/g, '').replace(/-/g, '').replace(/_/g, '');
 }
 
-// Solo son averías estos cuatro conceptos exactos.
-// "AVALADOS POR CALIDAD" queda como devolución normal.
+// Averías: daño físico al producto (transporte, empaque, vencimiento).
+// "AVALADOS POR VENTAS" y "AVALADOS POR CALIDAD" quedan como devolución normal.
 const CONCEPTOS_AVERIA_ = [
   'PRODUCTOVENCIDO',
-  'AVALADOSPORVENTAS',
   'AVERIAENTRANSPORTE',
   'PERDIDADEVACIO'
 ];
@@ -905,46 +943,79 @@ function sheetToJSON(sheetName) {
 // CUOTAS / METAS MENSUALES
 // ════════════════════════════════════════════════════════════════════
 
-// Lee la hoja CUOTAS y devuelve un mapa { cod → cuota }.
-// La hoja debe tener: A=Asesor (formato "COD-NOMBRE"), B=Cuota.
-// Actualiza la hoja cada mes para cambiar las metas; no toques el código.
+// Lee la hoja CUOTAS y devuelve un mapa { cod → cuota_total }.
+// Estructura: A=Asesor | B=Sede | C=Negocio | D=Meta
+// Retrocompatible: 2 cols (A=Asesor, B=Meta) y 3 cols (A=Asesor, B=Negocio, C=Meta) siguen funcionando.
 function getCuotasMap_() {
   const h = getSheet_(HOJAS.CUOTAS);
   if (!h || h.getLastRow() < 2) return {};
 
-  const data = h.getDataRange().getValues();
-  const map  = {};
+  const data  = h.getDataRange().getValues();
+  const ncols = (data[0] || []).length;
+  const map   = {};
 
   for (let i = 1; i < data.length; i++) {
     const asesorRaw = String(data[i][0] || '').trim();
-    const cuotaRaw  = data[i][1];
     if (!asesorRaw) continue;
-
-    const cod   = obtenerCodAsesor_(asesorRaw);
-    // Acepta número, texto con comas ("40,683.00") o con símbolo "$" ("$40,683.00")
-    const cuota = parseFloat(String(cuotaRaw || '0').replace(/[$,]/g, '')) || 0;
-    if (cod) map[cod] = cuota;
+    const cod = obtenerCodAsesor_(asesorRaw);
+    if (!cod) continue;
+    // 4 cols: meta en D (idx 3) | 3 cols: meta en C (idx 2) | legacy: meta en B (idx 1)
+    const metaIdx   = ncols >= 4 ? 3 : (ncols === 3 ? 2 : 1);
+    const cuota     = parseFloat(String(data[i][metaIdx] || '0').replace(/[$,]/g, '')) || 0;
+    map[cod] = (map[cod] || 0) + cuota;
   }
 
   return map;
 }
 
-// Endpoint ?sheet=cuotas — devuelve la lista completa de metas.
+// Endpoint ?sheet=cuotas — devuelve metas totales + sede + desglose por negocio.
 function getCuotas() {
   const h = getSheet_(HOJAS.CUOTAS);
   if (!h || h.getLastRow() < 2) return [];
 
-  return h.getDataRange().getValues().slice(1)
-    .filter(r => String(r[0] || '').trim())
-    .map(r => {
-      const asesorRaw = String(r[0] || '').trim();
-      const cuota     = parseFloat(String(r[1] || '0').replace(/[$,]/g, '')) || 0;
-      return {
-        cod:    obtenerCodAsesor_(asesorRaw),
-        asesor: asesorRaw,
-        cuota:  round2_(cuota)
-      };
-    });
+  const allData = h.getDataRange().getValues();
+  const ncols   = (allData[0] || []).length;
+  const data    = allData.slice(1);
+
+  // Columnas según número de columnas detectadas
+  // 4 cols: A=Asesor B=Sede C=Negocio D=Meta
+  // 3 cols: A=Asesor B=Negocio C=Meta  (sin sede)
+  // 2 cols: A=Asesor B=Meta             (legacy)
+  const tieneSede    = ncols >= 4;
+  const tieneNegocio = ncols >= 3;
+
+  const porCod = {};
+  data.forEach(function(r) {
+    const asesorRaw = String(r[0] || '').trim();
+    if (!asesorRaw) return;
+    const cod = obtenerCodAsesor_(asesorRaw);
+    if (!cod) return;
+
+    const sede     = tieneSede    ? String(r[1] || '').trim() : '';
+    const negocio  = tieneSede    ? String(r[2] || '').trim()
+                   : tieneNegocio ? String(r[1] || '').trim() : '';
+    const metaIdx  = tieneSede ? 3 : (tieneNegocio ? 2 : 1);
+    const cuota    = parseFloat(String(r[metaIdx] || '0').replace(/[$,]/g, '')) || 0;
+
+    if (!porCod[cod]) porCod[cod] = { cod, asesor: asesorRaw, sede: sede, por_negocio: [] };
+    // Actualizar sede si estaba vacía
+    if (!porCod[cod].sede && sede) porCod[cod].sede = sede;
+
+    const label = negocio || 'General';
+    porCod[cod].por_negocio.push({ negocio: label, meta: round2_(cuota) });
+  });
+
+  return Object.values(porCod).map(function(v) {
+    const cuota_total = round2_(v.por_negocio.reduce(function(s, n) { return s + n.meta; }, 0));
+    return {
+      cod:         v.cod,
+      asesor:      v.asesor,
+      sede:        v.sede,
+      cuota:       cuota_total,
+      cuota_total: cuota_total,
+      por_negocio: v.por_negocio
+    };
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -958,13 +1029,18 @@ function getCuotas() {
 // r[12]=tipo_prod  r[13]=periodo_filtro
 
 function getDevolucionesPeriodoRaw_(periodoYYYYMM) {
-  const hDev = getSheet_(HOJAS.DEVOLUCIONES);
+  var hDev = getSheet_(HOJAS.DEVOLUCIONES);
   if (!hDev || hDev.getLastRow() < 2) return [];
 
-  return hDev.getDataRange().getValues().slice(1).filter(r => {
-    const periodo  = periodoYYYYMM_(r[0]);
-    const cod      = obtenerCodAsesor_(r[1]);
-    const vendedor = String(r[2] || '').trim();
+  return hDev.getDataRange().getValues().slice(1).filter(function(r) {
+    // r[13]=periodo_filtro (período contable/dashboard) — columna primaria para filtrar.
+    // r[0] =periodo_mes   (fecha del movimiento original) — fallback si r[13] está vacío.
+    // Usar periodo_filtro evita que devoluciones de ventas de meses anteriores queden en $0.
+    var periodoFiltro = periodoYYYYMM_(r[13]);
+    var periodoMes    = periodoYYYYMM_(r[0]);
+    var periodo       = periodoFiltro || periodoMes;
+    var cod           = obtenerCodAsesor_(r[1]);
+    var vendedor      = String(r[2] || '').trim();
     if (periodoYYYYMM && periodo !== periodoYYYYMM) return false;
     return esVendedorValido_(cod, vendedor);
   });
@@ -1012,6 +1088,123 @@ function getDevolucionesPorCodAsesor_(periodoYYYYMM) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// CACHE (Apps Script CacheService)
+// TTL por defecto: 300 s (5 min). Límite por clave en CacheService: ≈100 KB.
+// Si el resultado serializado supera ese límite, put() falla silenciosamente
+// y la función se ejecuta normalmente sin cache.
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Ejecuta computeFn, guarda el resultado en CacheService y lo retorna.
+ * En llamadas siguientes (cache vivo) retorna el valor cacheado sin recalcular.
+ */
+function withCache_(cacheKey, ttlSec, computeFn) {
+  const cache = CacheService.getScriptCache();
+  const t0    = Date.now();
+
+  // ── Intentar devolver desde cache ──────────────────────────────────────────
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    Logger.log('[Cache HIT]  ' + cacheKey + ' en ' + (Date.now() - t0) + ' ms');
+    try { return JSON.parse(cached); } catch (_) { /* JSON corrupto → recalcular */ }
+  }
+
+  // ── Cache miss: calcular ───────────────────────────────────────────────────
+  Logger.log('[Cache MISS] ' + cacheKey + ' — calculando...');
+  const t1     = Date.now();
+  const result = computeFn();
+  const ms     = Date.now() - t1;
+  Logger.log('[Cache CALC] ' + cacheKey + ' = ' + ms + ' ms');
+
+  // ── Intentar guardar en cache (puede fallar si JSON > 100 KB) ─────────────
+  // La función SIEMPRE devuelve el resultado, aunque el cache falle.
+  try {
+    const json = JSON.stringify(result);
+    Logger.log('[Cache SIZE] ' + cacheKey + ' = ' + json.length + ' bytes');
+    if (json.length > 90000) {
+      Logger.log('[Cache WARN] ' + cacheKey +
+        ' cerca del límite de CacheService (' + json.length + ' bytes)');
+    }
+    cache.put(cacheKey, json, ttlSec);
+    Logger.log('[Cache PUT]  ' + cacheKey +
+      ' guardado (' + ms + ' ms, ' + json.length + ' bytes)');
+  } catch (e) {
+    // CacheService rechazó el valor (demasiado grande u otro error).
+    // Esto NO es un error fatal: el resultado se devuelve igualmente,
+    // pero sin quedar cacheado (la próxima llamada volverá a computar).
+    Logger.log('[Cache PUT FAIL] ' + cacheKey + ' — no se pudo cachear: ' + e.message);
+  }
+  return result;
+}
+
+/**
+ * Pre-calienta el cache de los endpoints AGREGADOS (no los de detalle).
+ *
+ * ── Qué calienta ────────────────────────────────────────────────────────────
+ *   resumen, vendedores, devoluciones, tendencia, dn_marcas, marcas, skus,
+ *   top_clientes, necesidad, cob_pc, cob_pc_vend
+ *
+ * ── Qué NO calienta (cargan bajo demanda) ───────────────────────────────────
+ *   pc_detalle       — puede superar 100 KB; solo cuando el usuario lo pide
+ *   clientes_sin_pc  — puede superar 100 KB; solo cuando el usuario lo pide
+ *
+ * ── Configurar trigger ──────────────────────────────────────────────────────
+ *   Apps Script → Activadores → Basado en tiempo → Temporizador de minutos
+ *   → Cada 5 minutos → función: warmCache_
+ *
+ * ── LockService ─────────────────────────────────────────────────────────────
+ *   Si un ciclo de calentamiento tarda más de 5 min, el siguiente trigger
+ *   llegaría mientras el anterior todavía corre. LockService lo evita:
+ *   el nuevo intento espera 5 s y, si el lock no queda libre, sale sin hacer nada.
+ */
+function warmCache_() {
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(5000)) {
+    Logger.log('[warmCache_] Saltado — ya hay otra ejecución activa');
+    return;
+  }
+
+  try {
+    const t0 = Date.now();
+    Logger.log('[warmCache_] Iniciando precalentamiento...');
+
+    // Solo endpoints AGREGADOS cuya respuesta cabe en CacheService (< 100 KB)
+    withCache_('resumen',      300, getResumen);      // ~1.6 KB
+    withCache_('vendedores',   300, getVendedores);   // ~12 KB
+    withCache_('tendencia',    300, getTendencia);    // ~0.1 KB
+    withCache_('dn_marcas',    300, getDNMarcas);     // ~10 KB
+    withCache_('marcas',       300, getTopMarcas);    // ~1.4 KB
+    withCache_('skus',         300, getTopSKUs);      // ~28 KB
+    withCache_('top_clientes', 300, getTopClientes);  // ~88 KB (cercano al límite)
+    withCache_('necesidad',    300, getNecesidadCliente);
+    withCache_('cob_pc',       300, getCoberturaProductosClave_);
+    withCache_('cob_pc_vend',  300, getCoberturaProductosClaveVendedor_);
+    // ⚠ NO calentar — respuesta > 100 KB (CacheService no puede almacenarlos):
+    //   'devoluciones'   ~219 KB — incluye array `detalle` completo
+    //   'clientes_sin_pc' ~359 KB — lista completa de clientes
+    //   'pc_detalle'      ~10 KB  — pequeño; se excluye por ser detalle bajo demanda
+
+    Logger.log('[warmCache_] Completado en ' + (Date.now() - t0) + ' ms');
+  } catch (err) {
+    Logger.log('[warmCache_] ERROR: ' + err.message);
+    throw err;  // re-lanzar para que Apps Script lo registre como fallo del trigger
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Invalida todo el cache (correr tras actualizar datos en Sheets). */
+function invalidarCache_() {
+  CacheService.getScriptCache().removeAll([
+    'resumen', 'vendedores', 'devoluciones', 'tendencia',
+    'dn_marcas', 'marcas', 'skus', 'top_clientes',
+    'necesidad', 'cob_pc', 'cob_pc_vend', 'clientes_sin_pc', 'pc_detalle'
+  ]);
+  Logger.log('[invalidarCache_] Cache limpiado.');
+}
+
+// ════════════════════════════════════════════════════════════════════
 // RESUMEN GLOBAL
 // ════════════════════════════════════════════════════════════════════
 
@@ -1021,100 +1214,252 @@ function getResumen() {
   const hEfR = getSheet_(HOJAS.EFECTIVIDAD_RESUMEN);
   if (!hB) return {};
 
+  // Fecha de corte desde A1 de CARGA_DIARIA
+  const hC = getSheet_(HOJAS.CARGA_DIARIA || 'CARGA_DIARIA');
+  const fechaCorte = hC ? parsearFecha(hC.getRange('A1').getValue()) : null;
+
   const periodoActual = getPeriodoActualDesdeBase_();
   const mesData       = getBasePeriodoActual_();
 
-  // Cuotas del equipo
-  const cuotaMap   = getCuotasMap_();
-  const cuotaTotal = Object.values(cuotaMap).reduce((s, v) => s + v, 0);
+  // ── Mapa cod→sede para desglose por sede ──────────────────────────────────
+  const sedeMap = cargarSedeMap_();
+  const SEDES   = ['TODOS', 'CENTRALES', 'CHIRIQUI', 'SIN_SEDE'];
 
-  // Venta neta VMXC (Vta + ITMBS, positivos y negativos; sin BOD100)
-  let ventaNetaVMXC      = 0;
-  let ventaPositivaVMXC  = 0;
-  let ventaNegativaVMXC  = 0;
-  const clientesImp = new Set();
-  const skusActivos = new Set();
+  // Normaliza el string de sede crudo al valor canónico
+  function normSedeCod_(cod) {
+    var raw = String(sedeMap[cod] || '').toUpperCase().trim()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (raw.indexOf('CENTRAL')  >= 0) return 'CENTRALES';
+    if (raw.indexOf('CHIRIQUI') >= 0) return 'CHIRIQUI';
+    return raw || 'SIN_SEDE';
+  }
 
-  mesData.forEach(r => {
-    const valor    = parseFloat(r[14]) || 0;
-    const cantNeta = parseFloat(r[13]) || 0;
-    ventaNetaVMXC += valor;
-    if (valor > 0) {
-      ventaPositivaVMXC += valor;
-      clientesImp.add(String(r[1]));
-    }
-    if (valor < 0) ventaNegativaVMXC += Math.abs(valor);
-    if (cantNeta > 0) skusActivos.add(String(r[6]));
+  // Acumuladores por sede
+  var sedeTotales = {};
+  SEDES.forEach(function(s) {
+    sedeTotales[s] = { ventaNeta: 0, ventaPositiva: 0, ventaNegativa: 0,
+                       clientesImp: {}, skusActivos: {}, negMap: {} };
   });
 
-  // Devoluciones y averías siempre desde hoja DEVOLUCIONES
-  const totalesDev    = getTotalesDevolucionesPeriodo_(periodoActual);
-  const totalDevol    = totalesDev.devoluciones;
-  const totalAverias  = totalesDev.averias;
+  // Cuotas del equipo
+  const cuotaMap   = getCuotasMap_();
+  const cuotaTotal = Object.values(cuotaMap).reduce(function(s, v) { return s + v; }, 0);
+
+  // Cuotas por sede
+  var cuotaPorSede = {};
+  SEDES.forEach(function(s) { cuotaPorSede[s] = 0; });
+  cuotaPorSede['TODOS'] = cuotaTotal;
+  Object.keys(cuotaMap).forEach(function(cod) {
+    var s = normSedeCod_(cod);
+    cuotaPorSede[s] += cuotaMap[cod];
+  });
+
+  // ── Loop BASE_ACUMULADA: global + por sede de una sola pasada ─────────────
+  var skusActivosGlobal = {};
+  mesData.forEach(function(row) {
+    var cod      = obtenerCodAsesor_(row[3]);
+    var valor    = parseFloat(row[14]) || 0;
+    var cantNeta = parseFloat(row[13]) || 0;
+    var neg      = String(row[8] || '').trim();
+    var cli      = String(row[1]);
+    var sku      = String(row[6]);
+    var sede     = normSedeCod_(cod);
+
+    // TODOS
+    sedeTotales['TODOS'].ventaNeta += valor;
+    if (valor > 0) {
+      sedeTotales['TODOS'].ventaPositiva += valor;
+      sedeTotales['TODOS'].clientesImp[cli] = true;
+      sedeTotales[sede].clientesImp[cli]    = true;
+    }
+    if (valor < 0) sedeTotales['TODOS'].ventaNegativa += Math.abs(valor);
+    if (cantNeta > 0) { skusActivosGlobal[sku] = true; sedeTotales['TODOS'].skusActivos[sku] = true; }
+    if (neg) sedeTotales['TODOS'].negMap[neg] = (sedeTotales['TODOS'].negMap[neg] || 0) + valor;
+
+    // Por sede
+    sedeTotales[sede].ventaNeta += valor;
+    if (neg) sedeTotales[sede].negMap[neg] = (sedeTotales[sede].negMap[neg] || 0) + valor;
+    if (cantNeta > 0) sedeTotales[sede].skusActivos[sku] = true;
+  });
+
+  // ── Devoluciones globales — MISMA fuente que el resumen histórico ───────────
+  // getTotalesDevolucionesPeriodo_ incluye TODAS las filas válidas de DEVOLUCIONES
+  // (incluso las que no tienen cod parseable), garantizando compatibilidad exacta
+  // con el comportamiento anterior.
+  var totalesDev   = getTotalesDevolucionesPeriodo_(periodoActual);
+  const totalDevol   = totalesDev.devoluciones;
+  const totalAverias = totalesDev.averias;
   const descuentoTotal = totalDevol + totalAverias;
 
-  const ventaNeta  = ventaNetaVMXC;
-  const ventaBruta = ventaNeta + descuentoTotal;
+  // ── Devoluciones por sede — segunda pasada sobre las mismas filas ─────────
+  // Para el desglose por sede se itera directamente sobre las filas crudas.
+  // Las filas sin cod parseable van a SIN_SEDE (no se pierden).
+  var sedeDevTotales = {};
+  SEDES.forEach(function(s) { sedeDevTotales[s] = { devoluciones: 0, averias: 0 }; });
 
-  // Cobertura global
+  getDevolucionesPeriodoRaw_(periodoActual).forEach(function(row) {
+    var monto    = Math.abs(parseFloat(row[10]) || 0);
+    var concepto = String(row[11] || '').trim();
+    if (!monto) return;
+    var esAv = esAveria_(concepto);
+    var d    = esAv ? 0 : monto;
+    var a    = esAv ? monto : 0;
+    // Siempre sumamos al total global (debe coincidir con totalDevol / totalAverias)
+    sedeDevTotales['TODOS'].devoluciones += d;
+    sedeDevTotales['TODOS'].averias      += a;
+    // Por sede según cod del asesor (SIN_SEDE si no es parseable)
+    var cod  = obtenerCodAsesor_(row[1]);
+    var sede = cod ? normSedeCod_(cod) : 'SIN_SEDE';
+    sedeDevTotales[sede].devoluciones += d;
+    sedeDevTotales[sede].averias      += a;
+  });
+
+  // Auditoría (visible en Apps Script Logs)
+  Logger.log('[ResumenPorSede] TODOS  dev=' + totalDevol   + '  av=' + totalAverias   + '  vn=' + (sedeTotales['TODOS'].ventaNeta));
+  Logger.log('[ResumenPorSede] TODOS  sedeDevTotales.dev=' + sedeDevTotales['TODOS'].devoluciones);
+  Logger.log('[ResumenPorSede] CENTRALES dev=' + sedeDevTotales['CENTRALES'].devoluciones + '  av=' + sedeDevTotales['CENTRALES'].averias);
+  Logger.log('[ResumenPorSede] CHIRIQUI  dev=' + sedeDevTotales['CHIRIQUI'].devoluciones  + '  av=' + sedeDevTotales['CHIRIQUI'].averias);
+  Logger.log('[ResumenPorSede] SIN_SEDE  dev=' + sedeDevTotales['SIN_SEDE'].devoluciones  + '  av=' + sedeDevTotales['SIN_SEDE'].averias);
+
+  const ventaNetaVMXC     = sedeTotales['TODOS'].ventaNeta;
+  const ventaPositivaVMXC = sedeTotales['TODOS'].ventaPositiva;
+  const ventaNegativaVMXC = sedeTotales['TODOS'].ventaNegativa;
+  const ventaNeta         = ventaNetaVMXC;
+  const ventaBruta        = ventaNeta + descuentoTotal;
+  const clientesImpGlobal = Object.keys(sedeTotales['TODOS'].clientesImp);
+
+  // ── Cobertura: global + por sede (RESUMEN_COBERTURA) ─────────────────────
+  var cobPorSede = {};
+  SEDES.forEach(function(s) { cobPorSede[s] = { maestro: 0, impactados: 0, pct: 0 }; });
+
   let coberturaGlobal = 0, totalMaestro = 0, totalImpactados = 0;
   if (hRC && hRC.getLastRow() > 1) {
     const rcData   = hRC.getDataRange().getValues().slice(1);
-    const totalRow = rcData.find(r => String(r[0]||'').toUpperCase().includes('TOTAL'));
+    const totalRow = rcData.find(function(rr) { return String(rr[0]||'').toUpperCase().indexOf('TOTAL') >= 0; });
+
     if (totalRow) {
       totalMaestro    = parseInt(totalRow[1]) || 0;
       totalImpactados = parseInt(totalRow[2]) || 0;
       coberturaGlobal = parseFloat(totalRow[3]) || 0;
-    } else {
-      rcData.forEach(r => {
-        const vendedor = String(r[0]||'').trim();
-        const cod      = obtenerCodAsesor_(vendedor);
-        if (!esVendedorValido_(cod, vendedor)) return;
-        totalMaestro    += parseInt(r[1]) || 0;
-        totalImpactados += parseInt(r[2]) || 0;
-      });
-      coberturaGlobal = totalMaestro > 0
-        ? round2_(totalImpactados / totalMaestro * 100) : 0;
+      cobPorSede['TODOS'].maestro    = totalMaestro;
+      cobPorSede['TODOS'].impactados = totalImpactados;
+      cobPorSede['TODOS'].pct        = coberturaGlobal;
+    }
+
+    // Iterar vendedor a vendedor para desglose por sede (siempre)
+    rcData.forEach(function(rr) {
+      const vendedor = String(rr[0]||'').trim();
+      const cod      = obtenerCodAsesor_(vendedor);
+      if (!esVendedorValido_(cod, vendedor)) return;
+      const mae  = parseInt(rr[1]) || 0;
+      const imp  = parseInt(rr[2]) || 0;
+      const sede = normSedeCod_(cod);
+      cobPorSede[sede].maestro    += mae;
+      cobPorSede[sede].impactados += imp;
+      if (!totalRow) {
+        cobPorSede['TODOS'].maestro    += mae;
+        cobPorSede['TODOS'].impactados += imp;
+      }
+    });
+
+    // Calcular % de cobertura para cada sede
+    SEDES.forEach(function(s) {
+      var c = cobPorSede[s];
+      if (c.maestro > 0) c.pct = round2_(c.impactados / c.maestro * 100);
+    });
+
+    if (!totalRow) {
+      totalMaestro    = cobPorSede['TODOS'].maestro;
+      totalImpactados = cobPorSede['TODOS'].impactados;
+      coberturaGlobal = cobPorSede['TODOS'].pct;
     }
   }
 
-  // Efectividad global (promedio de vendedores)
+  // ── Efectividad: global + por sede (EFECTIVIDAD_RESUMEN) ─────────────────
+  var efPorSede = {};
+  SEDES.forEach(function(s) { efPorSede[s] = { vals: [] }; });
   let efectividadGlobal = 0;
   if (hEfR && hEfR.getLastRow() > 1) {
-    const efData = hEfR.getDataRange().getValues().slice(1)
-      .filter(r => {
-        const v   = String(r[0]||'').trim();
-        const cod = obtenerCodAsesor_(v);
-        return esVendedorValido_(cod, v);
-      })
-      .map(r => parseFloat(r[5]) || 0)
-      .filter(v => v > 0);
-    if (efData.length > 0) {
-      efectividadGlobal = round2_(efData.reduce((s, v) => s + v, 0) / efData.length);
-    }
+    hEfR.getDataRange().getValues().slice(1).forEach(function(rr) {
+      const v   = String(rr[0]||'').trim();
+      const cod = obtenerCodAsesor_(v);
+      if (!esVendedorValido_(cod, v)) return;
+      const ef   = parseFloat(rr[5]) || 0;
+      if (ef <= 0) return;
+      const sede = normSedeCod_(cod);
+      efPorSede['TODOS'].vals.push(ef);
+      efPorSede[sede].vals.push(ef);
+    });
+    SEDES.forEach(function(s) {
+      var vals = efPorSede[s].vals;
+      if (vals.length > 0) {
+        efPorSede[s].pct = round2_(vals.reduce(function(a,b){return a+b;},0) / vals.length);
+      } else {
+        efPorSede[s].pct = 0;
+      }
+    });
+    efectividadGlobal = efPorSede['TODOS'].pct;
   }
 
-  // Venta por negocio
-  const negMapNeto     = {};
+  // ── Venta por negocio (global) ────────────────────────────────────────────
   const negMapPositivo = {};
-  mesData.forEach(r => {
-    const neg   = String(r[8]||'').trim();
-    const valor = parseFloat(r[14]) || 0;
-    if (!neg) return;
-    negMapNeto[neg] = (negMapNeto[neg] || 0) + valor;
-    if (valor > 0) negMapPositivo[neg] = (negMapPositivo[neg] || 0) + valor;
+  mesData.forEach(function(row) {
+    const neg   = String(row[8]||'').trim();
+    const valor = parseFloat(row[14]) || 0;
+    if (!neg || valor <= 0) return;
+    negMapPositivo[neg] = (negMapPositivo[neg] || 0) + valor;
   });
 
-  const venta_por_negocio = Object.entries(negMapNeto)
-    .map(([negocio, venta]) => ({ negocio, venta: round2_(venta) }))
-    .sort((a, b) => b.venta - a.venta);
+  const venta_por_negocio = Object.entries(sedeTotales['TODOS'].negMap)
+    .map(function(e) { return { negocio: e[0], venta: round2_(e[1]) }; })
+    .sort(function(a, b) { return b.venta - a.venta; });
 
   const venta_positiva_por_negocio = Object.entries(negMapPositivo)
-    .map(([negocio, venta]) => ({ negocio, venta: round2_(venta) }))
-    .sort((a, b) => b.venta - a.venta);
+    .map(function(e) { return { negocio: e[0], venta: round2_(e[1]) }; })
+    .sort(function(a, b) { return b.venta - a.venta; });
+
+  // ── Helper: construir objeto KPI para una sede ────────────────────────────
+  function buildSedeKPIs_(s) {
+    var t    = sedeTotales[s];
+    var dev  = sedeDevTotales[s];
+    var d    = round2_(dev.devoluciones);
+    var a    = round2_(dev.averias);
+    var desc = round2_(d + a);
+    var vn   = round2_(t.ventaNeta);
+    var vb   = round2_(vn + desc);
+    Logger.log('[buildSedeKPIs] ' + s + '  vb=' + vb + '  vn=' + vn + '  dev=' + d + '  av=' + a);
+    var cuota    = round2_(cuotaPorSede[s] || 0);
+    var nCli     = Object.keys(t.clientesImp).length;
+    var cobSede  = cobPorSede[s];
+    var efSede   = efPorSede[s];
+    var vpn      = Object.entries(t.negMap)
+      .map(function(e) { return { negocio: e[0], venta: round2_(e[1]) }; })
+      .sort(function(x, y) { return y.venta - x.venta; });
+    return {
+      venta_bruta:             vb,
+      venta_total:             vb,
+      venta_real:              vb,
+      venta_neta:              vn,
+      devolucion_total:        d,
+      averia_total:            a,
+      descuento_total:         desc,
+      pct_devolucion:          vb > 0 ? round2_(d    / vb * 100) : 0,
+      pct_averia:              vb > 0 ? round2_(a    / vb * 100) : 0,
+      pct_descuento_total:     vb > 0 ? round2_(desc / vb * 100) : 0,
+      clientes_impactados:     nCli,
+      clientes_maestro:        cobSede.maestro,
+      cobertura_pct:           cobSede.pct,
+      ticket_promedio:         nCli > 0 ? round2_(vn / nCli) : 0,
+      efectividad_pct:         efSede.pct || 0,
+      cuota_total:             cuota,
+      pct_cumplimiento_equipo: cuota > 0 ? round2_(vn / cuota * 100) : 0,
+      venta_por_negocio:       vpn
+    };
+  }
 
   return {
-    periodo: periodoActual,
+    periodo:      periodoActual,
+    fecha_corte:  fechaCorte,
 
     // Campos alineados con ECOM
     venta_bruta:             round2_(ventaBruta),
@@ -1140,16 +1485,24 @@ function getResumen() {
     pct_descuento_total:     ventaBruta > 0 ? round2_(descuentoTotal/ ventaBruta * 100) : 0,
 
     // Cobertura y operación
-    clientes_impactados:     clientesImp.size,
+    clientes_impactados:     clientesImpGlobal.length,
     clientes_maestro:        totalMaestro,
     cobertura_pct:           round2_(coberturaGlobal),
-    skus_activos:            skusActivos.size,
-    ticket_promedio:         clientesImp.size > 0 ? round2_(ventaNeta / clientesImp.size) : 0,
+    skus_activos:            Object.keys(skusActivosGlobal).length,
+    ticket_promedio:         clientesImpGlobal.length > 0 ? round2_(ventaNeta / clientesImpGlobal.length) : 0,
     efectividad_pct:         round2_(efectividadGlobal),
 
     // Cuotas / metas del equipo
     cuota_total:             round2_(cuotaTotal),
-    pct_cumplimiento_equipo: cuotaTotal > 0 ? round2_(ventaNeta / cuotaTotal * 100) : 0
+    pct_cumplimiento_equipo: cuotaTotal > 0 ? round2_(ventaNeta / cuotaTotal * 100) : 0,
+
+    // ── Desglose por sede (para KPI cards filtradas) ──────────────────────
+    por_sede: {
+      TODOS:     buildSedeKPIs_('TODOS'),
+      CENTRALES: buildSedeKPIs_('CENTRALES'),
+      CHIRIQUI:  buildSedeKPIs_('CHIRIQUI'),
+      SIN_SEDE:  buildSedeKPIs_('SIN_SEDE')
+    }
   };
 }
 
@@ -1398,34 +1751,68 @@ function getEfectividad() {
 // ════════════════════════════════════════════════════════════════════
 
 function getDevoluciones() {
-  const periodoActual = getPeriodoActualDesdeBase_();
-  const raw           = getDevolucionesPeriodoRaw_(periodoActual);
+  var periodoActual = getPeriodoActualDesdeBase_();
+  var raw           = getDevolucionesPeriodoRaw_(periodoActual);
 
-  const conceptoMap = {};
-  const vendedorMap = {};
-  const detalle     = [];
+  // ── Fallback de período: si no hay datos para el período de BASE, buscar el más reciente
+  // en DEVOLUCIONES. Esto evita que la vista quede en $0 cuando la hoja de devoluciones
+  // lleva un rezago o usa una fecha diferente a la de BASE.
+  if (!raw.length) {
+    var todosRaw = getDevolucionesPeriodoRaw_('');   // sin filtro de período
+    if (todosRaw.length) {
+      var maxPeriodo = todosRaw.reduce(function(max, r) {
+        var pf = periodoYYYYMM_(r[13]);
+        var pm = periodoYYYYMM_(r[0]);
+        var p  = pf || pm;
+        return p > max ? p : max;
+      }, '');
+      if (maxPeriodo) {
+        raw = todosRaw.filter(function(r) {
+          var pf = periodoYYYYMM_(r[13]);
+          var pm = periodoYYYYMM_(r[0]);
+          return (pf || pm) === maxPeriodo;
+        });
+        Logger.log('[getDevoluciones] periodoActual BASE=' + periodoActual +
+          ' → sin datos en DEVOLUCIONES; usando período más reciente: ' + maxPeriodo);
+        periodoActual = maxPeriodo;
+      }
+    }
+  }
+  Logger.log('[getDevoluciones] periodo=' + periodoActual + '  raw.length=' + raw.length);
 
-  raw.forEach(r => {
-    const periodoMes  = fechaISO_(r[0]);
-    const cod         = obtenerCodAsesor_(r[1]);
-    const vendedor    = String(r[2]  || '').trim();
-    const codCliente  = String(r[3]  || '').trim();
-    const nomCliente  = String(r[4]  || '').trim();
-    const factura     = String(r[5]  || '').trim();
-    const codSku      = String(r[6]  || '').trim();
-    const nomProducto = String(r[7]  || '').trim();
-    const cantidad    = parseFloat(r[8])  || 0;
-    const costoUnit   = parseFloat(r[9])  || 0;
-    const monto       = Math.abs(parseFloat(r[10]) || 0);
-    const concepto    = String(r[11] || 'Sin concepto').trim();
-    const tipoProducto= String(r[12] || '').trim();
+  var conceptoMap     = {};
+  var vendedorMap     = {};
+  var vendConceptoMap = {};
+  var detalle         = [];
 
-    if (!cod || !vendedor) return;
-    if (!esVendedorValido_(cod, vendedor)) return;
+  raw.forEach(function(r) {
+    var periodoMes  = fechaISO_(r[0]);
+    var cod         = obtenerCodAsesor_(r[1]);
+    var vendedor    = String(r[2]  || '').trim();
+    var codCliente  = String(r[3]  || '').trim();
+    var nomCliente  = String(r[4]  || '').trim();
+    var factura     = String(r[5]  || '').trim();
+    var codSku      = String(r[6]  || '').trim();
+    var nomProducto = String(r[7]  || '').trim();
+    var cantidad    = parseFloat(r[8])  || 0;
+    var costoUnit   = parseFloat(r[9])  || 0;
+    var monto       = Math.abs(parseFloat(r[10]) || 0);
+    var concepto    = String(r[11] || 'Sin concepto').trim();
+    var tipoProducto= String(r[12] || '').trim();
 
-    const nombreFinal = `${cod} - ${vendedor}`;
+    // Saltar solo si no hay NINGÚN identificador de vendedor (cod Y nombre ambos vacíos).
+    // Muchas filas de DEVOLUCIONES tienen r[1] vacío pero r[2] válido → incluirlas.
+    if (!vendedor && !cod) return;
+    if (!monto) return;
+
+    // Si cod está vacío, usar solo el nombre del vendedor como clave de agrupación
+    var nombreFinal = cod ? (cod + ' - ' + vendedor) : vendedor;
     conceptoMap[concepto]     = (conceptoMap[concepto]     || 0) + monto;
     vendedorMap[nombreFinal]  = (vendedorMap[nombreFinal]  || 0) + monto;
+
+    // Desglose concepto × vendedor (para filtros del dashboard)
+    if (!vendConceptoMap[nombreFinal]) vendConceptoMap[nombreFinal] = {};
+    vendConceptoMap[nombreFinal][concepto] = (vendConceptoMap[nombreFinal][concepto] || 0) + monto;
 
     detalle.push({
       periodo_mes:    periodoMes,
@@ -1445,30 +1832,43 @@ function getDevoluciones() {
     });
   });
 
-  const total = detalle.reduce((s, r) => s + (parseFloat(r.vlr_devolucion) || 0), 0);
+  var total = detalle.reduce(function(s, r) { return s + (parseFloat(r.vlr_devolucion) || 0); }, 0);
+  Logger.log('[getDevoluciones] detalle.length=' + detalle.length + '  total=' + round2_(total));
 
   // Top 10 clientes con más devoluciones por vendedor
-  const cliVendMap = {};
+  var cliVendMap = {};
   raw.forEach(function(r) {
-    const cod    = obtenerCodAsesor_(r[1]);
-    const vend   = String(r[2] || '').trim();
-    const codCli = String(r[3] || '').trim();
-    const nomCli = String(r[4] || '').trim();
-    const monto  = Math.abs(parseFloat(r[10]) || 0);
-    if (!cod || !vend || !codCli) return;
-    if (!esVendedorValido_(cod, vend)) return;
-    if (!cliVendMap[cod]) cliVendMap[cod] = {};
-    if (!cliVendMap[cod][codCli])
-      cliVendMap[cod][codCli] = { cod_cliente: codCli, nom_cliente: nomCli, total: 0 };
-    cliVendMap[cod][codCli].total += monto;
+    var cod    = obtenerCodAsesor_(r[1]);
+    var vend   = String(r[2] || '').trim();
+    var codCli = String(r[3] || '').trim();
+    var nomCli = String(r[4] || '').trim();
+    var monto  = Math.abs(parseFloat(r[10]) || 0);
+    // Necesitamos al menos un identificador de vendedor y un cliente para registrar el top
+    if (!vend || !codCli || !monto) return;
+    // Clave: cod si está disponible, sino nombre del vendedor
+    var claveVend = cod || vend;
+    if (!cliVendMap[claveVend]) cliVendMap[claveVend] = { cod_asesor: cod, clave: claveVend };
+    if (!cliVendMap[claveVend][codCli])
+      cliVendMap[claveVend][codCli] = { cod_cliente: codCli, nom_cliente: nomCli, total: 0 };
+    cliVendMap[claveVend][codCli].total += monto;
   });
-  const por_cliente_por_vendedor = Object.keys(cliVendMap).map(function(cod) {
+  var por_cliente_por_vendedor = Object.keys(cliVendMap).map(function(claveVend) {
+    var entry = cliVendMap[claveVend];
+    var clientes = Object.keys(entry)
+      .filter(function(k) { return k !== 'cod_asesor' && k !== 'clave'; })
+      .map(function(k) { return entry[k]; })
+      .sort(function(a, b) { return b.total - a.total; })
+      .slice(0, 10)
+      .map(function(c) { return { cod_cliente: c.cod_cliente, nom_cliente: c.nom_cliente, total: round2_(c.total) }; });
+    return { cod_asesor: entry.cod_asesor || claveVend, top10: clientes };
+  });
+
+  const por_concepto_por_vendedor = Object.entries(vendConceptoMap).map(function([vendedor, conceptos]) {
     return {
-      cod_asesor: cod,
-      top10: Object.values(cliVendMap[cod])
-        .sort(function(a, b) { return b.total - a.total; })
-        .slice(0, 10)
-        .map(function(c) { return { cod_cliente: c.cod_cliente, nom_cliente: c.nom_cliente, total: round2_(c.total) }; })
+      vendedor,
+      por_concepto: Object.entries(conceptos)
+        .map(([concepto, monto]) => ({ concepto, monto: round2_(monto) }))
+        .sort((a, b) => b.monto - a.monto)
     };
   });
 
@@ -1480,10 +1880,77 @@ function getDevoluciones() {
     por_vendedor: Object.entries(vendedorMap)
       .map(([vendedor, monto]) => ({ vendedor, monto: round2_(monto) }))
       .sort((a, b) => b.monto - a.monto),
+    por_concepto_por_vendedor,
     por_cliente_por_vendedor,
     detalle: detalle
       .sort((a, b) => b.vlr_devolucion - a.vlr_devolucion)
       .slice(0, 500)
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// VENTA POR NECESIDAD DE CLIENTE (col AD de MAESTRO_CLIENTES)
+// ════════════════════════════════════════════════════════════════════
+function getNecesidadCliente() {
+  // 1. Leer MAESTRO_CLIENTES: construir mapa cod_cliente → necesidad (col AD = índice 29)
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  const necesidadMap = {};  // cod_cliente → necesidad
+  if (hM && hM.getLastRow() > 1) {
+    hM.getDataRange().getValues().slice(1).forEach(function(r) {
+      const estado = String(r[19] || '').trim().toUpperCase();
+      if (estado !== 'A') return;
+      const codCli   = String(r[0] || '').trim();
+      const necesidad = String(r[29] || '').trim();  // col AD
+      if (codCli && necesidad) necesidadMap[codCli] = necesidad;
+    });
+  }
+
+  // 2. Leer BASE_ACUMULADA del período actual
+  const base = getBasePeriodoActual_();
+
+  // 3. Cruzar ventas con necesidad del cliente
+  const necesidadVentaMap = {};  // necesidad → { total, clientes: Set, por_negocio: {} }
+  const sinNecesidad = { total: 0, clientes: new Set(), por_negocio: {} };
+
+  base.forEach(function(r) {
+    const codCli  = String(r[1]  || '').trim();
+    const negocio = String(r[8]  || '').trim();
+    const venta   = parseFloat(r[14]) || 0;
+    if (venta <= 0 || !codCli) return;
+
+    const nec = necesidadMap[codCli];
+    const bucket = nec ? (necesidadVentaMap[nec] = necesidadVentaMap[nec] ||
+      { necesidad: nec, total: 0, clientes: new Set(), por_negocio: {} }) : sinNecesidad;
+
+    bucket.total += venta;
+    bucket.clientes.add(codCli);
+    bucket.por_negocio[negocio] = (bucket.por_negocio[negocio] || 0) + venta;
+  });
+
+  // 4. Serializar resultado
+  const serializar = function(bucket) {
+    return {
+      necesidad:  bucket.necesidad || 'Sin clasificar',
+      total:      round2_(bucket.total),
+      clientes:   bucket.clientes.size,
+      por_negocio: Object.entries(bucket.por_negocio)
+        .map(([negocio, monto]) => ({ negocio, monto: round2_(monto) }))
+        .sort((a, b) => b.monto - a.monto)
+    };
+  };
+
+  const resultado = Object.values(necesidadVentaMap)
+    .map(serializar)
+    .sort((a, b) => b.total - a.total);
+
+  if (sinNecesidad.total > 0) {
+    resultado.push(serializar(sinNecesidad));
+  }
+
+  return {
+    total: round2_(resultado.reduce((s, r) => s + r.total, 0)),
+    total_clasificados: Object.keys(necesidadMap).length,
+    por_necesidad: resultado
   };
 }
 
@@ -2066,6 +2533,103 @@ function getTopMarcas() {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// DN POR MARCA — Distribución Numérica top-10 + marcas con meta definida
+// ════════════════════════════════════════════════════════════════════
+function getDNMarcas() {
+  const mesData = getBasePeriodoActual_();
+
+  // ── Maestro total: conteo único de clientes ACTIVOS en MAESTRO_CLIENTES ──
+  const hMC = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  let maestroTotal = 0;
+  if (hMC && hMC.getLastRow() > 1) {
+    hMC.getDataRange().getValues().slice(1).forEach(function(r) {
+      if (String(r[19] || '').trim().toUpperCase() === 'A') maestroTotal++;
+    });
+  }
+
+  // ── Maestro por vendedor desde RESUMEN_COBERTURA ──
+  const hRC = getSheet_('RESUMEN_COBERTURA');
+  const maestroVend = {};   // cod → maestro individual
+  if (hRC && hRC.getLastRow() > 1) {
+    hRC.getDataRange().getValues().slice(1).forEach(function(r) {
+      const raw  = String(r[0] || '').trim();
+      const cod  = obtenerCodAsesor_(raw);
+      const mstr = parseInt(r[1]) || 0;
+      if (cod && mstr) maestroVend[cod] = mstr;
+    });
+  }
+
+  // ── Acumular clientes por marca (global y por vendedor) ──
+  const marcaVenta   = {};
+  const marcaCli     = {};
+  const vendMarcaCli = {};
+
+  mesData.forEach(function(r) {
+    const marca   = String(r[10] || '').trim();
+    const codCli  = String(r[1]  || '').trim();
+    const rawVend = String(r[3]  || '').trim();
+    const codVend = obtenerCodAsesor_(rawVend) || rawVend;  // extraer solo el código
+    const valor   = parseFloat(r[14]) || 0;
+    if (!marca || valor <= 0 || !codCli || !codVend) return;
+
+    marcaVenta[marca] = (marcaVenta[marca] || 0) + valor;
+    if (!marcaCli[marca])              marcaCli[marca] = new Set();
+    if (!vendMarcaCli[marca])          vendMarcaCli[marca] = {};
+    if (!vendMarcaCli[marca][codVend]) vendMarcaCli[marca][codVend] = new Set();
+    marcaCli[marca].add(codCli);
+    vendMarcaCli[marca][codVend].add(codCli);
+  });
+
+  // Top 10 marcas por venta
+  const top10 = Object.entries(marcaVenta)
+    .sort(function(a, b) { return b[1] - a[1]; })
+    .slice(0, 10)
+    .map(function(e) { return e[0]; });
+
+  // Agregar marcas con meta aunque no estén en top-10
+  const MARCAS_META = { 'CHOCOLISTO': 60, 'GRANUTS': 60, 'TIKYS': 10 };
+  Object.keys(MARCAS_META).forEach(function(kw) {
+    const found = Object.keys(marcaVenta).find(function(m) {
+      return m.toUpperCase().includes(kw);
+    });
+    if (found && top10.indexOf(found) === -1) top10.push(found);
+  });
+
+  // Construir resultado
+  return top10.map(function(marca) {
+    const clientes = marcaCli[marca] ? marcaCli[marca].size : 0;
+    const dn_pct   = maestroTotal > 0 ? round2_(clientes / maestroTotal * 100) : 0;
+
+    // DN por vendedor — solo códigos numéricos válidos
+    const por_vendedor = Object.entries(vendMarcaCli[marca] || {})
+      .filter(function(e) { return /^\d+$/.test(e[0]); })
+      .map(function(e) {
+        const cod      = e[0];
+        const cliSet   = e[1];
+        const maestro  = maestroVend[cod] || 0;
+        const vClientes= cliSet.size;
+        const vDn      = maestro > 0 ? round2_(vClientes / maestro * 100) : 0;
+        return { cod, clientes: vClientes, maestro, dn_pct: vDn };
+      });
+
+    // Meta si aplica
+    const marcaUpper = marca.toUpperCase();
+    const kwMatch    = Object.keys(MARCAS_META).find(function(kw) { return marcaUpper.includes(kw); });
+    const meta       = kwMatch ? MARCAS_META[kwMatch] : null;
+
+    return {
+      marca,
+      venta:        round2_(marcaVenta[marca] || 0),
+      clientes,
+      maestro:      maestroTotal,
+      dn_pct,
+      meta,          // null = sin meta definida
+      por_vendedor
+    };
+  }).sort(function(a, b) { return b.venta - a.venta; });
+}
+
+// ════════════════════════════════════════════════════════════════════
 // DIAGNÓSTICO DE API
 // ════════════════════════════════════════════════════════════════════
 
@@ -2143,7 +2707,10 @@ function getCartera() {
     return rawHdrs.findIndex(function(h) { return kws.some(function(k) { return h.includes(k); }); });
   }
   const iRuc    = col(['n__ruc', 'ruc']);
-  const iCli    = col(['cliente']);
+  // Buscar columna exacta "Cliente" (no "Documento cliente" que solo tiene el código RUC)
+  const iCli    = rawHdrs.indexOf('cliente') !== -1
+    ? rawHdrs.indexOf('cliente')
+    : col(['nombre_cliente', 'nom_cliente', 'cliente']);
   const iAsesor = col(['asesor']);
   const iValor  = col(['valor_ruc', 'valor']);
   const iEstado = col(['estado_cxc', 'estado']);
@@ -2267,4 +2834,361 @@ function getCartera() {
     top_clientes:    top_clientes,
     detalle:         pendientes.sort(function(a, b) { return b.valor - a.valor; }).slice(0, 300)
   };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PRODUCTOS CLAVE — cobertura por cliente
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Limpia el campo SAP antes de comparar.
+ * - Convierte a string, quita espacios y el sufijo ".0" de Excel.
+ * - No convierte a número: preserva ceros iniciales y códigos largos.
+ */
+function limpiarSap_(sap) {
+  return String(sap || '').trim().replace(/\.0$/, '');
+}
+
+/**
+ * Lee PRODUCTOS_CLAVE y construye:
+ *   claveMap  → { sap: { nombre, detalle, negocio, tr, estado } }
+ *   todos     → Array de todos los productos del catálogo
+ */
+function cargarProductosClave_() {
+  var productos = sheetToJSON(HOJAS.PRODUCTOS_CLAVE);
+  var claveMap  = {};
+  var todos     = [];
+
+  productos.forEach(function(p) {
+    var sap    = limpiarSap_(p.sap);
+    var estado = normalizarTexto_(p.estado);
+    var obj = {
+      sap:     sap,
+      gtinse:  String(p.gtinse  || '').trim(),
+      nombre:  String(p.nombre  || '').trim(),
+      detalle: String(p.detalle || '').trim(),
+      negocio: String(p.negocio || '').trim(),
+      tr:      String(p.tr      || '').trim(),
+      estado:  String(p.estado  || '').trim()
+    };
+    todos.push(obj);
+    if (estado === 'CLAVE' && sap) {
+      claveMap[sap] = obj;
+    }
+  });
+
+  return { claveMap: claveMap, todos: todos };
+}
+
+/**
+ * Lee MAESTRO_CLIENTES y construye:
+ *   activosSet → Set de cod_cliente activos (estado='A')
+ *   byAsesor   → { cod_asesor: Set<cod_cliente> }
+ *   byCliente  → { cod_cliente: { cod_asesor, asesor_raw, nombre } }
+ *   total      → count
+ */
+function cargarMaestroActivos_() {
+  var hM        = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  var activosSet = new Set();
+  var byAsesor  = {};
+  var byCliente = {};
+
+  if (hM && hM.getLastRow() > 1) {
+    hM.getDataRange().getValues().slice(1).forEach(function(r) {
+      var estado = String(r[19] || '').trim().toUpperCase();
+      if (estado !== 'A') return;
+      var codCli    = String(r[0]  || '').trim();
+      var nombre    = String(r[1]  || '').trim();
+      var asesorRaw = String(r[20] || '').trim();
+      var codAs     = obtenerCodAsesor_(asesorRaw);
+      if (!codCli) return;
+      if (asesorRaw && !esVendedorValido_(codAs, asesorRaw)) return;
+
+      activosSet.add(codCli);
+      byCliente[codCli] = { cod_asesor: codAs, asesor_raw: asesorRaw, nombre: nombre };
+      if (codAs) {
+        if (!byAsesor[codAs]) byAsesor[codAs] = new Set();
+        byAsesor[codAs].add(codCli);
+      }
+    });
+  }
+
+  return { activosSet: activosSet, byAsesor: byAsesor, byCliente: byCliente, total: activosSet.size };
+}
+
+/**
+ * Lee CUOTAS y construye un mapa cod_asesor → sede.
+ */
+function cargarSedeMap_() {
+  var sedeMap   = {};
+  var hCuotas   = getSheet_(HOJAS.CUOTAS);
+  if (!hCuotas || hCuotas.getLastRow() < 2) return sedeMap;
+  var rows  = hCuotas.getDataRange().getValues().slice(1);
+  var ncols = rows.length > 0 ? rows[0].length : 0;
+  var tieneSede = ncols >= 4;
+  rows.forEach(function(r) {
+    var cod  = obtenerCodAsesor_(String(r[0] || '').trim());
+    var sede = tieneSede ? String(r[1] || '').trim() : '';
+    if (cod && sede && !sedeMap[cod]) sedeMap[cod] = sede;
+  });
+  return sedeMap;
+}
+
+// ── Endpoint: catálogo de productos clave ─────────────────────────
+function getProductosClave_() {
+  var pc   = cargarProductosClave_();
+  var clave = Object.values(pc.claveMap);
+
+  return {
+    total_catalogo:         pc.todos.length,
+    total_productos_clave:  clave.length,
+    total_sap_clave_unicos: clave.length,
+    productos:              clave
+  };
+}
+
+// ── Endpoint: cobertura gerencial de productos clave ──────────────
+function getCoberturaProductosClave_() {
+  var pc          = cargarProductosClave_();
+  var sapClaveSet = new Set(Object.keys(pc.claveMap));
+
+  var maestro    = cargarMaestroActivos_();
+  var activosSet = maestro.activosSet;
+  var totalActivos = maestro.total;
+
+  var base = getBasePeriodoActual_();
+
+  var clientesImpactados = new Set();
+  var ventaClave  = 0;
+  var unidadesClave = 0;
+  var negocioMap  = {};   // negocio → { clientes:Set, venta, unidades, saps:Set }
+  var sapVendido  = new Set();
+  var sapInvalido = 0;
+  var sapNoEncontrado = 0;
+
+  base.forEach(function(r) {
+    var codCli  = String(r[1]  || '').trim();
+    var sap     = limpiarSap_(r[6]);
+    var negocio = String(r[8]  || '').trim() || 'Sin negocio';
+    var cant    = parseFloat(r[13]) || 0;
+    var venta   = parseFloat(r[14]) || 0;
+    if (venta <= 0 || !activosSet.has(codCli)) return;
+
+    if (!sap)                      { sapInvalido++;        return; }
+    if (!sapClaveSet.has(sap))     { sapNoEncontrado++;    return; }
+
+    clientesImpactados.add(codCli);
+    ventaClave   += venta;
+    unidadesClave += Math.max(cant, 0);
+    sapVendido.add(sap);
+
+    if (!negocioMap[negocio]) negocioMap[negocio] = { negocio: negocio, clientes: new Set(), venta: 0, unidades: 0, saps: new Set() };
+    negocioMap[negocio].clientes.add(codCli);
+    negocioMap[negocio].venta    += venta;
+    negocioMap[negocio].unidades += Math.max(cant, 0);
+    negocioMap[negocio].saps.add(sap);
+  });
+
+  var impactados    = clientesImpactados.size;
+  var sinImpacto    = totalActivos - impactados;
+  var cobPct        = totalActivos > 0 ? round2_(impactados / totalActivos * 100) : 0;
+  var vendidos      = sapVendido.size;
+  var noVendidos    = sapClaveSet.size - vendidos;
+
+  // Auditoría en Logger (visible en Apps Script)
+  Logger.log('[PC] total_catalogo='           + pc.todos.length);
+  Logger.log('[PC] total_productos_clave='    + sapClaveSet.size);
+  Logger.log('[PC] total_sap_clave_unicos='   + sapClaveSet.size);
+  Logger.log('[PC] total_clientes_activos='   + totalActivos);
+  Logger.log('[PC] clientes_impactados_clave='+ impactados);
+  Logger.log('[PC] clientes_sin_impacto='     + sinImpacto);
+  Logger.log('[PC] cobertura_clave_pct='      + cobPct);
+  Logger.log('[PC] venta_productos_clave='    + round2_(ventaClave));
+  Logger.log('[PC] sap_clave_vendidos='       + vendidos);
+  Logger.log('[PC] sap_clave_no_vendidos='    + noVendidos);
+  Logger.log('[PC] ventas_sap_invalido='      + sapInvalido);
+  Logger.log('[PC] ventas_sap_no_encontrado=' + sapNoEncontrado);
+
+  return {
+    total_clientes_activos:        totalActivos,
+    clientes_impactados_clave:     impactados,
+    clientes_sin_impacto_clave:    sinImpacto,
+    cobertura_clave_pct:           cobPct,
+    venta_productos_clave:         round2_(ventaClave),
+    unidades_productos_clave:      Math.round(unidadesClave),
+    total_productos_clave:         sapClaveSet.size,
+    productos_clave_vendidos:      vendidos,
+    productos_clave_no_vendidos:   noVendidos,
+    ventas_sap_invalido:           sapInvalido,
+    ventas_sap_no_encontrado:      sapNoEncontrado,
+    negocios: Object.values(negocioMap)
+      .map(function(n) { return {
+        negocio:             n.negocio,
+        clientes_impactados: n.clientes.size,
+        venta:               round2_(n.venta),
+        unidades:            Math.round(n.unidades),
+        productos_vendidos:  n.saps.size
+      }; })
+      .sort(function(a, b) { return b.clientes_impactados - a.clientes_impactados; })
+  };
+}
+
+// ── Endpoint: cobertura de productos clave por vendedor ───────────
+function getCoberturaProductosClaveVendedor_() {
+  var pc          = cargarProductosClave_();
+  var sapClaveSet = new Set(Object.keys(pc.claveMap));
+  var maestro     = cargarMaestroActivos_();
+  var sedeMap     = cargarSedeMap_();
+  var base        = getBasePeriodoActual_();
+
+  // Acumular desde BASE: impactados clave por asesor
+  var vendMap = {};  // cod_asesor → { nombre, clientes_imp:Set, venta, unidades, saps:Set }
+
+  base.forEach(function(r) {
+    var codCli   = String(r[1]  || '').trim();
+    var codAs    = obtenerCodAsesor_(String(r[3] || '').trim());
+    var nomVend  = String(r[4]  || '').trim();
+    var sap      = limpiarSap_(r[6]);
+    var cant     = parseFloat(r[13]) || 0;
+    var venta    = parseFloat(r[14]) || 0;
+
+    if (!codAs || !nomVend || !esVendedorValido_(codAs, nomVend)) return;
+    if (venta <= 0 || !sap || !sapClaveSet.has(sap)) return;
+    if (!maestro.activosSet.has(codCli)) return;
+
+    if (!vendMap[codAs]) vendMap[codAs] = { nombre: nomVend, clientes_imp: new Set(), venta: 0, unidades: 0, saps: new Set() };
+    vendMap[codAs].clientes_imp.add(codCli);
+    vendMap[codAs].venta    += venta;
+    vendMap[codAs].unidades += Math.max(cant, 0);
+    vendMap[codAs].saps.add(sap);
+  });
+
+  // Combinar con todos los asesores que tienen clientes activos en el maestro
+  var result = Object.entries(maestro.byAsesor).map(function(entry) {
+    var codAs      = entry[0];
+    var cliActivos = entry[1];
+    var v          = vendMap[codAs] || {};
+    var impactados = v.clientes_imp ? v.clientes_imp.size : 0;
+    var activos    = cliActivos.size;
+
+    return {
+      cod_asesor:                codAs,
+      vendedor:                  v.nombre || codAs,
+      sede:                      sedeMap[codAs] || '',
+      clientes_activos:          activos,
+      clientes_impactados_clave: impactados,
+      clientes_sin_impacto_clave: activos - impactados,
+      cobertura_clave_pct:       activos > 0 ? round2_(impactados / activos * 100) : 0,
+      venta_productos_clave:     round2_(v.venta || 0),
+      unidades_productos_clave:  Math.round(v.unidades || 0),
+      productos_clave_vendidos:  v.saps ? v.saps.size : 0
+    };
+  }).filter(function(v) {
+    return esVendedorValido_(v.cod_asesor, v.vendedor);
+  }).sort(function(a, b) {
+    return b.cobertura_clave_pct - a.cobertura_clave_pct;
+  });
+
+  return { vendedores: result };
+}
+
+// ── Endpoint: clientes activos que no compraron ningún producto clave ─
+function getClientesSinProductosClave_() {
+  var pc          = cargarProductosClave_();
+  var sapClaveSet = new Set(Object.keys(pc.claveMap));
+  var maestro     = cargarMaestroActivos_();
+  var sedeMap     = cargarSedeMap_();
+  var base        = getBasePeriodoActual_();
+
+  // Recorrer base: qué clientes compraron al menos un producto clave
+  var clientesConClave = new Set();
+  var clienteVenta     = {};  // cod_cli → { venta_total, ultima_compra, cod_asesor, vendedor }
+
+  base.forEach(function(r) {
+    var codCli   = String(r[1]  || '').trim();
+    var codAs    = obtenerCodAsesor_(String(r[3] || '').trim());
+    var nomVend  = String(r[4]  || '').trim();
+    var sap      = limpiarSap_(r[6]);
+    var venta    = parseFloat(r[14]) || 0;
+    var fechaR   = r[18];
+
+    if (!codCli || venta <= 0 || !esVendedorValido_(codAs, nomVend)) return;
+
+    if (!clienteVenta[codCli]) clienteVenta[codCli] = { venta_total: 0, ultima_compra: '', cod_asesor: codAs, vendedor: nomVend };
+    clienteVenta[codCli].venta_total += venta;
+    var fs = fechaISO_(fechaR);
+    if (fs && fs > clienteVenta[codCli].ultima_compra) clienteVenta[codCli].ultima_compra = fs;
+
+    if (sap && sapClaveSet.has(sap)) clientesConClave.add(codCli);
+  });
+
+  // Clientes activos sin producto clave
+  var clientes = [];
+  maestro.activosSet.forEach(function(codCli) {
+    if (clientesConClave.has(codCli)) return;
+    var m  = maestro.byCliente[codCli] || {};
+    var cv = clienteVenta[codCli]       || {};
+    var codAs = cv.cod_asesor || m.cod_asesor || '';
+    clientes.push({
+      cod_cliente:          codCli,
+      nombre_cliente:       m.nombre     || '',
+      cod_asesor:           codAs,
+      vendedor:             cv.vendedor  || m.asesor_raw || '',
+      sede:                 sedeMap[codAs] || '',
+      venta_total_periodo:  round2_(cv.venta_total || 0),
+      ultima_compra:        cv.ultima_compra || ''
+    });
+  });
+
+  clientes.sort(function(a, b) { return b.venta_total_periodo - a.venta_total_periodo; });
+
+  return { total: clientes.length, clientes: clientes };
+}
+
+// ── Endpoint: detalle por producto clave ──────────────────────────
+function getProductosClaveDetalle_() {
+  var pc          = cargarProductosClave_();
+  var sapClaveSet = new Set(Object.keys(pc.claveMap));
+  var maestro     = cargarMaestroActivos_();
+  var base        = getBasePeriodoActual_();
+
+  var sapDataMap  = {};  // sap → { clientes:Set, venta, unidades, vendedores:Set }
+
+  base.forEach(function(r) {
+    var codCli  = String(r[1]  || '').trim();
+    var codAs   = obtenerCodAsesor_(String(r[3] || '').trim());
+    var nomVend = String(r[4]  || '').trim();
+    var sap     = limpiarSap_(r[6]);
+    var cant    = parseFloat(r[13]) || 0;
+    var venta   = parseFloat(r[14]) || 0;
+
+    if (!sap || !sapClaveSet.has(sap)) return;
+    if (venta <= 0 || !maestro.activosSet.has(codCli)) return;
+    if (!esVendedorValido_(codAs, nomVend)) return;
+
+    if (!sapDataMap[sap]) sapDataMap[sap] = { clientes: new Set(), venta: 0, unidades: 0, vendedores: new Set() };
+    sapDataMap[sap].clientes.add(codCli);
+    sapDataMap[sap].venta    += venta;
+    sapDataMap[sap].unidades += Math.max(cant, 0);
+    sapDataMap[sap].vendedores.add(codAs);
+  });
+
+  var productos = Object.keys(pc.claveMap).map(function(sap) {
+    var info = pc.claveMap[sap];
+    var d    = sapDataMap[sap] || {};
+    return {
+      sap:                  sap,
+      nombre:               info.nombre,
+      detalle:              info.detalle,
+      negocio:              info.negocio,
+      clientes_impactados:  d.clientes  ? d.clientes.size   : 0,
+      venta:                round2_(d.venta || 0),
+      unidades:             Math.round(d.unidades || 0),
+      vendedores_impactando: d.vendedores ? d.vendedores.size : 0
+    };
+  }).sort(function(a, b) {
+    return b.clientes_impactados - a.clientes_impactados || b.venta - a.venta;
+  });
+
+  return { productos: productos };
 }

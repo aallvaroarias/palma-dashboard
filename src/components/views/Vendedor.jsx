@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import useDashboardStore from '../../store/dashboardStore';
 import KpiCard from '../ui/KpiCard';
@@ -13,8 +13,14 @@ export default function Vendedor() {
   const [params] = useSearchParams();
   const cod = params.get('v');
 
-  const { vendedores, cobertura, cobNegocio, efectividad, skus, clientesNuevos,
-          clientesCero, topClientes, cuotas, devoluciones, refetchClientes } = useDashboardStore();
+  const { vendedores, loading, loadVendedores,
+          cobertura, cobNegocio, efectividad, skus, clientesNuevos,
+          clientesCero, topClientes, cuotas, devoluciones, dnMarcas, refetchClientes,
+          coberturaVendedoresPC, clientesSinPC,
+          loadClientesSinPC } = useDashboardStore();
+
+  // Cargar clientes sin producto clave en cuanto hay un vendedor seleccionado
+  useEffect(() => { if (cod) loadClientesSinPC?.(); }, [cod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const v = useMemo(
     () => vendedores.find(x => String(x.cod) === String(cod)),
@@ -134,6 +140,76 @@ export default function Vendedor() {
       .map(x => ({ ...x, total: Math.round(x.total * 100) / 100 }));
   }, [devoluciones, v]);
 
+  // Metas por negocio del vendedor (cruza cuotas.por_negocio con venta NETA por negocio)
+  const metasPorNegocio = useMemo(() => {
+    if (!v) return [];
+    const found = cuotas.find(c => String(c.cod).trim() === String(v.cod).trim());
+    const porNeg = found?.por_negocio || [];
+    if (!porNeg.length) return [];
+
+    const normN = s => s.toLowerCase()
+      .replace(/√©/g,'e').replace(/√≥/g,'o').replace(/√ü/g,'u').replace(/√°/g,'a').replace(/√≠/g,'i')
+      .replace(/^\d+-/, '')
+      .replace(/[áàäâ]/g,'a').replace(/[éèëê]/g,'e').replace(/[íìïî]/g,'i')
+      .replace(/[óòöô]/g,'o').replace(/[úùü]/g,'u')
+      .replace(/[^a-z0-9]/g,' ').replace(/\s+/g,' ').trim();
+
+    const ventaNegList = v.venta_por_negocio || [];
+    const sumRaw = ventaNegList.reduce((s, n) => s + (n.venta || 0), 0);
+    const netaFactor = sumRaw > 0 ? (v.venta_neta || sumRaw) / sumRaw : 1;
+
+    // Matching mejorado igual que en Gerencial
+    const findRaw = (cuotaNeg) => {
+      const nN = normN(cuotaNeg);
+      if (nN.includes('otros') && nN.includes('tmluc')) return null;
+      if (nN.includes('snack') && nN.includes('tmluc')) {
+        const e = ventaNegList.find(vn => { const kN = normN(vn.negocio); return kN.includes('snack') && kN.includes('tmluc'); });
+        return e?.venta || 0;
+      }
+      // "Bebidas TMLUC": entry exacto "tmluc"
+      if (nN.includes('tmluc')) {
+        const e = ventaNegList.find(vn => normN(vn.negocio) === 'tmluc');
+        return e?.venta || 0;
+      }
+      const words = nN.split(' ').filter(w => w.length > 3);
+      const e = ventaNegList.find(vn => { const kN = normN(vn.negocio); return words.some(w => kN.includes(w)); });
+      return e?.venta || 0;
+    };
+
+    const snacksRaw     = ventaNegList.find(vn => { const kN = normN(vn.negocio); return kN.includes('snack') && kN.includes('tmluc'); })?.venta || 0;
+    const otrosTmlucRaw = ventaNegList
+      .filter(vn => {
+        const kN = normN(vn.negocio);
+        return (kN.includes('tmluc') && !kN.includes('snack') && kN !== 'tmluc') || kN.includes('nutrici');
+      })
+      .reduce((s, vn) => s + Math.max(0, vn.venta), 0);
+
+    return porNeg.map(item => {
+      const nN = normN(item.negocio);
+      const isOtros = nN.includes('otros') && nN.includes('tmluc');
+      const raw   = isOtros ? otrosTmlucRaw : findRaw(item.negocio);
+      const venta = Math.round(raw * netaFactor * 100) / 100;
+      const meta  = item.meta || 0;
+      const pct_c = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
+      return { negocio: item.negocio, meta, venta, pct_c };
+    }).sort((a, b) => b.meta - a.meta);
+  }, [cuotas, v]);
+
+  // Factor de proyección de cierre de mes
+  const factorProyeccion = useMemo(() => {
+    function diasHabiles(desde, hasta) {
+      let c = 0; const d = new Date(desde);
+      while (d <= hasta) { if (d.getDay() !== 0) c++; d.setDate(d.getDate() + 1); }
+      return c;
+    }
+    const hoy = new Date();
+    const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const fin    = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    const transc = diasHabiles(inicio, hoy);
+    const total  = diasHabiles(inicio, fin);
+    return transc > 0 ? total / transc : 1;
+  }, []);
+
   // Top clientes por negocio de este vendedor
   const topNegociosVend = useMemo(() => {
     if (!v) return [];
@@ -143,7 +219,92 @@ export default function Vendedor() {
     return found?.negocios || [];
   }, [topClientes, v]);
 
+  // Histórico del mes cerrado (snapshot del mes anterior)
+  const [historico, setHistorico] = useState(null);
+  useEffect(() => {
+    fetch('/api/historico_clientes')
+      .then(r => r.json())
+      .then(d => { if (d?.mes) setHistorico(d); })
+      .catch(() => {});
+  }, []);
+
+  const historicoVend = useMemo(() => {
+    if (!historico || !v) return [];
+    const found = (historico.top_por_vendedor || []).find(x =>
+      String(x.cod_vendedor) === String(v.cod) || x.nom_vendedor === v.nombre
+    );
+    return found?.top10 || [];
+  }, [historico, v]);
+
+  const historicoVendNeg = useMemo(() => {
+    if (!historico || !v) return [];
+    const found = (historico.top_por_vendedor_negocio || []).find(x =>
+      String(x.cod_vendedor) === String(v.cod)
+    );
+    return found?.negocios || [];
+  }, [historico, v]);
+
+  // ── Productos Clave: datos del vendedor ─────────────────────────────────────
+  const pcVendedor = useMemo(() => {
+    if (!v) return null;
+    const myCod = String(v.cod).trim();
+    return coberturaVendedoresPC.find(x => String(x.cod_asesor).trim() === myCod) || null;
+  }, [coberturaVendedoresPC, v]);
+
+  const clientesSinPCVend = useMemo(() => {
+    if (!v) return [];
+    const myCod = String(v.cod).trim();
+    return (clientesSinPC?.clientes || []).filter(c =>
+      String(c.cod_asesor || '').trim() === myCod
+    );
+  }, [clientesSinPC, v]);
+
   if (!cod) {
+    // ── Debug ──────────────────────────────────────────────────────────────
+    console.group('[MiPanel] Debug vendedores');
+    console.log('vendedores raw:', vendedores);
+    console.log('loading:', loading);
+    console.groupEnd();
+
+    // Aún cargando Fase 1 (vendedores llegará con ella)
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-3 text-palumar-muted">
+          <svg className="w-8 h-8 animate-spin opacity-60" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-sm">Cargando vendedores…</p>
+        </div>
+      );
+    }
+
+    // Fase 1 terminó pero no hay vendedores — error o array vacío
+    if (!vendedores.length) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-4 text-palumar-muted">
+          <svg className="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
+              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm">No se pudo cargar el listado de vendedores.</p>
+          <button
+            onClick={() => loadVendedores?.()}
+            className="px-4 py-1.5 rounded-lg text-xs font-medium border transition-all"
+            style={{
+              background: 'rgba(26,127,166,0.15)',
+              borderColor: 'rgba(26,127,166,0.4)',
+              color: 'var(--cyan)',
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+
+    // Vendedores disponibles — mostrar selector
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4 text-palumar-muted">
         <svg className="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -322,6 +483,134 @@ export default function Vendedor() {
         );
       })()}
 
+      {/* ── Metas por Negocio ── */}
+      {metasPorNegocio.length > 0 && (
+        <>
+          <SectionTitle>Metas por Negocio</SectionTitle>
+          <div className="table-card mb-4">
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>Negocio</th>
+                    <th style={{ textAlign: 'right' }}>Meta</th>
+                    <th style={{ textAlign: 'right' }}>Venta Real</th>
+                    <th style={{ textAlign: 'right' }}>Proyección</th>
+                    <th style={{ textAlign: 'right' }}>Cumplimiento</th>
+                    <th style={{ textAlign: 'right' }}>Falta / Exceso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metasPorNegocio.map((item, i) => {
+                    const proyec = Math.round(item.venta * factorProyeccion);
+                    const falta  = item.meta - item.venta;           // meta − venta real
+                    const col    = item.meta > 0
+                      ? (item.pct_c >= 100 ? 'var(--green)' : item.pct_c >= 75 ? 'var(--amber)' : 'var(--red)')
+                      : 'var(--muted)';
+                    const colP   = proyec >= item.meta ? 'var(--green)' : proyec >= item.meta * 0.75 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 500 }}>{item.negocio}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(item.meta)}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(item.venta)}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: colP, fontWeight: 600 }}>{fmt(proyec)}</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span style={{ color: col, fontWeight: 700 }}>{item.pct_c.toFixed(1)}%</span>
+                          <div style={{ height: '4px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)', marginTop: '4px', width: '80px', marginLeft: 'auto' }}>
+                            <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(item.pct_c, 100)}%`, background: col }} />
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: falta <= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                            {falta <= 0 ? '+' : ''}{fmt(Math.abs(falta))}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ borderTop: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.03)' }}>
+                    <td style={{ fontWeight: 700, color: 'var(--white-2)' }}>TOTAL</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }} className="font-mono-num">{fmt(metasPorNegocio.reduce((s, x) => s + x.meta, 0))}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--green)' }} className="font-mono-num">{fmt(metasPorNegocio.reduce((s, x) => s + x.venta, 0))}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }} className="font-mono-num">{fmt(metasPorNegocio.reduce((s, x) => s + Math.round(x.venta * factorProyeccion), 0))}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── DN por Marca ── */}
+      {dnMarcas.length > 0 && (() => {
+        const myCod  = String(v.cod).trim();
+        const maestro = v.maestro || 0;
+        const marcasVend = dnMarcas.map(item => {
+          // El cod en por_vendedor puede venir como "211-HAYMETH LEWIS" o solo "211"
+          const vEntry = (item.por_vendedor || []).find(x =>
+            String(x.cod || '').split('-')[0].trim() === myCod
+          );
+          const clientes = vEntry?.clientes || 0;
+          // Recalcular DN con maestro real del vendedor (no el del servidor que puede ser 0)
+          const dn_pct  = maestro > 0 ? Math.round(clientes / maestro * 1000) / 10 : 0;
+          return { ...item, clientes, dn_pct };
+        }).sort((a, b) => b.venta - a.venta);
+        return (
+          <>
+            <SectionTitle>Distribución Numérica por Marca (DN)</SectionTitle>
+            <div className="table-card mb-4">
+              <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--border-2)' }}>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                  DN = clientes que compraron la marca ÷ maestro del vendedor ({maestro} clientes)
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Marca</th>
+                      <th style={{ textAlign: 'right' }}>Clientes</th>
+                      <th style={{ textAlign: 'right' }}>DN%</th>
+                      <th>Progreso vs Meta</th>
+                      <th style={{ textAlign: 'right' }}>Meta DN</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marcasVend.map((item, i) => {
+                      const hasMeta = item.meta !== null && item.meta !== undefined;
+                      const col     = hasMeta
+                        ? (item.dn_pct >= item.meta ? 'var(--green)' : item.dn_pct >= item.meta * 0.75 ? 'var(--amber)' : 'var(--red)')
+                        : 'var(--cyan)';
+                      const barPct  = hasMeta ? Math.min(item.dn_pct / item.meta * 100, 100) : Math.min(item.dn_pct * 2, 100);
+                      return (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600 }}>{item.marca}</td>
+                          <td style={{ textAlign: 'right' }}>{item.clientes}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <span style={{ color: col, fontWeight: 700 }}>{item.dn_pct.toFixed(1)}%</span>
+                          </td>
+                          <td style={{ minWidth: '140px' }}>
+                            <div style={{ height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)', position: 'relative' }}>
+                              <div style={{ height: '100%', borderRadius: '99px', width: `${barPct}%`, background: col }} />
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: hasMeta ? 700 : 400, color: hasMeta ? 'var(--cyan)' : 'var(--muted)' }}>
+                            {hasMeta ? `${item.meta}%` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       {/* Charts row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
         {/* Venta por negocio */}
@@ -463,7 +752,7 @@ export default function Vendedor() {
                 Top {topDevolucionesVend.length} por monto devuelto
               </h3>
               <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
-                Total: <span style={{ color: 'var(--red)', fontWeight: 600 }}>${fmt(v.devol)}</span>
+                Total: <span style={{ color: 'var(--red)', fontWeight: 600 }}>{fmt(v.devol)}</span>
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -486,7 +775,7 @@ export default function Vendedor() {
                         <td className="font-mono-num" style={{ color: 'var(--muted)' }}>{c.cod_cliente || '—'}</td>
                         <td style={{ fontWeight: 500 }}>{c.nom_cliente || '—'}</td>
                         <td style={{ textAlign: 'right' }} className="font-mono-num">
-                          <span style={{ color: 'var(--red)', fontWeight: 600 }}>${fmt(c.total)}</span>
+                          <span style={{ color: 'var(--red)', fontWeight: 600 }}>{fmt(c.total)}</span>
                         </td>
                         <td style={{ textAlign: 'right' }} className="font-mono-num">
                           <span style={{ color: pctTotal > 20 ? 'var(--red)' : 'var(--muted)' }}>
@@ -574,6 +863,95 @@ export default function Vendedor() {
               </table>
             </div>
           </div>
+        </>
+      )}
+
+      {/* ── Mejores Clientes · Mes Anterior (snapshot) ── */}
+      {historicoVend.length > 0 && (
+        <>
+          <SectionTitle>
+            <span>Mis Mejores Clientes</span>
+            <span
+              className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold"
+              style={{ background: 'rgba(200,164,62,0.15)', color: 'var(--gold)', fontSize: '10px' }}
+            >
+              {historico.mes}
+            </span>
+          </SectionTitle>
+          <div className="table-card mb-4">
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              Cierre de {historico.mes} · Referencia para el mes en curso
+            </p>
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cód.</th>
+                    <th>Cliente</th>
+                    <th style={{ textAlign: 'right' }}>Venta {historico.mes}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historicoVend.map((c) => (
+                    <tr key={c.cod_cliente}>
+                      <td>
+                        <span className="font-mono-num font-bold"
+                          style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}>
+                          {c.ranking}
+                        </span>
+                      </td>
+                      <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
+                      <td>{c.nombre}</td>
+                      <td style={{ textAlign: 'right' }} className="font-mono-num">
+                        <span style={{ color: 'var(--gold)' }}>{fmt(c.venta)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Clientes por negocio del histórico */}
+          {historicoVendNeg.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold mb-2" style={{ color: 'var(--muted)' }}>
+                Por negocio · {historico.mes}
+              </p>
+              {historicoVendNeg.map((nx, ni) => {
+                if (!nx.top10?.length) return null;
+                const NEG_COLORS_CSS = ['var(--blue)','var(--cyan)','var(--green)','var(--amber)','var(--gold)','var(--red)','var(--muted)'];
+                const negCol = NEG_COLORS_CSS[ni % NEG_COLORS_CSS.length];
+                return (
+                  <div key={nx.negocio} className="mb-3">
+                    <div className="px-3 py-1 rounded-t text-xs font-bold"
+                      style={{ background: `${negCol}22`, color: negCol, borderLeft: `3px solid ${negCol}` }}>
+                      {nx.negocio}
+                    </div>
+                    <table className="palma-table" style={{ borderRadius: 0 }}>
+                      <tbody>
+                        {nx.top10.slice(0,5).map(c => (
+                          <tr key={c.cod_cliente}>
+                            <td style={{ width: 28 }}>
+                              <span className="font-mono-num font-bold" style={{ color: c.ranking <= 3 ? 'var(--gold)' : 'var(--muted)', fontSize: '11px' }}>
+                                {c.ranking}
+                              </span>
+                            </td>
+                            <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '10px', width: 56 }}>{c.cod_cliente}</td>
+                            <td>{c.nombre}</td>
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">
+                              <span style={{ color: negCol, fontWeight: 600 }}>{fmt(c.venta)}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
@@ -748,6 +1126,90 @@ export default function Vendedor() {
               </table>
             </div>
           </div>
+        </>
+      )}
+
+      {/* ── Productos Clave ── */}
+      {pcVendedor && (
+        <>
+          <SectionTitle>Mis Productos Clave</SectionTitle>
+
+          {/* 5 KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+            <KpiCard
+              label="Clientes activos"
+              value={String(pcVendedor.clientes_activos || 0)}
+              color="blue"
+            />
+            <KpiCard
+              label="Impactados"
+              value={String(pcVendedor.clientes_impactados_clave || 0)}
+              sub="al menos un producto clave"
+              color="green"
+            />
+            <KpiCard
+              label="Pendientes"
+              value={String(pcVendedor.clientes_sin_impacto_clave || 0)}
+              color="red"
+            />
+            <KpiCard
+              label="Cobertura clave"
+              value={`${(pcVendedor.cobertura_clave_pct || 0).toFixed(1)}%`}
+              color={pcVendedor.cobertura_clave_pct >= 70 ? 'green' : pcVendedor.cobertura_clave_pct >= 40 ? 'amber' : 'red'}
+              barValue={pcVendedor.cobertura_clave_pct || 0}
+              sub={pcVendedor.cobertura_clave_pct >= 70 ? 'Bien' : pcVendedor.cobertura_clave_pct >= 40 ? 'En avance' : 'Crítico'}
+            />
+            <KpiCard
+              label="Venta clave"
+              value={fmt(pcVendedor.venta_productos_clave || 0)}
+              color="cyan"
+            />
+          </div>
+
+          {/* Tabla de clientes pendientes del vendedor */}
+          {clientesSinPCVend.length > 0 && (
+            <div className="table-card mb-4">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                  Clientes Pendientes — Sin Producto Clave
+                </h3>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                  {clientesSinPCVend.length} clientes
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Código</th>
+                      <th style={{ textAlign: 'right' }}>Venta total periodo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientesSinPCVend.slice(0, 100).map((c, i) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{c.nombre_cliente || '—'}</td>
+                        <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          {c.venta_total_periodo > 0
+                            ? <span style={{ color: 'var(--cyan)' }}>{fmt(c.venta_total_periodo)}</span>
+                            : <span style={{ color: 'var(--muted)' }}>$0</span>}
+                        </td>
+                      </tr>
+                    ))}
+                    {clientesSinPCVend.length > 100 && (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '11px', padding: '8px' }}>
+                          + {clientesSinPCVend.length - 100} clientes más
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

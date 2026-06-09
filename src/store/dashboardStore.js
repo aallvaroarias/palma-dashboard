@@ -2,109 +2,283 @@ import { create } from 'zustand';
 import { vendedorValido, esBodega, getCoberturaVendedor } from '../utils/formatters';
 
 // Always route through /api/datos → Vite proxy in dev, Vercel serverless in prod
-const BASE = '/api/datos';
+const BASE       = '/api/datos';
+const APPS_DIRECT = 'https://script.google.com/macros/s/AKfycbxon9PiTxLibNmihjEGdRoCqYO4YdTEFes88w8Ub2YqDXfZaTPCm1Wk9L0-m-ONXSAh/exec';
 
-async function fetchSheet(sheet, params = {}) {
+function buildUrl(base, sheet, params = {}) {
+  const sep = base.includes('?') ? '&' : '?';
+  let url = `${base}${sep}sheet=${sheet}`;
+  if (params.desde) url += `&desde=${params.desde}`;
+  if (params.hasta) url += `&hasta=${params.hasta}`;
+  return url;
+}
+
+function parseJson(json) {
+  if (!json) return null;
+  if (json.error === 'timeout') return null;          // proxy timeout → sin datos
+  if (json.ok !== undefined) return json.ok ? json.data : null;  // wrapper Apps Script
+  return json;                                         // proxy Vercel directo
+}
+
+/**
+ * Pide un sheet al proxy Vercel.
+ * Si el proxy devuelve 504 (sin stale cache), reintenta directo al Apps Script
+ * solo para endpoints críticos (Fase 1); los diferidos simplemente devuelven null.
+ */
+async function fetchSheet(sheet, params = {}, { fallbackDirect = false } = {}) {
+  // 1. Proxy Vercel
   try {
-    let url = `${BASE}?sheet=${sheet}`;
-    if (params.desde) url += `&desde=${params.desde}`;
-    if (params.hasta) url += `&hasta=${params.hasta}`;
-
-    const res = await fetch(url);
+    const res  = await fetch(buildUrl(BASE, sheet, params));
     const json = await res.json();
-
-    // Apps Script wraps response in { ok, data }
-    if (json && json.ok !== undefined) {
-      return json.ok ? json.data : null;
+    const data = parseJson(json);
+    if (data !== null) return data;
+    // proxy devolvió null (json.error=timeout y no había stale cache)
+    if (!fallbackDirect) {
+      console.warn(`[store] ${sheet} → proxy sin datos, sin fallback`);
+      return null;
     }
-    // Vercel proxy returns data directly
-    return json;
+    console.warn(`[store] ${sheet} → proxy sin datos, reintentando directo`);
   } catch (e) {
-    console.error('[store] Error fetching', sheet, e);
+    if (!fallbackDirect) {
+      console.warn(`[store] ${sheet} → proxy error (${e.message}), sin fallback`);
+      return null;
+    }
+    console.warn(`[store] ${sheet} → proxy error (${e.message}), reintentando directo`);
+  }
+
+  // 2. Fallback directo a Apps Script (solo para fallbackDirect=true)
+  try {
+    const res  = await fetch(buildUrl(APPS_DIRECT, sheet, params));
+    const json = await res.json();
+    return parseJson(json);
+  } catch (e) {
+    console.error(`[store] ${sheet} → directo error: ${e.message}`);
     return null;
   }
 }
 
-const useDashboardStore = create((set, get) => ({
-  resumen: null,
-  vendedores: [],
-  cobertura: [],
-  cobNegocio: [],
-  efectividad: { por_semana: [], resumen_mes: [] },
-  devoluciones: { total: 0, por_concepto: [], por_vendedor: [], detalle: [] },
-  clientesCero: { total: 0, por_vendedor: [], detalle: [] },
-  clientesNuevos: { total: 0, por_vendedor: [], por_mes: [], detalle: [], desde: null, hasta: null },
-  tendencia: [],
-  skus: { global: [], por_vendedor: [] },
-  marcas: [],
-  topClientes: { top_global: [], top_por_vendedor: [], top_por_negocio: [] },
-  cuotas: [],   // [{ cod, asesor, cuota }] — metas mensuales por vendedor
-  cartera: { total_pendiente: 0, total_facturas: 0, por_vendedor: [], por_tramo: [], top_clientes: [], detalle: [] },
-  loading: false,
-  lastUpdate: null,
-  error: null,
+// ─── Helpers de normalización para store ─────────────────────────────────────
 
+function normalizeVendedores(raw) {
+  // Soporta array directo [...] o envuelto { vendedores: [...] }
+  const arr = Array.isArray(raw) ? raw
+    : Array.isArray(raw?.vendedores) ? raw.vendedores
+    : [];
+  return arr.filter(vendedorValido);
+}
+function normalizeCobertura(raw) {
+  return raw ? raw.filter(r => !esBodega(getCoberturaVendedor(r))) : [];
+}
+function normalizeCobNegocio(raw) {
+  return raw ? raw.filter(r => !esBodega(getCoberturaVendedor(r))) : [];
+}
+
+// ─── Store ───────────────────────────────────────────────────────────────────
+
+const useDashboardStore = create((set, get) => ({
+  resumen:         null,
+  vendedores:      [],
+  cobertura:       [],
+  cobNegocio:      [],
+  efectividad:     { por_semana: [], resumen_mes: [] },
+  devoluciones:    { total: 0, por_concepto: [], por_vendedor: [], detalle: [] },
+  clientesCero:    { total: 0, por_vendedor: [], detalle: [] },
+  clientesNuevos:  { total: 0, por_vendedor: [], por_mes: [], detalle: [], desde: null, hasta: null },
+  tendencia:       [],
+  skus:            { global: [], por_vendedor: [] },
+  marcas:          [],
+  topClientes:     { top_global: [], top_por_vendedor: [], top_por_negocio: [] },
+  cuotas:          [],
+  cartera:         { total_pendiente: 0, total_facturas: 0, por_vendedor: [], por_tramo: [], top_clientes: [], detalle: [] },
+  necesidadCliente:{ total: 0, total_clasificados: 0, por_necesidad: [] },
+  dnMarcas:        [],
+  // ── Productos clave ──────────────────────────────────────────────────────────
+  productosClaveList:   { total_catalogo: 0, total_productos_clave: 0, productos: [] },
+  coberturaPC: {
+    total_clientes_activos: 0, clientes_impactados_clave: 0, clientes_sin_impacto_clave: 0,
+    cobertura_clave_pct: 0, venta_productos_clave: 0, unidades_productos_clave: 0,
+    total_productos_clave: 0, productos_clave_vendidos: 0, productos_clave_no_vendidos: 0,
+    negocios: []
+  },
+  coberturaVendedoresPC: [],
+  clientesSinPC:  { total: 0, clientes: [] },
+  pcDetalle:      { productos: [] },
+
+  // Estado de carga
+  loading:       false,   // Fase 1 en progreso
+  loadingFase2:  false,   // Fase 2 en progreso
+  pcDetalleLoading: false,
+  clientesSinPCLoading: false,
+  lastUpdate:    null,
+  error:         null,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // loadAll — Fase 1 (crítica, bloquea loading) + Fase 2 (diferida, background)
+  // ─────────────────────────────────────────────────────────────────────────
   loadAll: async () => {
     set({ loading: true, error: null });
+    const t0 = Date.now();
+
+    console.group('%c[Store] Carga dashboard', 'color:#4ade80;font-weight:bold');
+
+    // ── FASE 1: Endpoints críticos ─────────────────────────────────────────
+    // Estos datos alimentan las secciones principales del Gerencial (KPIs,
+    // gráficos de negocio, metas, cobertura). Con CacheService en Apps Script
+    // deberían responder en <1 s después del primer calentamiento.
+    // `vendedores` está aquí (no en Fase 2) para que el selector de Mi Panel
+    // esté disponible desde el primer render.
+    const fase1 = [
+      'resumen', 'cobertura', 'cob_negocio', 'efectividad',
+      'cuotas', 'clientes_cero', 'clientes_nuevos', 'cartera',
+      'productos_clave', 'cobertura_productos_clave', 'cobertura_pc_vendedor',
+      'vendedores',
+    ];
+    console.log('▶ Fase 1 (' + fase1.length + ' endpoints):', fase1.join(', '));
 
     try {
       const [
-        resumen, vendedores, cobertura, cobNegocio,
-        efectividad, devoluciones, cero, nuevos,
-        tendencia, skus, marcas, topClientes, cuotas, cartera,
-      ] = await Promise.all([
-        fetchSheet('resumen'),
-        fetchSheet('vendedores'),
-        fetchSheet('cobertura'),
-        fetchSheet('cob_negocio'),
-        fetchSheet('efectividad'),
-        fetchSheet('devoluciones'),
-        fetchSheet('clientes_cero'),
-        fetchSheet('clientes_nuevos'),
-        fetchSheet('tendencia'),
-        fetchSheet('skus'),
-        fetchSheet('marcas'),
-        fetchSheet('top_clientes'),
-        fetchSheet('cuotas'),
-        fetchSheet('cartera'),
-      ]);
+        resumen, cobertura, cobNegocio, efectividad,
+        cuotas, cero, nuevos, cartera,
+        productosClaveRaw, coberturaPC, coberturaVendedoresRaw,
+        vendedoresRaw,
+      ] = await Promise.all(
+        fase1.map(s => fetchSheet(s, {}, { fallbackDirect: true }))
+      );
+
+      console.log('✓ Fase 1 completada en', Date.now() - t0, 'ms');
 
       set({
-        resumen: resumen || get().resumen,
-        vendedores: vendedores
-          ? vendedores.filter(vendedorValido)
-          : get().vendedores,
-        cobertura: cobertura
-          ? cobertura.filter(r => !esBodega(getCoberturaVendedor(r)))
-          : get().cobertura,
-        cobNegocio: cobNegocio
-          ? cobNegocio.filter(r => !esBodega(getCoberturaVendedor(r)))
-          : get().cobNegocio,
-        efectividad: efectividad || get().efectividad,
-        devoluciones: devoluciones || get().devoluciones,
-        clientesCero: cero || get().clientesCero,
-        clientesNuevos: nuevos || get().clientesNuevos,
-        tendencia: tendencia || get().tendencia,
-        skus: skus || get().skus,
-        marcas: marcas || get().marcas,
-        topClientes: topClientes || get().topClientes,
-        cuotas: cuotas || get().cuotas,
-        cartera: cartera || get().cartera,
-        loading: false,
+        resumen:              resumen              || get().resumen,
+        cobertura:            normalizeCobertura(cobertura),
+        cobNegocio:           normalizeCobNegocio(cobNegocio),
+        efectividad:          efectividad          || get().efectividad,
+        cuotas:               cuotas               || get().cuotas,
+        clientesCero:         cero                 || get().clientesCero,
+        clientesNuevos:       nuevos               || get().clientesNuevos,
+        cartera:              cartera              || get().cartera,
+        productosClaveList:   productosClaveRaw    || get().productosClaveList,
+        coberturaPC:          coberturaPC          || get().coberturaPC,
+        coberturaVendedoresPC: coberturaVendedoresRaw?.vendedores ?? get().coberturaVendedoresPC,
+        vendedores:           normalizeVendedores(vendedoresRaw),
+        loading:    false,
         lastUpdate: new Date(),
       });
     } catch (e) {
-      console.error('[store] loadAll error', e);
-      set({ loading: false, error: 'Error cargando datos' });
+      console.error('[Store] Fase 1 error:', e);
+      set({ loading: false, error: 'Error cargando datos principales' });
+    }
+
+    // ── FASE 2: Endpoints diferidos ────────────────────────────────────────
+    // Se cargan en background después de que el UI ya es visible.
+    // Cada uno actualiza el store individualmente cuando llega.
+    // Escalonados para no saturar Apps Script simultáneamente.
+    // [sheet, delay_ms, setter_fn, fallbackDirect?]
+    //
+    // fallbackDirect=true → si Vercel timeout, reintenta directo a Apps Script.
+    // Usar SOLO para endpoints que no caben en CacheService (>100 KB) y por
+    // tanto siempre serán lentos en Vercel. Al ser Fase 2 / background, la
+    // espera de 20-30 s no bloquea el render.
+    //
+    // fallbackDirect=false (default) → si Vercel falla, queda null silencioso.
+    // Usar para endpoints que SÍ son cacheados en Apps Script (<100 KB).
+    const fase2 = [
+      // vendedores movido a Fase 1 — selector de Mi Panel disponible desde el inicio
+      ['devoluciones',      100,  d => ({ devoluciones: d }),           true],  // ~219 KB, no cacheable
+      ['tendencia',         700,  d => ({ tendencia: d })],
+      ['marcas',            1000, d => ({ marcas: d })],
+      ['skus',              1300, d => ({ skus: d })],
+      ['top_clientes',      1600, d => ({ topClientes: d })],
+      ['dn_marcas',         1900, d => ({ dnMarcas: d })],
+      ['necesidad_cliente', 2200, d => ({ necesidadCliente: d })],
+      // clientes_sin_pc movido a carga bajo demanda (loadClientesSinPC) — ~359 KB, no auto-cargar
+    ];
+    console.log('▶ Fase 2 (' + fase2.length + ' endpoints, diferidos):', fase2.map(f => f[0]).join(', '));
+
+    set({ loadingFase2: true });
+
+    let fase2Done = 0;
+    fase2.forEach(([sheet, delay, setter, useFallback = false]) => {
+      setTimeout(async () => {
+        const ts = Date.now();
+        try {
+          const data = await fetchSheet(sheet, {}, { fallbackDirect: useFallback });
+          if (data !== null) {
+            // setter() dentro del try: si lanza por estructura inesperada,
+            // queda aislado y no afecta los demás endpoints.
+            const patch = setter(data);
+            set(patch);
+            console.log(`  ✓ Fase 2 [${sheet}] en ${Date.now() - ts} ms`);
+          } else {
+            console.warn(`  ✗ Fase 2 [${sheet}] sin datos (${Date.now() - ts} ms)`);
+          }
+        } catch (e) {
+          // Error aislado: UI sigue funcionando con el estado previo del store
+          console.warn(`  ✗ Fase 2 [${sheet}] error: ${e.message} (${Date.now() - ts} ms)`);
+        } finally {
+          fase2Done++;
+          if (fase2Done === fase2.length) {
+            set({ loadingFase2: false });
+            console.log('✓ Fase 2 completada en', Date.now() - t0, 'ms');
+            console.groupEnd();
+          }
+        }
+      }, delay);
+    });
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // loadVendedores — carga/recarga vendedores bajo demanda (fallback y retry)
+  // ─────────────────────────────────────────────────────────────────────────
+  loadVendedores: async () => {
+    try {
+      const data = await fetchSheet('vendedores', {}, { fallbackDirect: true });
+      if (data !== null) set({ vendedores: normalizeVendedores(data) });
+    } catch (e) {
+      console.warn('[Store] loadVendedores error:', e.message);
     }
   },
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // loadPCDetalle — carga lazy de pc_detalle (solo cuando se necesita)
+  // ─────────────────────────────────────────────────────────────────────────
+  loadPCDetalle: async () => {
+    if (get().pcDetalle?.productos?.length > 0) return; // ya cargado
+    set({ pcDetalleLoading: true });
+    try {
+      const data = await fetchSheet('pc_detalle', {}, { fallbackDirect: false });
+      if (data) set({ pcDetalle: data });
+    } catch (e) {
+      console.warn('[Store] loadPCDetalle error:', e.message);
+    } finally {
+      set({ pcDetalleLoading: false });
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // loadClientesSinPC — carga lazy de clientes_sin_pc (solo bajo demanda)
+  // ─────────────────────────────────────────────────────────────────────────
+  loadClientesSinPC: async () => {
+    if (get().clientesSinPCLoading) return; // prevenir doble carga simultánea
+    set({ clientesSinPCLoading: true });
+    try {
+      const data = await fetchSheet('clientes_sin_pc', {}, { fallbackDirect: true });
+      if (data !== null) set({ clientesSinPC: data });
+    } catch (e) {
+      console.warn('[Store] loadClientesSinPC error:', e.message);
+    } finally {
+      set({ clientesSinPCLoading: false });
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // refetchClientes — recarga clientes_nuevos con filtro de fechas
+  // ─────────────────────────────────────────────────────────────────────────
   refetchClientes: async (desde, hasta) => {
     const params = {};
     if (desde) params.desde = desde;
     if (hasta) params.hasta = hasta;
 
-    const nuevos = await fetchSheet('clientes_nuevos', params);
+    const nuevos = await fetchSheet('clientes_nuevos', params, { fallbackDirect: false });
     if (nuevos) {
       set({ clientesNuevos: { ...nuevos, desde, hasta } });
     }

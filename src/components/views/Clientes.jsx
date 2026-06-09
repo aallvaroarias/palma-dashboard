@@ -4,11 +4,19 @@ import KpiCard from '../ui/KpiCard';
 import SectionTitle from '../ui/SectionTitle';
 import HBarChart from '../charts/HBarChart';
 import LineChart from '../charts/LineChart';
-import { hoy, diasAtras, inicioMes, mesLabel } from '../../utils/formatters';
-import { VEND_COLORS } from '../../utils/colors';
+import { fmt, hoy, diasAtras, inicioMes, mesLabel } from '../../utils/formatters';
+import { VEND_COLORS, COLORS } from '../../utils/colors';
+
+const NEG_COLORS_LIST = [
+  '#2AAED9', '#0FA97A', '#C8A43E', '#8B6CF6',
+  '#2DC8D8', '#E05252', '#5BADC7', '#DDB84A',
+  '#4CAF8A', '#F97316',
+];
 
 export default function Clientes() {
-  const { clientesNuevos, clientesCero, resumen, refetchClientes } = useDashboardStore();
+  const { clientesNuevos, clientesCero, resumen, necesidadCliente, refetchClientes } = useDashboardStore();
+  const [expandedNec, setExpandedNec] = useState(null);
+  const [filterNegocio, setFilterNegocio] = useState('');
 
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
@@ -236,6 +244,263 @@ export default function Clientes() {
           </table>
         </div>
       </div>
+
+      {/* ── Venta por Necesidad de Cliente ── */}
+      {(() => {
+        const nec = necesidadCliente || {};
+        const allItems = nec.por_necesidad || [];
+        const hasData = allItems.length > 0;
+
+        // Negocios únicos para el filtro (computed inline, no hook)
+        const allNegocios = (() => {
+          const s = new Set();
+          allItems.forEach(item => (item.por_negocio || []).forEach(n => s.add(n.negocio)));
+          return [...s].sort();
+        })();
+
+        // Items filtrados por negocio seleccionado
+        const items = !filterNegocio ? allItems : allItems
+          .map(item => {
+            const entry = (item.por_negocio || []).find(n => n.negocio === filterNegocio);
+            return entry ? { ...item, total: entry.monto } : null;
+          })
+          .filter(x => x && x.total > 0)
+          .sort((a, b) => b.total - a.total);
+
+        const filteredTotal = items.reduce((s, x) => s + x.total, 0);
+        const topNec = items[0];
+
+        return (
+          <>
+            <SectionTitle>Venta por Necesidad de Cliente</SectionTitle>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+              <KpiCard
+                label={filterNegocio ? `Venta · ${filterNegocio}` : 'Venta Clasificada'}
+                value={fmt(filterNegocio ? filteredTotal : (nec.total || 0))}
+                color="blue"
+              />
+              <KpiCard label="Clientes Clasificados" value={String(nec.total_clasificados || 0)} color="cyan" />
+              <KpiCard
+                label="Categoría Líder"
+                value={topNec?.necesidad || '—'}
+                sub={topNec ? fmt(topNec.total) : undefined}
+                color="purple"
+              />
+            </div>
+
+            {!hasData ? (
+              <div
+                className="flex flex-col items-center justify-center gap-3 rounded-xl border mb-4 py-12"
+                style={{ borderColor: 'var(--border-2)', background: 'rgba(13,30,43,0.5)' }}
+              >
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--muted)', opacity: 0.5 }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-palumar-muted text-sm">Sin datos — actualiza el Apps Script para habilitar esta sección</p>
+              </div>
+            ) : (
+              <>
+                {/* ── Filtro por negocio ── */}
+                <div className="flex flex-wrap items-center gap-2 mb-5">
+                  <button
+                    onClick={() => setFilterNegocio('')}
+                    style={{
+                      fontSize: '11px', fontWeight: 700, padding: '5px 14px',
+                      borderRadius: '99px', cursor: 'pointer', transition: 'all 0.15s',
+                      background: !filterNegocio ? 'rgba(42,174,217,0.15)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${!filterNegocio ? 'rgba(42,174,217,0.6)' : 'rgba(255,255,255,0.1)'}`,
+                      color: !filterNegocio ? '#2AAED9' : 'var(--muted)',
+                    }}
+                  >
+                    Todos
+                  </button>
+                  {allNegocios.map((neg, ni) => {
+                    const active = filterNegocio === neg;
+                    const color = NEG_COLORS_LIST[ni % NEG_COLORS_LIST.length];
+                    return (
+                      <button
+                        key={neg}
+                        onClick={() => setFilterNegocio(active ? '' : neg)}
+                        style={{
+                          fontSize: '11px', fontWeight: 700, padding: '5px 14px',
+                          borderRadius: '99px', cursor: 'pointer', transition: 'all 0.15s',
+                          background: active ? `${color}22` : 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${active ? color : 'rgba(255,255,255,0.1)'}`,
+                          color: active ? color : 'var(--muted)',
+                        }}
+                      >
+                        {neg}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Gráfico + detalle por negocio */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                  <div className="chart-card">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="font-display font-bold text-palumar-white" style={{ fontSize: '14px' }}>
+                        Ventas por Necesidad
+                      </span>
+                      {filterNegocio && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px',
+                          background: 'rgba(42,174,217,0.12)', border: '1px solid rgba(42,174,217,0.3)',
+                          color: '#2AAED9',
+                        }}>
+                          {filterNegocio}
+                        </span>
+                      )}
+                    </div>
+                    {items.length > 0 ? (
+                      <HBarChart
+                        labels={items.map(x => x.necesidad)}
+                        data={items.map(x => x.total)}
+                        barColors={items.map(item => {
+                          const origIdx = allItems.findIndex(a => a.necesidad === item.necesidad);
+                          return NEG_COLORS_LIST[(origIdx >= 0 ? origIdx : 0) % NEG_COLORS_LIST.length];
+                        })}
+                        minH={160}
+                        rowH={38}
+                      />
+                    ) : (
+                      <div className="text-center py-10 text-palumar-muted text-sm">Sin ventas para este negocio</div>
+                    )}
+                  </div>
+
+                  {/* Panel de desglose por negocio (solo sin filtro activo) */}
+                  {!filterNegocio && (
+                    <div className="chart-card">
+                      <div className="font-display font-bold text-palumar-white mb-3" style={{ fontSize: '14px' }}>
+                        Desglose por Negocio
+                      </div>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {allItems.map((item, i) => (
+                          <button
+                            key={item.necesidad}
+                            onClick={() => setExpandedNec(expandedNec === item.necesidad ? null : item.necesidad)}
+                            style={{
+                              fontSize: '11px', fontWeight: 700, padding: '4px 12px',
+                              borderRadius: '99px', cursor: 'pointer', transition: 'all 0.15s',
+                              background: expandedNec === item.necesidad
+                                ? `${NEG_COLORS_LIST[i % NEG_COLORS_LIST.length]}22`
+                                : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${expandedNec === item.necesidad
+                                ? NEG_COLORS_LIST[i % NEG_COLORS_LIST.length]
+                                : 'rgba(255,255,255,0.1)'}`,
+                              color: expandedNec === item.necesidad
+                                ? NEG_COLORS_LIST[i % NEG_COLORS_LIST.length]
+                                : 'var(--muted)',
+                            }}
+                          >
+                            {item.necesidad}
+                          </button>
+                        ))}
+                      </div>
+                      {(() => {
+                        const sel = expandedNec
+                          ? allItems.find(x => x.necesidad === expandedNec)
+                          : allItems[0];
+                        if (!sel) return null;
+                        const negocios = sel.por_negocio || [];
+                        return (
+                          <div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-palumar-white font-semibold" style={{ fontSize: '12px' }}>{sel.necesidad}</span>
+                              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                                · {sel.clientes} cliente{sel.clientes !== 1 ? 's' : ''} · {fmt(sel.total)}
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              {negocios.map((neg, ni) => {
+                                const share = sel.total > 0 ? (neg.monto / sel.total) * 100 : 0;
+                                const color = NEG_COLORS_LIST[ni % NEG_COLORS_LIST.length];
+                                return (
+                                  <div key={neg.negocio}>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{neg.negocio}</span>
+                                      <span style={{ fontSize: '11px', color, fontWeight: 600 }}>{fmt(neg.monto)}</span>
+                                    </div>
+                                    <div style={{ height: '5px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)' }}>
+                                      <div style={{
+                                        height: '100%', borderRadius: '99px',
+                                        width: `${share.toFixed(1)}%`,
+                                        background: color,
+                                        transition: 'width 0.4s ease',
+                                      }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tabla resumen */}
+                <div className="table-card mb-4">
+                  <div className="px-5 py-3.5 border-b flex items-center gap-3" style={{ borderColor: 'var(--border-2)' }}>
+                    <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Resumen por Necesidad</h3>
+                    {filterNegocio && (
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px',
+                        background: 'rgba(42,174,217,0.12)', border: '1px solid rgba(42,174,217,0.3)',
+                        color: '#2AAED9',
+                      }}>
+                        {filterNegocio}
+                      </span>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="palma-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Necesidad</th>
+                          <th style={{ textAlign: 'right' }}>Clientes</th>
+                          <th style={{ textAlign: 'right' }}>Venta Total</th>
+                          <th style={{ textAlign: 'right' }}>% del Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, i) => {
+                          const base = filterNegocio ? filteredTotal : (nec.total || 0);
+                          const share = base > 0 ? (item.total / base) * 100 : 0;
+                          const origIdx = allItems.findIndex(x => x.necesidad === item.necesidad);
+                          const color = NEG_COLORS_LIST[origIdx % NEG_COLORS_LIST.length];
+                          return (
+                            <tr key={i}>
+                              <td style={{ color: 'var(--muted)', fontSize: '11px' }}>{i + 1}</td>
+                              <td>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                                  <span style={{ fontWeight: 500 }}>{item.necesidad}</span>
+                                </div>
+                              </td>
+                              <td style={{ textAlign: 'right', color: 'var(--cyan)' }}>{item.clientes}</td>
+                              <td style={{ textAlign: 'right' }} className="font-mono-num">
+                                <span style={{ color, fontWeight: 600 }}>{fmt(item.total)}</span>
+                              </td>
+                              <td style={{ textAlign: 'right', color: 'var(--muted)', fontSize: '11px' }}>
+                                {share.toFixed(1)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {/* Tabla detalle completo */}
       {(clientesNuevos.detalle || []).length > 0 && (

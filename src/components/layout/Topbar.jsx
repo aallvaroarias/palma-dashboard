@@ -10,6 +10,8 @@ const TABS = [
   { label: 'Devoluciones', path: '/devoluciones' },
   { label: 'Clientes', path: '/clientes' },
   { label: 'Cartera', path: '/cartera' },
+  { label: 'Nómina',     path: '/nomina' },
+  { label: 'Inventario', path: '/inventario' },
 ];
 
 export default function Topbar({ onRefresh }) {
@@ -100,17 +102,13 @@ export default function Topbar({ onRefresh }) {
 
       {/* Right side */}
       <div className="ml-auto flex items-center gap-2.5 flex-shrink-0">
-        {/* Period badge */}
-        {resumen?.periodo && (
+        {/* Fecha de corte */}
+        {resumen?.fecha_corte && (
           <span
             className="hidden md:inline font-mono-num text-palumar-muted rounded-md px-2.5 py-1 border"
-            style={{
-              fontSize: '10px',
-              background: 'var(--navy-3)',
-              borderColor: 'var(--border-2)',
-            }}
+            style={{ fontSize: '10px', background: 'var(--navy-3)', borderColor: 'var(--border-2)' }}
           >
-            {resumen.periodo}
+            Corte: {new Date(resumen.fecha_corte + 'T12:00:00').toLocaleDateString('es-PA', { day: 'numeric', month: 'long', year: 'numeric' })}
           </span>
         )}
 

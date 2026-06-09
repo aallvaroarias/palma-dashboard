@@ -6,7 +6,7 @@ import { pct, fmt, getCoberturaVendedor, getCoberturaValue } from '../../utils/f
 import { VEND_COLORS } from '../../utils/colors';
 
 export default function Cobertura() {
-  const { cobertura, cobNegocio, clientesCero, vendedores } = useDashboardStore();
+  const { cobertura, cobNegocio, clientesCero, vendedores, resumen } = useDashboardStore();
 
   const [vendedorSel, setVendedorSel] = useState('');
 
@@ -18,6 +18,47 @@ export default function Cobertura() {
     [cobertura]
   );
 
+  // ── Cobertura por Negocio a nivel Palumar ──────────────────────────
+  const cobNegocioTotal = useMemo(() => {
+    if (!cobNegocio.length) return [];
+
+    // 1. Maestro único por vendedor (clientes_maestro es igual en todas sus filas)
+    const maestroPorVend = {};
+    cobNegocio.forEach(r => {
+      const vCod = getCoberturaVendedor(r).split('-')[0].trim();
+      if (vCod && !maestroPorVend[vCod]) {
+        maestroPorVend[vCod] = Number(r.clientes_maestro || 0);
+      }
+    });
+    const totalMaestro = Object.values(maestroPorVend).reduce((s, n) => s + n, 0);
+
+    // 2. Sumar impactados por negocio a través de todos los vendedores
+    const negMap = {};
+    cobNegocio.forEach(r => {
+      const neg = String(r.negocio || '').trim();
+      if (!neg) return;
+      if (!negMap[neg]) negMap[neg] = 0;
+      negMap[neg] += Number(r.impactados || 0);
+    });
+
+    // 3. Venta por negocio desde resumen
+    const ventaNeg = {};
+    (resumen?.venta_por_negocio || []).forEach(n => { ventaNeg[n.negocio] = n.venta; });
+
+    // 4. Construir array final, solo negocios con actividad
+    return Object.entries(negMap)
+      .filter(([, imp]) => imp > 0)
+      .map(([negocio, impactados]) => ({
+        negocio,
+        maestro:    totalMaestro,
+        impactados,
+        sinCompra:  totalMaestro - impactados,
+        cobertura:  totalMaestro > 0 ? Math.round(impactados / totalMaestro * 1000) / 10 : 0,
+        venta:      ventaNeg[negocio] || 0,
+      }))
+      .sort((a, b) => b.cobertura - a.cobertura);
+  }, [cobNegocio, resumen]);
+
   // Lista de vendedores únicos con datos de cobNegocio
   const vendedoresNeg = useMemo(() => {
     const seen = new Set();
@@ -26,14 +67,6 @@ export default function Cobertura() {
       .filter(v => { if (!v || seen.has(v)) return false; seen.add(v); return true; })
       .sort();
   }, [cobNegocio]);
-
-  // Negocios del vendedor seleccionado
-  const negVend = useMemo(() => {
-    if (!vendedorSel) return [];
-    return cobNegocio
-      .filter(r => getCoberturaVendedor(r) === vendedorSel)
-      .sort((a, b) => getCoberturaValue(b) - getCoberturaValue(a));
-  }, [cobNegocio, vendedorSel]);
 
   // Mapa cod_vendedor → clientes cero (desde FRECUENCIA_ECOM vía clientesCero)
   const ceroCodMap = useMemo(() => {
@@ -44,16 +77,31 @@ export default function Cobertura() {
     return map;
   }, [clientesCero]);
 
-  // Mapa negocio → venta $ del vendedor seleccionado (desde vendedores)
+  // Mapa negocio → venta $ del vendedor seleccionado — debe declararse ANTES de negVend
   const ventaNegMap = useMemo(() => {
     if (!vendedorSel) return {};
+    const cod = vendedorSel.split('-')[0].trim();
     const vend = vendedores.find(v =>
+      String(v.cod || '').trim() === cod ||
       (v.nom_vendedor || v.vendedor || v.nombre || '') === vendedorSel
     );
     const map = {};
     (vend?.venta_por_negocio || []).forEach(n => { map[n.negocio] = n.venta; });
     return map;
   }, [vendedores, vendedorSel]);
+
+  // Negocios del vendedor seleccionado (solo los que tienen actividad)
+  const negVend = useMemo(() => {
+    if (!vendedorSel) return [];
+    const cod = vendedorSel.split('-')[0].trim();
+    return cobNegocio
+      .filter(r => {
+        const vCod = getCoberturaVendedor(r).split('-')[0].trim();
+        return vCod === cod && r.negocio && String(r.negocio).trim() !== '';
+      })
+      .filter(r => getCoberturaValue(r) > 0 || (ventaNegMap[r.negocio] || 0) > 0)
+      .sort((a, b) => getCoberturaValue(b) - getCoberturaValue(a));
+  }, [cobNegocio, vendedorSel, ventaNegMap]);
 
   return (
     <div className="animate-fade-in">
@@ -138,6 +186,108 @@ export default function Cobertura() {
           </table>
         </div>
       </div>
+
+      {/* ── Cobertura por Negocio — Palumar Total ── */}
+      {cobNegocioTotal.length > 0 && (
+        <>
+          <SectionTitle>Cobertura por Negocio — Palumar</SectionTitle>
+
+          {/* Gráfica % */}
+          <div className="chart-card mb-4">
+            <div className="font-display font-semibold mb-3" style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              Cobertura %
+            </div>
+            <HBarChart
+              labels={cobNegocioTotal.map(r => r.negocio)}
+              data={cobNegocioTotal.map(r => r.cobertura)}
+              barColors={cobNegocioTotal.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+              isPct
+              metaValue={95}
+              metaLabel="Meta 95%"
+              minH={80}
+              rowH={34}
+            />
+          </div>
+
+          {/* Tabla detalle */}
+          <div className="table-card mb-6">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                Detalle por Negocio
+              </h3>
+              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                {cobNegocioTotal.length} líneas activas
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="palma-table">
+                <thead>
+                  <tr>
+                    <th>Negocio</th>
+                    <th style={{ textAlign: 'right' }}>Impactados</th>
+                    <th style={{ textAlign: 'right' }}>Sin compra</th>
+                    <th style={{ textAlign: 'right' }}>Cobertura</th>
+                    <th style={{ textAlign: 'right' }}>Venta $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cobNegocioTotal.map((r, i) => {
+                    const cobCol = r.cobertura >= 95 ? 'var(--green)' : r.cobertura >= 75 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <tr key={r.negocio}>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-sm flex-shrink-0"
+                              style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                            {r.negocio}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: 'var(--green)' }}>{r.impactados}</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ color: r.sinCompra > 0 ? 'var(--red)' : 'var(--muted)' }}>{r.sinCompra}</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          <span style={{ fontWeight: 700, color: cobCol }}>{pct(r.cobertura)}</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          {r.venta > 0
+                            ? <span style={{ color: 'var(--cyan)' }}>{fmt(r.venta)}</span>
+                            : <span style={{ color: 'var(--muted)' }}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '1px solid var(--border-2)' }}>
+                    <td className="font-semibold" style={{ color: 'var(--palumar-white)', fontSize: '11px' }}>
+                      Total activos
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="font-mono-num font-semibold">
+                      {cobNegocioTotal.reduce((s, r) => s + r.impactados, 0)}
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="font-mono-num font-semibold">
+                      <span style={{ color: 'var(--red)' }}>
+                        {cobNegocioTotal.reduce((s, r) => s + r.sinCompra, 0)}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="font-mono-num font-semibold">
+                      —
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="font-mono-num font-semibold">
+                      <span style={{ color: 'var(--cyan)' }}>
+                        {fmt(cobNegocioTotal.reduce((s, r) => s + r.venta, 0))}
+                      </span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Cobertura por Negocio — Individual ── */}
       {vendedoresNeg.length > 0 && (

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import useDashboardStore from '../../store/dashboardStore';
 import KpiCard from '../ui/KpiCard';
 import SectionTitle from '../ui/SectionTitle';
@@ -18,6 +18,19 @@ function AlertItem({ type, children }) {
   );
 }
 
+// ── Helpers de sede ────────────────────────────────────────────────────────────
+// Extrae el código del asesor de un label "201 - ANAYS" → "201"
+// (equivalente a obtenerCodAsesor_ del backend)
+const extractCod = (label) => String(label || '').split('-')[0].trim();
+
+// Normaliza el nombre de sede a forma canónica
+const normalizarSede = (sede) => {
+  const s = String(sede || '').toUpperCase().trim();
+  if (s.includes('CHIRIQ')) return 'CHIRIQUI';
+  if (s.includes('CENTRAL') || s.includes('CTR')) return 'CENTRALES';
+  return s;
+};
+
 export default function Gerencial() {
   const {
     resumen: r,
@@ -33,14 +46,26 @@ export default function Gerencial() {
     topClientes,
     cuotas,
     refetchClientes,
+    coberturaPC,
+    coberturaVendedoresPC,
+    clientesSinPC,
+    pcDetalle,
+    loadPCDetalle,
+    pcDetalleLoading,
+    loadClientesSinPC,
+    clientesSinPCLoading,
+    loadingFase2,
   } = useDashboardStore();
 
+  const [sedeFiltro, setSedeFiltro]       = useState('TODOS'); // 'TODOS' | 'CENTRALES' | 'CHIRIQUI'
   const [negocioFiltro, setNegocioFiltro] = useState('');
   const [vendedorTop10, setVendedorTop10] = useState('');
   const [negocioTop10, setNegocioTop10]   = useState('');
   const [ceroVendSel, setCeroVendSel] = useState('');
   const [loadingNuevosG, setLoadingNuevosG] = useState(false);
   const [filtroNuevosLabel, setFiltroNuevosLabel] = useState('Este período');
+  const [showSinPC, setShowSinPC]         = useState(false);   // panel clientes pendientes
+  const [showPCDetalle, setShowPCDetalle] = useState(false);   // panel detalle por producto
 
   const applyNuevosG = useCallback(async (desde, hasta, label) => {
     setLoadingNuevosG(true);
@@ -49,6 +74,9 @@ export default function Gerencial() {
     finally { setLoadingNuevosG(false); }
   }, [refetchClientes]);
 
+  // Limpiar selección de vendedor cero al cambiar sede
+  useEffect(() => { setCeroVendSel(''); }, [sedeFiltro]);
+
   // Quick filter helpers
   const hoy = new Date();
   const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`;
@@ -56,33 +84,79 @@ export default function Gerencial() {
   const hace30 = new Date(hoy); hace30.setDate(hoy.getDate() - 30);
   const hace30Str = hace30.toISOString().slice(0, 10);
 
+  // ── Mapa cod → sede (fuente: cuotas, que tiene campo sede por asesor) ─────────
+  // DEBE ser el primero de los memos de sede: los siguientes dependen de él.
+  const asesorSedeMap = useMemo(() => {
+    const map = {};
+    cuotas.forEach(c => {
+      const cod = String(c.cod || '').trim();
+      if (cod) map[cod] = normalizarSede(c.sede || '');
+    });
+    return map;
+  }, [cuotas]);
+
+  // ── Vendedores filtrados por sede ────────────────────────────────────────────
+  const vendedoresFiltrados = useMemo(() => {
+    if (sedeFiltro === 'TODOS') return vendedores;
+    return vendedores.filter(v => {
+      const cod = String(v.cod || '').trim();
+      return asesorSedeMap[cod] === sedeFiltro;
+    });
+  }, [vendedores, asesorSedeMap, sedeFiltro]);
+
+  // ── Clientes cero filtrados por sede ─────────────────────────────────────────
+  const ceroVendedoresFiltrados = useMemo(() => {
+    if (sedeFiltro === 'TODOS') return clientesCero.por_vendedor || [];
+    return (clientesCero.por_vendedor || []).filter(row => {
+      const cod = String(row.cod || extractCod(row.vendedor || '')).trim();
+      return asesorSedeMap[cod] === sedeFiltro;
+    });
+  }, [clientesCero, asesorSedeMap, sedeFiltro]);
+
+  // Total clientes cero del filtro actual
+  const ceroCeroTotal = useMemo(
+    () => ceroVendedoresFiltrados.reduce((s, row) => s + (row.cantidad || 0), 0),
+    [ceroVendedoresFiltrados]
+  );
+
   // Detalle de clientes cero del vendedor seleccionado
   const ceroVendDetalle = useMemo(() => {
     if (!ceroVendSel) return [];
     return (clientesCero.detalle || []).filter(c => {
-      if (c.cod_vendedor) return String(c.cod_vendedor).trim() === ceroVendSel;
-      return String(c.vendedor || '').trim() === ceroVendSel;
+      const matchVend = c.cod_vendedor
+        ? String(c.cod_vendedor).trim() === ceroVendSel
+        : String(c.vendedor || '').trim() === ceroVendSel;
+      return matchVend;
     });
   }, [clientesCero, ceroVendSel]);
 
   const vs = useMemo(
-    () => [...vendedores].sort((a, b) => (b.venta_neta || 0) - (a.venta_neta || 0)),
-    [vendedores]
+    () => [...vendedoresFiltrados].sort((a, b) => (b.venta_neta || 0) - (a.venta_neta || 0)),
+    [vendedoresFiltrados]
   );
 
-  const cobData = useMemo(
-    () =>
-      [...cobertura]
-        .filter(r2 => getCoberturaValue(r2) > 0)
-        .sort((a, b) => getCoberturaValue(b) - getCoberturaValue(a)),
-    [cobertura]
-  );
+  const cobData = useMemo(() => {
+    const base = sedeFiltro === 'TODOS'
+      ? cobertura
+      : cobertura.filter(r2 => {
+          const cod = extractCod(getCoberturaVendedor(r2));
+          return asesorSedeMap[cod] === sedeFiltro;
+        });
+    return base
+      .filter(r2 => getCoberturaValue(r2) > 0)
+      .sort((a, b) => getCoberturaValue(b) - getCoberturaValue(a));
+  }, [cobertura, asesorSedeMap, sedeFiltro]);
 
-  // Efectividad — excluir Ruta Centrales
-  const efData = useMemo(
-    () => (efectividad.resumen_mes || []).filter(r2 => !esRutaCentral(getCoberturaVendedor(r2))),
-    [efectividad]
-  );
+  // Efectividad — excluir Ruta Centrales + filtrar por sede
+  const efData = useMemo(() => {
+    const base = sedeFiltro === 'TODOS'
+      ? (efectividad.resumen_mes || [])
+      : (efectividad.resumen_mes || []).filter(r2 => {
+          const cod = extractCod(getCoberturaVendedor(r2));
+          return asesorSedeMap[cod] === sedeFiltro;
+        });
+    return base.filter(r2 => !esRutaCentral(getCoberturaVendedor(r2)));
+  }, [efectividad, asesorSedeMap, sedeFiltro]);
 
   const efField = useMemo(() => {
     if (!efData.length) return 'efectividad';
@@ -111,7 +185,7 @@ export default function Gerencial() {
   // Así coinciden sin importar el separador que use cada fuente.
   const vendVentaMap = useMemo(() => {
     const map = {};
-    vendedores.forEach(v => {
+    vendedoresFiltrados.forEach(v => {
       const venta  = v.venta_neta || 0;
       const cod    = String(v.cod    || '').trim();
       const nombre = String(v.nombre || '').trim();
@@ -120,13 +194,13 @@ export default function Gerencial() {
       if (nombre)        map[norm(nombre)]       = venta;  // "ANAYS"      ← fallback
     });
     return map;
-  }, [vendedores]);
+  }, [vendedoresFiltrados]);
 
   // Mapa equivalente para venta en el negocio seleccionado (cobertura por negocio)
   const cobNegVentaMap = useMemo(() => {
     if (!negocioFiltro) return {};
     const map = {};
-    vendedores.forEach(v => {
+    vendedoresFiltrados.forEach(v => {
       const n     = (v.venta_por_negocio || []).find(x => x.negocio === negocioFiltro);
       const venta = n ? (n.venta || 0) : 0;
       const cod    = String(v.cod    || '').trim();
@@ -136,7 +210,7 @@ export default function Gerencial() {
       if (nombre)        map[norm(nombre)]       = venta;
     });
     return map;
-  }, [vendedores, negocioFiltro]);
+  }, [vendedoresFiltrados, negocioFiltro]);
 
   const promEquipoCob = useMemo(() => {
     if (!cobData.length) return 0;
@@ -159,9 +233,44 @@ export default function Gerencial() {
     return map;
   }, [cuotas]);
 
+  // ── Resumen filtrado por sede ─────────────────────────────────────────────
+  // Cuando sedeFiltro === 'TODOS' retorna el resumen global (r).
+  // Cuando hay filtro de sede retorna r.por_sede[sedeFiltro] (calculado en backend).
+  // DEBE estar ANTES del early return `if (!r)` para no violar las reglas de Hooks.
+  const rf = useMemo(() => {
+    if (!r) return null;
+    if (sedeFiltro === 'TODOS') return r;
+    return r?.por_sede?.[sedeFiltro] ?? r;
+  }, [r, sedeFiltro]);
+
+  // Auditoría en consola cada vez que cambia sede o datos
+  useMemo(() => {
+    if (!rf) return;
+    console.group('[FiltroSede KPIs] sede=' + sedeFiltro);
+    console.log('resumen crudo (r):',      r);
+    console.log('resumen filtrado (rf):',  rf);
+    console.log('venta_bruta',             rf.venta_bruta);
+    console.log('devolucion_total',        rf.devolucion_total);
+    console.log('averia_total',            rf.averia_total);
+    console.log('descuento_total',         rf.descuento_total);
+    console.log('venta_neta',              rf.venta_neta);
+    console.log('clientes_impactados',     rf.clientes_impactados);
+    console.log('clientes_maestro',        rf.clientes_maestro);
+    console.log('cobertura_pct',           rf.cobertura_pct);
+    console.log('cuota_total',             rf.cuota_total);
+    if (r?.por_sede) {
+      const tC = r.por_sede.CENTRALES;
+      const tQ = r.por_sede.CHIRIQUI;
+      const tS = r.por_sede.SIN_SEDE;
+      console.log('Σ venta_neta  C+Q+S =', (tC?.venta_neta||0)+(tQ?.venta_neta||0)+(tS?.venta_neta||0), '≈ TODOS =', r.venta_neta);
+      console.log('Σ devol_total C+Q+S =', (tC?.devolucion_total||0)+(tQ?.devolucion_total||0)+(tS?.devolucion_total||0), '≈ TODOS =', r.devolucion_total);
+    }
+    console.groupEnd();
+  }, [rf, sedeFiltro, r]);
+
   // Vendedores con cuota configurada, ordenados por % cumplimiento desc
   const metaData = useMemo(() => {
-    return [...vendedores]
+    return [...vendedoresFiltrados]
       .filter(v => !esRutaCentral(v.nombre))
       .map(v => {
         const cuota = cuotaMap[String(v.cod).trim()] ?? (v.cuota || 0);
@@ -171,7 +280,7 @@ export default function Gerencial() {
       })
       .filter(v => v.cuota > 0)
       .sort((a, b) => b.pct_cumplimiento - a.pct_cumplimiento);
-  }, [vendedores, cuotaMap]);
+  }, [vendedoresFiltrados, cuotaMap]);
 
   // ── Normalización de nombres de negocio ──────────────────────────────────
   // Unifica nombres que vienen con código ("03-Chocolates"), sin tildes ("Cafe"),
@@ -221,11 +330,15 @@ export default function Gerencial() {
     return MAPA_NEGOCIOS[s] ? MAPA_NEGOCIOS[s] : limpio;
   }
 
-  // Metas por negocio: suma cuotas de todos los vendedores cruzada con venta real por negocio
+  // Metas por negocio: suma cuotas × sede cruzada con venta real por negocio
   const metasPorNegocio = useMemo(() => {
-    // Acumular meta total por negocio normalizado desde cuotas[].por_negocio
+    // ── Meta: filtrar cuotas por sede ─────────────────────────────────────────
+    const cuotasFiltradas = sedeFiltro === 'TODOS'
+      ? cuotas
+      : cuotas.filter(c => normalizarSede(c.sede) === sedeFiltro);
+
     const metaMap = {};
-    cuotas.forEach(c => {
+    cuotasFiltradas.forEach(c => {
       (c.por_negocio || []).forEach(({ negocio, meta }) => {
         const key = normNeg(negocio);
         if (key) metaMap[key] = (metaMap[key] || 0) + (meta || 0);
@@ -233,12 +346,29 @@ export default function Gerencial() {
     });
     if (!Object.keys(metaMap).length) return [];
 
-    // Venta por negocio desde r.venta_por_negocio (misma fuente que el KPI principal)
+    // ── Venta: siempre desde rf.venta_por_negocio (backend pre-agregado por sede) ─
+    // TODOS → rf === r → r.venta_por_negocio
+    // Sede  → rf === r.por_sede[sedeFiltro] → venta_por_negocio de esa sede
+    // Fallback: si por_sede no está en cache (backend viejo), usar vendedoresFiltrados
+    const rfVpn = rf?.venta_por_negocio;
     const ventaMap = {};
-    (r?.venta_por_negocio || []).forEach(({ negocio, venta }) => {
-      const key = normNeg(negocio);
-      if (key) ventaMap[key] = (ventaMap[key] || 0) + (venta || 0);
-    });
+    if (rfVpn?.length) {
+      rfVpn.forEach(({ negocio, venta }) => {
+        const key = normNeg(negocio);
+        if (key) ventaMap[key] = (ventaMap[key] || 0) + (venta || 0);
+      });
+    } else {
+      // Fallback: calcular desde vendedores cuando por_sede no está disponible
+      vendedoresFiltrados.forEach(v => {
+        (v.venta_por_negocio || []).forEach(({ negocio, venta }) => {
+          const key = normNeg(negocio);
+          if (key) ventaMap[key] = (ventaMap[key] || 0) + (venta || 0);
+        });
+      });
+    }
+
+    // ── KPI de referencia (para calcular "sin negocio") ──────────────────────
+    const ventaKPI = rf?.venta_neta ?? 0;
 
     // Factor de proyección (días hábiles lun-sáb)
     const hoy2 = new Date();
@@ -253,28 +383,31 @@ export default function Gerencial() {
     const hTransc = diasHab(inicio, hoy2);
     const factor  = hTransc > 0 ? hTotal / hTransc : 1;
 
-    // ── Auditoría de negocios crudos vs normalizados ──────────────────────────
-    const rawEntries    = r?.venta_por_negocio || [];
-    const ventaKPI      = r?.venta_neta ?? 0;
-    const ventaTotalRaw = rawEntries.reduce((s, n) => s + (n.venta || 0), 0);
-    // Diferencia entre KPI y suma de r.venta_por_negocio = filas sin negocio en BASE
+    const ventaTotalRaw   = Object.values(ventaMap).reduce((s, v) => s + v, 0);
     const ventaSinNegocio = Math.round((ventaKPI - ventaTotalRaw) * 100) / 100;
 
-    // Mapa crudo → normalizado para detectar no-homologados
-    const negociosCrudos      = rawEntries.map(n => n.negocio);
-    const negociosNormalizados = rawEntries.map(n => ({ crudo: n.negocio, normalizado: normNeg(n.negocio) }));
-    const noHomologados = negociosNormalizados.filter(n => {
-      const s = n.crudo.trim().replace(/^\d{1,3}\s*[-_]\s*/, '')
-        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '')
-        .toUpperCase().replace(/\s+/g, ' ').trim();
-      return !MAPA_NEGOCIOS[s]; // no estaba en el mapa, se usó nombre crudo
-    });
+    // Auditoría (solo en modo TODOS para mantener consistencia con la auditoría original)
+    if (sedeFiltro === 'TODOS') {
+      const rawEntries = rf?.venta_por_negocio || [];
+      const negociosNormalizados = rawEntries.map(n => ({ crudo: n.negocio, normalizado: normNeg(n.negocio) }));
+      const noHomologados = negociosNormalizados.filter(n => {
+        const s = n.crudo.trim().replace(/^\d+\s*[-_]\s*/, '')
+          .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '')
+          .toUpperCase().replace(/\s+/g, ' ').trim();
+        return !MAPA_NEGOCIOS[s];
+      });
+      console.group('[MetasPorNegocio] Auditoría diferencia KPI vs tabla');
+      console.table({ ventaKpiPrincipal: ventaKPI, sumaNegociosEnBASE: ventaTotalRaw, ventaSinNegocioEnBASE: ventaSinNegocio });
+      if (noHomologados.length) console.warn('⚠ Negocios NO homologados:', noHomologados);
+      else console.log('✅ Todos los negocios fueron homologados');
+      console.groupEnd();
+    }
 
-    // Unión de todos los negocios (con meta Y con venta) — floats internos, sin redondear
+    // Unión de todos los negocios (floats internos, sin redondear)
     const allKeys = new Set([...Object.keys(metaMap), ...Object.keys(ventaMap)]);
     const rows = [...allKeys].map(key => {
       const meta  = metaMap[key] || 0;
-      const venta = ventaMap[key] || 0;   // float real, sin redondear
+      const venta = ventaMap[key] || 0;
       const proyec = venta * factor;
       const pctC   = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
       const falta  = meta - venta;
@@ -291,72 +424,56 @@ export default function Gerencial() {
       });
     }
 
-    const ventaTablaCentavos = rows.reduce((s, row) => s + row.venta, 0);
-
-    // ── Log de auditoría ──────────────────────────────────────────────────────
-    console.group('[MetasPorNegocio] Auditoría diferencia KPI vs tabla');
-    console.table({
-      ventaKpiPrincipal:                              ventaKPI,
-      sumaNegociosEnBASE:                             ventaTotalRaw,
-      ventaSinNegocioEnBASE:                          ventaSinNegocio,
-      totalVentaTablaNegociosIncluyendoSinNegocio:    ventaTablaCentavos,
-      diferenciaFinal:                                ventaKPI - ventaTablaCentavos,
-    });
-    console.log('Negocios crudos en r.venta_por_negocio:', negociosCrudos);
-    console.table(negociosNormalizados);
-    if (noHomologados.length) {
-      console.warn('⚠ Negocios NO homologados:', noHomologados);
-    } else {
-      console.log('✅ Todos los negocios fueron homologados');
-    }
-    console.groupEnd();
-
     return rows;
-  }, [cuotas, r]);
+  }, [cuotas, rf, vendedoresFiltrados, sedeFiltro]);
 
   // Venta NETA por negocio — normalizada con normNeg, agrupada, sin códigos ni chars dañados
+  // Fuente principal: rf.venta_por_negocio (pre-agregado en backend por sede).
+  // Fallback: vendedoresFiltrados[].venta_por_negocio si por_sede no está disponible.
   const neg = useMemo(() => {
     const grouped = {};
-    (r?.venta_por_negocio || []).forEach(({ negocio, venta }) => {
-      const key = normNeg(negocio);
-      if (!key) return;
-      grouped[key] = (grouped[key] || 0) + (venta || 0);
-    });
+    const source = rf?.venta_por_negocio;
+    if (source?.length) {
+      source.forEach(({ negocio, venta }) => {
+        const key = normNeg(negocio);
+        if (!key) return;
+        grouped[key] = (grouped[key] || 0) + (venta || 0);
+      });
+    } else {
+      // Fallback cuando el backend no tiene por_sede todavía
+      vendedoresFiltrados.forEach(v => {
+        (v.venta_por_negocio || []).forEach(({ negocio, venta }) => {
+          const key = normNeg(negocio);
+          if (!key) return;
+          grouped[key] = (grouped[key] || 0) + (venta || 0);
+        });
+      });
+    }
 
-    const result = Object.entries(grouped)
+    return Object.entries(grouped)
       .filter(([, venta]) => venta > 0)
       .map(([negocio, venta]) => ({ negocio, venta }))
       .sort((a, b) => b.venta - a.venta);
-
-    // Validación temporal en consola
-    const labels = result.map(n => n.negocio);
-    const dirty  = labels.filter(l => /^\d+-/.test(l) || /[√�]/.test(l) || !l);
-    console.log('[VentaPorNegocio] labels normalizados:', labels);
-    console.log('[VentaPorNegocio] dataset agrupado:', result);
-    if (dirty.length) console.warn('[VentaPorNegocio] ⚠ Labels con problema:', dirty);
-    else              console.log('[VentaPorNegocio] ✅ Todos los labels están limpios');
-
-    return result;
-  }, [r]);
+  }, [rf, vendedoresFiltrados]);
 
   // Alerts
   const alerts = useMemo(() => {
     const list = [];
-    vendedores.forEach(v => {
+    vendedoresFiltrados.forEach(v => {
       const c = +v.cobertura || 0;
       if (c < 75) list.push({ type: 'alert-red', msg: `Cobertura crítica: ${v.nombre} (${pct(c)})` });
       else if (c < 95) list.push({ type: 'alert-amber', msg: `Bajo meta: ${v.nombre} (${pct(c)})` });
     });
-    if ((+r?.pct_devolucion || 0) > 10) {
-      list.push({ type: 'alert-amber', msg: `Devoluciones altas: ${pct(r.pct_devolucion)} de venta real` });
+    if ((+rf?.pct_devolucion || 0) > 10) {
+      list.push({ type: 'alert-amber', msg: `Devoluciones altas: ${pct(rf.pct_devolucion)} de venta real` });
     }
     if (!list.length) list.push({ type: 'alert-green', msg: 'Sin alertas críticas' });
     return list.slice(0, 6);
-  }, [vendedores, r]);
+  }, [vendedoresFiltrados, rf]);
 
   // Proyección de cierre de mes basada en días hábiles (lun–sáb)
   const proyeccionCierre = useMemo(() => {
-    if (!r?.venta_neta) return null;
+    if (!rf?.venta_neta) return null;
     const hoy   = new Date();
     const anio  = hoy.getFullYear();
     const mes   = hoy.getMonth();
@@ -377,12 +494,57 @@ export default function Gerencial() {
     const habilesTransc = diasHabiles(inicio, hoy);
     if (habilesTransc === 0) return null;
 
-    const proyeccion  = Math.round(r.venta_neta / habilesTransc * habilesTotal);
+    const proyeccion  = Math.round(rf.venta_neta / habilesTransc * habilesTotal);
     const pctAvance   = Math.round(habilesTransc / habilesTotal * 100);
-    const cuota       = r.cuota_total || 0;
+    const cuota       = rf.cuota_total || 0;
     const pctVsCuota  = cuota > 0 ? Math.round(proyeccion / cuota * 100) : null;
     return { proyeccion, pctAvance, habilesTransc, habilesTotal, pctVsCuota };
-  }, [r]);
+  }, [rf]);
+
+  // ── Productos Clave: filtrado por sede ──────────────────────────────────────
+  // ⚠ DEBEN estar ANTES del early return `if (!r)`.
+  // No dependen de `r` — son seguros con r === null.
+  const cobPCVendedoresFiltrados = useMemo(() => {
+    const base = sedeFiltro === 'TODOS'
+      ? coberturaVendedoresPC
+      : coberturaVendedoresPC.filter(v => {
+          const sedeV = normalizarSede(v.sede || '');
+          const sedeA = asesorSedeMap[String(v.cod_asesor || '').trim()] || '';
+          return (sedeV || sedeA) === sedeFiltro;
+        });
+    // Ordenar por cobertura ASC (peor cobertura primero → prioridad de acción)
+    return [...base].sort((a, b) => (a.cobertura_clave_pct || 0) - (b.cobertura_clave_pct || 0));
+  }, [coberturaVendedoresPC, asesorSedeMap, sedeFiltro]);
+
+  const cobPCResumen = useMemo(() => {
+    if (sedeFiltro === 'TODOS') return coberturaPC;
+    const vends = cobPCVendedoresFiltrados;
+    const totalAct = vends.reduce((s, v) => s + (v.clientes_activos || 0), 0);
+    const totalImp = vends.reduce((s, v) => s + (v.clientes_impactados_clave || 0), 0);
+    return {
+      total_clientes_activos:      totalAct,
+      clientes_impactados_clave:   totalImp,
+      clientes_sin_impacto_clave:  totalAct - totalImp,
+      cobertura_clave_pct:         totalAct > 0 ? Math.round(totalImp / totalAct * 1000) / 10 : 0,
+      venta_productos_clave:       vends.reduce((s, v) => s + (v.venta_productos_clave || 0), 0),
+      total_productos_clave:       coberturaPC.total_productos_clave || 0,
+      productos_clave_vendidos:    coberturaPC.productos_clave_vendidos || 0,
+      productos_clave_no_vendidos: coberturaPC.productos_clave_no_vendidos || 0,
+    };
+  }, [coberturaPC, cobPCVendedoresFiltrados, sedeFiltro]);
+
+  const clientesSinPCFiltrados = useMemo(() => {
+    // Defensivo: clientesSinPC puede ser un objeto {total, clientes:[]} o null/array
+    const lista = Array.isArray(clientesSinPC)
+      ? clientesSinPC
+      : (clientesSinPC?.clientes || []);
+    if (sedeFiltro === 'TODOS') return lista;
+    return lista.filter(c => {
+      const cod   = String(c.cod_asesor || '').trim();
+      const sedeC = normalizarSede(c.sede || '');
+      return (sedeC || asesorSedeMap[cod] || '') === sedeFiltro;
+    });
+  }, [clientesSinPC, asesorSedeMap, sedeFiltro]);
 
   if (!r) {
     return (
@@ -392,31 +554,82 @@ export default function Gerencial() {
     );
   }
 
+  // KPIs del equipo filtrado (para la barra de resumen del filtro)
+  // Usa rf para mostrar siempre datos coherentes con los KPI cards
+  const ventaEquipo = rf?.venta_neta ?? 0;
+  const cuotaEquipo = rf?.cuota_total ?? 0;
+
   return (
     <div className="animate-fade-in">
+
+      {/* ── Filtro de Sede ── */}
+      <div
+        className="flex flex-wrap items-center gap-2 mb-5 px-4 py-3 rounded-xl"
+        style={{ background: 'rgba(13,30,43,0.6)', border: '1px solid var(--border-2)' }}
+      >
+        <span className="text-palumar-muted font-semibold" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: '4px' }}>
+          Vista:
+        </span>
+        {[
+          { key: 'TODOS',     label: 'Todos',     color: 'var(--green)', border: 'rgba(15,169,122,0.45)', bg: 'linear-gradient(135deg,rgba(15,169,122,0.18) 0%,rgba(52,211,153,0.09) 100%)' },
+          { key: 'CENTRALES', label: 'Centrales', color: 'var(--cyan)',  border: 'rgba(45,174,217,0.45)', bg: 'linear-gradient(135deg,rgba(45,174,217,0.18) 0%,rgba(45,174,217,0.09) 100%)' },
+          { key: 'CHIRIQUI',  label: 'Chiriquí',  color: 'var(--cyan)',  border: 'rgba(45,174,217,0.45)', bg: 'linear-gradient(135deg,rgba(45,174,217,0.18) 0%,rgba(45,174,217,0.09) 100%)' },
+        ].map(({ key, label, color, border, bg }) => {
+          const active = sedeFiltro === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setSedeFiltro(key)}
+              className="px-4 py-1.5 rounded-lg font-bold transition-all duration-150"
+              style={{
+                fontSize: '12px',
+                background: active ? bg : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${active ? border : 'var(--border-2)'}`,
+                color: active ? color : 'var(--muted)',
+                boxShadow: active ? `0 0 8px ${border}` : 'none',
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+        {sedeFiltro !== 'TODOS' && (
+          <span className="ml-2 text-palumar-muted" style={{ fontSize: '11px' }}>
+            {`${vendedoresFiltrados.length} vendedor${vendedoresFiltrados.length !== 1 ? 'es' : ''} · Venta: `}
+            <strong style={{ color: 'var(--cyan)' }}>{fmt(ventaEquipo)}</strong>
+            {cuotaEquipo > 0 && (
+              <> · Cuota: <strong style={{ color: 'var(--gold)' }}>{fmt(cuotaEquipo)}</strong>
+                {' · '}<strong style={{ color: ventaEquipo >= cuotaEquipo ? 'var(--green)' : 'var(--amber)' }}>
+                  {Math.round(ventaEquipo / cuotaEquipo * 100)}%
+                </strong></>
+            )}
+          </span>
+        )}
+      </div>
+
       {/* ── KPIs ── */}
       <SectionTitle>KPIs Globales</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 tv:grid-cols-5 gap-3 mb-6">
-        <KpiCard label="Venta Bruta" value={fmt(r.venta_bruta ?? r.venta_real ?? 0)} color="blue" />
+        <KpiCard label="Venta Bruta" value={fmt(rf.venta_bruta ?? rf.venta_real ?? 0)} color="blue" />
         <KpiCard
           label="Devoluciones"
-          value={fmt(r.devolucion_total || 0)}
-          sub={`<span style="color:var(--red)">${pct(r.pct_devolucion)}</span> de venta bruta`}
+          value={fmt(rf.devolucion_total || 0)}
+          sub={`<span style="color:var(--red)">${pct(rf.pct_devolucion)}</span> de venta bruta`}
           color="red"
         />
         <KpiCard
           label="Averías"
-          value={fmt(r.averia_total || 0)}
-          sub={pct(r.pct_averia || 0)}
+          value={fmt(rf.averia_total || 0)}
+          sub={pct(rf.pct_averia || 0)}
           color="red"
         />
         <KpiCard
           label="Descuentos"
-          value={fmt(r.descuento_total || 0)}
-          sub={pct(r.pct_descuento_total || 0)}
+          value={fmt(rf.descuento_total || 0)}
+          sub={pct(rf.pct_descuento_total || 0)}
           color="amber"
         />
-        <KpiCard label="Venta Neta" value={fmt(r.venta_neta || 0)} color="green" />
+        <KpiCard label="Venta Neta" value={fmt(rf.venta_neta || 0)} color="green" />
         {proyeccionCierre && (
           <KpiCard
             label="Proyección Cierre"
@@ -432,25 +645,25 @@ export default function Gerencial() {
         )}
         <KpiCard
           label="Cobertura"
-          value={pct(r.cobertura_pct || 0)}
-          sub={`${r.clientes_impactados} / ${r.clientes_maestro}`}
+          value={pct(rf.cobertura_pct || 0)}
+          sub={`${rf.clientes_impactados} / ${rf.clientes_maestro}`}
           color="cyan"
-          barValue={r.cobertura_pct || 0}
+          barValue={rf.cobertura_pct || 0}
         />
-        <KpiCard label="Ticket Promedio" value={fmt(r.ticket_promedio)} color="blue" />
+        <KpiCard label="Ticket Promedio" value={fmt(rf.ticket_promedio)} color="blue" />
         <KpiCard
           label="Efectividad"
-          value={pct(r.efectividad_pct)}
+          value={pct(rf.efectividad_pct)}
           color="purple"
-          barValue={r.efectividad_pct || 0}
+          barValue={rf.efectividad_pct || 0}
         />
-        {r.cuota_total > 0 && (
+        {rf.cuota_total > 0 && (
           <KpiCard
             label="Cuota Equipo"
-            value={fmt(r.cuota_total)}
-            sub={`${pct(r.pct_cumplimiento_equipo || 0)} cumplimiento`}
+            value={fmt(rf.cuota_total)}
+            sub={`${pct(rf.pct_cumplimiento_equipo || 0)} cumplimiento`}
             color="gold"
-            barValue={r.pct_cumplimiento_equipo || 0}
+            barValue={rf.pct_cumplimiento_equipo || 0}
           />
         )}
       </div>
@@ -465,7 +678,7 @@ export default function Gerencial() {
                 Venta neta del período · ordenado de mayor a menor
               </span>
               <span className="font-mono-num font-bold text-palumar-white" style={{ fontSize: '17px' }}>
-                {fmt(r.venta_neta ?? 0)}
+                {fmt(rf?.venta_neta ?? 0)}
               </span>
             </div>
             <HBarChart
@@ -526,7 +739,7 @@ export default function Gerencial() {
                           ) : <span className="text-palumar-muted">—</span>}
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 600, color: !row.conMeta ? 'var(--muted)' : exceso ? 'var(--green)' : 'var(--red)' }} className="font-mono-num">
-                          {!row.conMeta ? '—' : exceso ? `+${fmt(Math.abs(row.falta))} exceso` : fmt(row.falta) + ' falta'}
+                          {!row.conMeta ? '—' : exceso ? `+${fmt(Math.abs(row.falta))}` : fmt(row.falta)}
                         </td>
                       </tr>
                     );
@@ -554,7 +767,7 @@ export default function Gerencial() {
                           </div>
                         </td>
                         <td style={{ textAlign: 'right', color: totalFalta <= 0 ? 'var(--green)' : 'var(--red)' }} className="font-mono-num">
-                          {totalFalta <= 0 ? `+${fmt(Math.abs(totalFalta))} exceso` : fmt(totalFalta) + ' falta'}
+                          {totalFalta <= 0 ? `+${fmt(Math.abs(totalFalta))}` : fmt(totalFalta)}
                         </td>
                       </tr>
                     );
@@ -566,6 +779,276 @@ export default function Gerencial() {
         </>
       )}
 
+      {/* ── Cobertura Productos Clave ── */}
+      {(cobPCResumen.total_clientes_activos > 0 || cobPCVendedoresFiltrados.length > 0) && (
+        <>
+          <SectionTitle>Cobertura Productos Clave</SectionTitle>
+
+          {/* 4 KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <KpiCard
+              label="Cobertura clave"
+              value={pct(cobPCResumen.cobertura_clave_pct || 0)}
+              color={cobPCResumen.cobertura_clave_pct >= 70 ? 'green' : cobPCResumen.cobertura_clave_pct >= 40 ? 'amber' : 'red'}
+              barValue={cobPCResumen.cobertura_clave_pct || 0}
+              sub={cobPCResumen.cobertura_clave_pct >= 70 ? 'Bien' : cobPCResumen.cobertura_clave_pct >= 40 ? 'En avance' : 'Crítico'}
+            />
+            <KpiCard
+              label="Clientes impactados"
+              value={String(cobPCResumen.clientes_impactados_clave || 0)}
+              sub="al menos un producto clave"
+              color="green"
+            />
+            <KpiCard
+              label="Clientes pendientes"
+              value={String(cobPCResumen.clientes_sin_impacto_clave || 0)}
+              color="red"
+            />
+            <KpiCard
+              label="Venta clave"
+              value={fmt(cobPCResumen.venta_productos_clave || 0)}
+              color="cyan"
+            />
+          </div>
+
+          {/* Ranking por vendedor — menor cobertura primero para priorizar acción */}
+          {cobPCVendedoresFiltrados.length > 0 && (
+            <div className="table-card mb-4">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                  Ranking Cobertura por Vendedor
+                </h3>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                  {cobPCVendedoresFiltrados.length} vendedores · menor cobertura primero
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th>Sede</th>
+                      <th style={{ textAlign: 'right' }}>Activos</th>
+                      <th style={{ textAlign: 'right' }}>Impactados</th>
+                      <th style={{ textAlign: 'right' }}>Pendientes</th>
+                      <th style={{ minWidth: '160px' }}>Cobertura %</th>
+                      <th style={{ textAlign: 'right' }}>Venta clave</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cobPCVendedoresFiltrados.map((v, i) => {
+                      const c   = v.cobertura_clave_pct || 0;
+                      const col = c >= 70 ? 'var(--green)' : c >= 40 ? 'var(--amber)' : 'var(--red)';
+                      const lbl = c >= 70 ? 'Bien' : c >= 40 ? 'En avance' : 'Crítico';
+                      return (
+                        <tr key={i}>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                              {v.cod_asesor} — {v.vendedor}
+                            </div>
+                          </td>
+                          <td><span className="badge badge-blue" style={{ fontSize: '10px' }}>{v.sede || '—'}</span></td>
+                          <td style={{ textAlign: 'right' }}>{v.clientes_activos}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 700 }}>{v.clientes_impactados_clave}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--red)', fontWeight: 700 }}>{v.clientes_sin_impacto_clave}</td>
+                          <td>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
+                                <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(c, 100)}%`, background: col }} />
+                              </div>
+                              <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{c.toFixed(1)}%</span>
+                            </div>
+                            <span style={{ fontSize: '10px', color: col }}>{lbl}</span>
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(v.venta_productos_clave)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Botón Ver detalle por producto (demanda) */}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <button
+              onClick={() => { setShowPCDetalle(true); loadPCDetalle?.(); }}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: `1px solid ${showPCDetalle ? 'rgba(26,127,166,0.5)' : 'var(--border-2)'}`,
+                background: showPCDetalle ? 'rgba(26,127,166,0.10)' : 'rgba(255,255,255,0.04)',
+                color: showPCDetalle ? 'var(--cyan)' : 'var(--muted)',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              Ver detalle por producto
+            </button>
+          </div>
+
+          {/* ── Clientes pendientes — acordeón (oculto por defecto) ── */}
+          <div className="table-card mb-4">
+            {/* Cabecera siempre visible con contador y botón toggle */}
+            <div
+              className="px-5 py-3.5 flex items-center justify-between"
+              style={{
+                borderBottom: showSinPC ? '1px solid var(--border-2)' : 'none',
+              }}
+            >
+              <div>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                  Clientes pendientes — Sin Producto Clave
+                </h3>
+                <p className="text-palumar-muted" style={{ fontSize: '11px', marginTop: '2px' }}>
+                  {clientesSinPCFiltrados.length > 0
+                    ? `${clientesSinPCFiltrados.length.toLocaleString()} clientes pendientes · ordenados por venta periodo`
+                    : `${(cobPCResumen.clientes_sin_impacto_clave || 0).toLocaleString()} clientes pendientes`}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const willOpen = !showSinPC;
+                  setShowSinPC(willOpen);
+                  if (willOpen) {
+                    const lista = Array.isArray(clientesSinPC) ? clientesSinPC : (clientesSinPC?.clientes || []);
+                    if (!lista.length) loadClientesSinPC?.();
+                  }
+                }}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  border: `1px solid ${showSinPC ? 'rgba(239,68,68,0.4)' : 'var(--border-2)'}`,
+                  background: showSinPC ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.05)',
+                  color: showSinPC ? 'var(--red)' : 'var(--muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  flexShrink: 0,
+                }}
+              >
+                {showSinPC ? 'Ocultar listado' : 'Ver listado'}
+              </button>
+            </div>
+
+            {/* Cuerpo del acordeón */}
+            {showSinPC && (
+              clientesSinPCLoading ? (
+                <div className="flex items-center justify-center" style={{ minHeight: 80 }}>
+                  <span className="text-palumar-muted" style={{ fontSize: 12 }}>Cargando clientes pendientes…</span>
+                </div>
+              ) : clientesSinPCFiltrados.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Código</th>
+                        <th>Vendedor</th>
+                        <th>Sede</th>
+                        <th style={{ textAlign: 'right' }}>Venta periodo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientesSinPCFiltrados.slice(0, 150).map((c, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600 }}>{c.nombre_cliente || '—'}</td>
+                          <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
+                          <td style={{ color: 'var(--muted)' }}>{c.vendedor || c.cod_asesor || '—'}</td>
+                          <td>
+                            {c.sede
+                              ? <span className="badge badge-blue" style={{ fontSize: '10px' }}>{c.sede}</span>
+                              : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">
+                            {c.venta_total_periodo > 0
+                              ? <span style={{ color: 'var(--cyan)' }}>{fmt(c.venta_total_periodo)}</span>
+                              : <span style={{ color: 'var(--muted)' }}>$0</span>}
+                          </td>
+                        </tr>
+                      ))}
+                      {clientesSinPCFiltrados.length > 150 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '11px', padding: '8px' }}>
+                            + {clientesSinPCFiltrados.length - 150} clientes más
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center" style={{ minHeight: 64 }}>
+                  <span className="text-palumar-muted" style={{ fontSize: 12 }}>
+                    No se pudo cargar el listado. Intenta nuevamente.
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* ── Detalle por producto (carga bajo demanda) ── */}
+          {showPCDetalle && (
+            <div className="table-card mb-6">
+              {pcDetalleLoading ? (
+                <div className="flex items-center justify-center" style={{ minHeight: 80 }}>
+                  <span className="text-palumar-muted" style={{ fontSize: 12 }}>Cargando detalle de productos…</span>
+                </div>
+              ) : (pcDetalle?.productos || []).length > 0 ? (
+                <>
+                  <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                    <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Detalle por Producto Clave</h3>
+                    <span className="text-palumar-muted" style={{ fontSize: '11px' }}>Ordenado por clientes impactados</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="palma-table">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>SAP</th>
+                          <th>Negocio</th>
+                          <th style={{ textAlign: 'right' }}>Clientes impactados</th>
+                          <th style={{ textAlign: 'right' }}>Venta</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(pcDetalle?.productos || []).map((p, i) => (
+                          <tr key={i} style={{ opacity: p.clientes_impactados === 0 ? 0.5 : 1 }}>
+                            <td style={{ fontWeight: p.clientes_impactados > 0 ? 600 : 400 }}>
+                              {p.nombre || p.detalle}
+                              {p.clientes_impactados === 0 && (
+                                <span className="badge badge-red" style={{ fontSize: '9px', marginLeft: '6px' }}>sin venta</span>
+                              )}
+                            </td>
+                            <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{p.sap}</td>
+                            <td style={{ color: 'var(--muted)' }}>{p.negocio || '—'}</td>
+                            <td style={{ textAlign: 'right', color: p.clientes_impactados > 0 ? 'var(--green)' : 'var(--muted)', fontWeight: 700 }}>
+                              {p.clientes_impactados}
+                            </td>
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(p.venta)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center" style={{ minHeight: 64 }}>
+                  <span className="text-palumar-muted" style={{ fontSize: 12 }}>
+                    No se pudo cargar el detalle. Intenta nuevamente.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       {/* ── Clientes Sin Compra ── */}
       {(clientesCero.total > 0) && (
         <>
@@ -573,14 +1056,14 @@ export default function Gerencial() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <KpiCard
               label="Sin compra este período"
-              value={String(clientesCero.total || 0)}
+              value={String(sedeFiltro === 'TODOS' ? (clientesCero.total || 0) : ceroCeroTotal)}
               color="red"
             />
-            {(clientesCero.por_vendedor || []).length > 0 && (
+            {ceroVendedoresFiltrados.length > 0 && (
               <KpiCard
                 label="Vendedor c/más ceros"
-                value={clientesCero.por_vendedor[0]?.vendedor?.split(' ')[0] || '—'}
-                sub={`${clientesCero.por_vendedor[0]?.cantidad} clientes`}
+                value={ceroVendedoresFiltrados[0]?.vendedor?.split(' ')[0] || '—'}
+                sub={`${ceroVendedoresFiltrados[0]?.cantidad} clientes`}
                 color="amber"
               />
             )}
@@ -594,7 +1077,7 @@ export default function Gerencial() {
                   Resumen por Vendedor
                 </h3>
                 <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
-                  {(clientesCero.por_vendedor || []).length} vendedores
+                  {ceroVendedoresFiltrados.length} vendedores
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -606,7 +1089,7 @@ export default function Gerencial() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(clientesCero.por_vendedor || []).map((row, i) => (
+                    {ceroVendedoresFiltrados.map((row, i) => (
                       <tr
                         key={i}
                         className="cursor-pointer"
@@ -910,10 +1393,10 @@ export default function Gerencial() {
           <div className="chart-card mb-4">
 
             {/* Resumen Total Palumar */}
-            {(r.cuota_total || 0) > 0 && (() => {
-              const ventaR = r.venta_neta ?? 0;
-              const falta  = (r.cuota_total || 0) - ventaR;
-              const pctC   = r.pct_cumplimiento_equipo || 0;
+            {(rf.cuota_total || 0) > 0 && (() => {
+              const ventaR = rf.venta_neta ?? 0;
+              const falta  = (rf.cuota_total || 0) - ventaR;
+              const pctC   = rf.pct_cumplimiento_equipo || 0;
               const colorP = pctC >= 100 ? 'var(--green)' : pctC >= 75 ? 'var(--amber)' : 'var(--red)';
               return (
                 <div
@@ -921,7 +1404,7 @@ export default function Gerencial() {
                   style={{ borderColor: 'var(--border-2)' }}
                 >
                   {[
-                    { label: 'Cuota Equipo', val: fmt(r.cuota_total), color: 'var(--white-2)' },
+                    { label: 'Cuota Equipo', val: fmt(rf.cuota_total), color: 'var(--white-2)' },
                     { label: 'Venta Neta',   val: fmt(ventaR),        color: 'var(--white-2)' },
                     { label: 'Cumplimiento', val: pct(pctC),           color: colorP },
                     { label: 'Falta para Meta',

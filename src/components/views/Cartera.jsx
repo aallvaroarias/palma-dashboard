@@ -43,8 +43,10 @@ export default function Cartera() {
   const mayorDeudor = top_clientes?.[0];
 
   const detalleVend = useMemo(() => {
-    if (!vendedorSel) return detalle || [];
-    return (detalle || []).filter(r => r.cod_asesor === vendedorSel);
+    const base = !vendedorSel
+      ? (detalle || [])
+      : (detalle || []).filter(r => r.cod_asesor === vendedorSel);
+    return [...base].sort((a, b) => (b.dias_vencido || 0) - (a.dias_vencido || 0));
   }, [detalle, vendedorSel]);
 
   const noData = !total_pendiente && !total_facturas;
