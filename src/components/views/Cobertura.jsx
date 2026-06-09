@@ -198,9 +198,9 @@ export default function Cobertura() {
           {/* Gráfica % */}
           <div className="chart-card mb-4">
             <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
-              Cobertura = clientes impactados en el negocio ÷ maestro total Palumar
+              Cobertura = clientes impactados en el negocio ÷ universo total de clientes activos
               {cobNegocioTotal[0]?.maestro > 0
-                ? ` · ${cobNegocioTotal[0].maestro.toLocaleString()} clientes activos`
+                ? ` · universo: ${cobNegocioTotal[0].maestro.toLocaleString()} clientes`
                 : ''}
             </p>
             <div className="font-display font-semibold mb-3" style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
@@ -215,6 +215,8 @@ export default function Cobertura() {
               metaLabel="Meta 95%"
               minH={80}
               rowH={34}
+              secondaryData={cobNegocioTotal.map(r => r.impactados)}
+              secondaryFmt={(v) => `${v.toLocaleString()} clientes`}
             />
           </div>
 
@@ -234,7 +236,12 @@ export default function Cobertura() {
                   <tr>
                     <th>Negocio</th>
                     <th style={{ textAlign: 'right' }}>Impactados</th>
-                    <th style={{ textAlign: 'right' }}>Sin compra</th>
+                    <th style={{ textAlign: 'right' }}>
+                      Sin compra
+                      <div style={{ fontSize: '9px', color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                        universo − impactados
+                      </div>
+                    </th>
                     <th style={{ textAlign: 'right' }}>Cobertura</th>
                     <th style={{ textAlign: 'right' }}>Venta $</th>
                   </tr>
@@ -270,15 +277,19 @@ export default function Cobertura() {
                   })}
                 </tbody>
                 <tfoot>
+                  {/* Fila de totales */}
                   <tr style={{ borderTop: '1px solid var(--border-2)' }}>
                     <td className="font-semibold" style={{ color: 'var(--palumar-white)', fontSize: '11px' }}>
-                      Total activos
+                      Oportunidades pendientes
+                      <div style={{ fontSize: '9px', color: 'var(--muted)', fontWeight: 400 }}>
+                        suma por negocio
+                      </div>
                     </td>
                     <td style={{ textAlign: 'right' }} className="font-mono-num font-semibold">
                       {cobNegocioTotal.reduce((s, r) => s + r.impactados, 0)}
                     </td>
                     <td style={{ textAlign: 'right' }} className="font-mono-num font-semibold">
-                      <span style={{ color: 'var(--red)' }}>
+                      <span style={{ color: 'var(--amber)' }}>
                         {cobNegocioTotal.reduce((s, r) => s + r.sinCompra, 0)}
                       </span>
                     </td>
@@ -289,6 +300,20 @@ export default function Cobertura() {
                       <span style={{ color: 'var(--cyan)' }}>
                         {fmt(cobNegocioTotal.reduce((s, r) => s + r.venta, 0))}
                       </span>
+                    </td>
+                  </tr>
+                  {/* Nota explicativa: los totales son oportunidades, no clientes únicos */}
+                  <tr>
+                    <td colSpan={5} style={{
+                      fontSize: '10px',
+                      color: 'var(--muted)',
+                      fontStyle: 'italic',
+                      padding: '6px 12px',
+                      borderTop: '1px solid rgba(255,255,255,0.05)',
+                    }}>
+                      Nota: la columna "Sin compra" cuenta cuántos clientes del universo no compraron ese negocio.
+                      Un cliente puede aparecer como pendiente en varios negocios —
+                      la suma de la columna representa oportunidades pendientes cliente-negocio, no clientes únicos.
                     </td>
                   </tr>
                 </tfoot>
