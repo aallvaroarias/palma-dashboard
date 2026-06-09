@@ -646,7 +646,7 @@ export default function Gerencial() {
         <KpiCard
           label="Cobertura"
           value={pct(rf.cobertura_pct || 0)}
-          sub={`${rf.clientes_impactados} / ${rf.clientes_maestro}`}
+          sub={`${rf.clientes_impactados ?? 0} de ${rf.clientes_maestro ?? 0} clientes activos`}
           color="cyan"
           barValue={rf.cobertura_pct || 0}
         />
@@ -783,6 +783,15 @@ export default function Gerencial() {
       {(cobPCResumen.total_clientes_activos > 0 || cobPCVendedoresFiltrados.length > 0) && (
         <>
           <SectionTitle>Cobertura Productos Clave</SectionTitle>
+
+          {/* Contexto de universo medido */}
+          <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+            Cobertura clave = clientes con mínimo 1 producto clave ÷ clientes activos{' '}
+            {sedeFiltro === 'TODOS' ? 'medidos' : sedeFiltro === 'CENTRALES' ? 'de Centrales' : 'de Chiriquí'}
+            {cobPCResumen.total_clientes_activos > 0
+              ? ` · ${cobPCResumen.total_clientes_activos.toLocaleString()} clientes`
+              : ''}
+          </p>
 
           {/* 4 KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
@@ -1449,6 +1458,12 @@ export default function Gerencial() {
             Meta: <strong style={{ color: 'var(--red)' }}>95%</strong>
           </span>
         </div>
+        <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+          Cobertura = clientes impactados ÷ maestro de cada vendedor
+          {rf?.clientes_maestro > 0
+            ? ` · universo ${sedeFiltro === 'TODOS' ? 'total' : sedeFiltro === 'CENTRALES' ? 'Centrales' : 'Chiriquí'}: ${(rf.clientes_maestro).toLocaleString()} clientes activos`
+            : ''}
+        </p>
         <HBarChart
           labels={cobData.map(r2 => getCoberturaVendedor(r2))}
           data={cobData.map(r2 => getCoberturaValue(r2))}

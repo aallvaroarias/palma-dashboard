@@ -631,9 +631,12 @@ export default function Vendedor() {
 
         {/* Cobertura vs equipo */}
         <div className="chart-card">
-          <div className="font-display font-bold text-palumar-white mb-4" style={{ fontSize: '13px' }}>
+          <div className="font-display font-bold text-palumar-white mb-1" style={{ fontSize: '13px' }}>
             Cobertura vs Equipo
           </div>
+          <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+            Cobertura = clientes impactados ÷ maestro del vendedor ({v.maestro || 0} clientes)
+          </p>
           <LineChart
             labels={['Mi cobertura', 'Prom. equipo', 'Meta']}
             datasets={[{
@@ -1133,6 +1136,14 @@ export default function Vendedor() {
       {pcVendedor && (
         <>
           <SectionTitle>Mis Productos Clave</SectionTitle>
+
+          {/* Contexto de universo medido */}
+          <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+            Cobertura clave = clientes con mínimo 1 producto clave ÷ maestro del vendedor
+            {pcVendedor.clientes_activos > 0
+              ? ` · ${pcVendedor.clientes_activos.toLocaleString()} clientes activos`
+              : ''}
+          </p>
 
           {/* 5 KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">

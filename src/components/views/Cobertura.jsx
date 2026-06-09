@@ -109,7 +109,7 @@ export default function Cobertura() {
 
       {/* Chart */}
       <div className="chart-card mb-4">
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-1">
           <div className="font-display font-bold text-palumar-white" style={{ fontSize: '14px' }}>
             Cobertura Real
           </div>
@@ -117,6 +117,9 @@ export default function Cobertura() {
             Meta: <strong style={{ color: 'var(--red)' }}>95%</strong>
           </span>
         </div>
+        <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+          Cobertura = clientes impactados ÷ maestro de cada vendedor
+        </p>
         <HBarChart
           labels={cobData.map(r => getCoberturaVendedor(r))}
           data={cobData.map(r => getCoberturaValue(r))}
@@ -194,6 +197,12 @@ export default function Cobertura() {
 
           {/* Gráfica % */}
           <div className="chart-card mb-4">
+            <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+              Cobertura = clientes impactados en el negocio ÷ maestro total Palumar
+              {cobNegocioTotal[0]?.maestro > 0
+                ? ` · ${cobNegocioTotal[0].maestro.toLocaleString()} clientes activos`
+                : ''}
+            </p>
             <div className="font-display font-semibold mb-3" style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
               Cobertura %
             </div>
