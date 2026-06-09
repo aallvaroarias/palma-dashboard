@@ -27,6 +27,10 @@ function ViewFallback() {
 }
 
 export default function App() {
+  React.useEffect(() => {
+    console.log('[PALMA BUILD] 2026-06-09-fix-falta-acordeon');
+  }, []);
+
   useDashboard();
 
   const { loading, loadAll, resumen } = useDashboardStore();
