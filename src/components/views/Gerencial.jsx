@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import useDashboardStore from '../../store/dashboardStore';
 import KpiCard from '../ui/KpiCard';
 import SectionTitle from '../ui/SectionTitle';
@@ -14,6 +15,33 @@ function AlertItem({ type, children }) {
   return (
     <div className={`alert-item ${type}`}>
       {children}
+    </div>
+  );
+}
+
+/** Encabezado de sección colapsable — mismo estilo que SectionTitle pero con toggle */
+function CollapseTitle({ open, onToggle, children, badge }) {
+  return (
+    <div
+      className="flex items-center gap-3 mt-7 mb-3.5 cursor-pointer select-none"
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onToggle()}
+    >
+      <div style={{ width: 3, height: 14, borderRadius: 2, background: 'linear-gradient(180deg,#2AAED9 0%,#1A7FA6 100%)', flexShrink: 0 }} />
+      <span className="font-display font-bold uppercase tracking-widest text-palumar-white" style={{ fontSize: '10.5px', letterSpacing: '1.4px', opacity: 0.75 }}>
+        {children}
+      </span>
+      {badge != null && (
+        <span style={{ fontSize: '10px', color: 'var(--muted)', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', padding: '1px 6px' }}>
+          {badge}
+        </span>
+      )}
+      <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg,var(--border-2) 0%,transparent 100%)' }} />
+      <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600, marginLeft: 4 }}>
+        {open ? '▲ Colapsar' : '▼ Ver'}
+      </span>
     </div>
   );
 }
@@ -66,6 +94,17 @@ export default function Gerencial() {
   const [filtroNuevosLabel, setFiltroNuevosLabel] = useState('Este período');
   const [showSinPC, setShowSinPC]         = useState(false);   // panel clientes pendientes
   const [showPCDetalle, setShowPCDetalle] = useState(false);   // panel detalle por producto
+
+  // Secciones colapsadas (cerradas por defecto para mantener el panel ejecutivo)
+  const [openCobertura,   setOpenCobertura]   = useState(false);
+  const [openCobNegocio,  setOpenCobNegocio]  = useState(false);
+  const [openMetasCumpl,  setOpenMetasCumpl]  = useState(false);
+  const [openEfectividad, setOpenEfectividad] = useState(false);
+  const [openCeroClientes,setOpenCeroClientes]= useState(false);
+  const [openNuevos,      setOpenNuevos]      = useState(false);
+  const [openAnalisis,    setOpenAnalisis]    = useState(false);
+  const [openMarcas,      setOpenMarcas]      = useState(false);
+  const [showAllPCTable,  setShowAllPCTable]  = useState(false); // más filas en tabla PC
 
   const applyNuevosG = useCallback(async (desde, hasta, label) => {
     setLoadingNuevosG(true);
@@ -302,8 +341,15 @@ export default function Gerencial() {
     'SNACKS':            'Snacks TMLUC',
     'OTROS TMLUC':       'Otros TMLUC',
     'OTROS':             'Otros TMLUC',
-    'NUTRICION EXPERTA': 'Nutrición Experta',
-    'NUTRICION':         'Nutrición Experta',
+    'NUTRICION EXPERTA':  'Nutrición Experta',
+    'NUTRICION':          'Nutrición Experta',
+    // variantes con Û→U (encoding artifact U+00DB): "NutriciÛn" → NFD strip → "NUTRICIUN"
+    'NUTRICIUN EXPERTA':  'Nutrición Experta',
+    'NUTRICIUN':          'Nutrición Experta',
+    // variante con espacio corrupto "NUTRICI N EXPERTA"
+    'NUTRICI N EXPERTA':  'Nutrición Experta',
+    // variante sin espacio "NUTRICIONEXPERTA"
+    'NUTRICIONEXPERTA':   'Nutrición Experta',
     'BARRAS CORTAS':     'Barras Cortas',
     'BARRAS':            'Barras Cortas',
     'TAJADOS':           'Tajados',
@@ -319,6 +365,10 @@ export default function Gerencial() {
     // é → √©   ó → √≥   ú → √∫   á → √°   í → √≠   ñ → √±
     s = s.replace(/√©/g, 'e').replace(/√≥/g, 'o').replace(/√∫/g, 'u')
          .replace(/√°/g, 'a').replace(/√±/g, 'n').replace(/√≠/g, 'i');
+    // Reparar Û/û (U+00DB / U+00FB): en algunos encodings "ó" llega como Û
+    // NFD de Û = U + combining circumflex → tras strip queda "U" → "NUTRICIUN"
+    // Reemplazamos antes de NFD para que caiga en la clave del mapa
+    s = s.replace(/Û/g, 'u').replace(/û/g, 'u');
     // Quitar código inicial con cualquier cantidad de dígitos: "241-", "03-", "001 -"
     s = s.replace(/^\d+\s*[-_]\s*/, '');
     // Guardar versión limpia (sin código) para el fallback
@@ -326,6 +376,9 @@ export default function Gerencial() {
     // Quitar acentos y caracteres corruptos para lookup en mapa
     s = s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/�/g, '').replace(/\?/g, '');
     s = s.toUpperCase().replace(/\s+/g, ' ').trim();
+    if (process.env.NODE_ENV !== 'production' && s.includes('NUTRI')) {
+      console.log('[normNeg] entrada:', nombre, '→ clave:', s, '→ resultado:', MAPA_NEGOCIOS[s] || limpio);
+    }
     // Si está en el mapa usar el nombre canónico, si no usar el nombre limpio (sin código)
     return MAPA_NEGOCIOS[s] ? MAPA_NEGOCIOS[s] : limpio;
   }
@@ -546,6 +599,140 @@ export default function Gerencial() {
     });
   }, [clientesSinPC, asesorSedeMap, sedeFiltro]);
 
+  const navigate = useNavigate();
+
+  // ── Ranking completo enriquecido (venta + cumplimiento + cobertura + PC) ─────
+  const rankingVendedores = useMemo(() => {
+    return vs.map(v => {
+      const metaEntry = metaData.find(m => String(m.cod).trim() === String(v.cod).trim());
+      const pcEntry   = cobPCVendedoresFiltrados.find(p => String(p.cod_asesor || '').trim() === String(v.cod).trim());
+      return {
+        cod:       v.cod,
+        nombre:    v.nombre,
+        venta:     v.venta_neta || 0,
+        pct_cumpl: metaEntry?.pct_cumplimiento ?? null,
+        cobertura: +v.cobertura || 0,
+        cob_pc:    pcEntry?.cobertura_clave_pct ?? null,
+      };
+    });
+  }, [vs, metaData, cobPCVendedoresFiltrados]);
+
+  // Top 5 mejores (por venta neta desc — vs ya viene sorted desc)
+  const top5Mejores = rankingVendedores.slice(0, 5);
+
+  // 5 más críticos (por cobertura asc; si hay empate, por pct_cumpl asc)
+  const top5Criticos = useMemo(() => {
+    return [...rankingVendedores]
+      .sort((a, b) => {
+        if (a.cobertura !== b.cobertura) return a.cobertura - b.cobertura;
+        return (a.pct_cumpl ?? 999) - (b.pct_cumpl ?? 999);
+      })
+      .slice(0, 5);
+  }, [rankingVendedores]);
+
+  // ── Alertas de gestión enriquecidas ──────────────────────────────────────────
+  const alertasGestion = useMemo(() => {
+    const items = [];
+
+    // 1. Negocio más lejos de meta
+    const conMeta = metasPorNegocio.filter(m => m.conMeta && !m.sinIdentificar && m.falta > 0);
+    if (conMeta.length > 0) {
+      const masLejos = conMeta.reduce((prev, curr) => (curr.pctC < prev.pctC ? curr : prev));
+      items.push({
+        tipo:      masLejos.pctC < 70 ? 'rojo' : 'ambar',
+        titulo:    'Negocio más lejos de meta',
+        valor:     masLejos.negocio,
+        sub:       `${masLejos.pctC.toFixed(1)}% · Faltan ${(masLejos.falta).toLocaleString('es', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+        link:      null,
+        linkLabel: null,
+      });
+    }
+
+    // 2. Vendedor con menor cobertura
+    if (top5Criticos.length > 0) {
+      const peor = top5Criticos[0];
+      if (peor.cobertura < 95) {
+        items.push({
+          tipo:      peor.cobertura < 70 ? 'rojo' : 'ambar',
+          titulo:    'Menor cobertura',
+          valor:     peor.nombre || `Cód. ${peor.cod}`,
+          sub:       `${peor.cobertura.toFixed(1)}% de cobertura`,
+          link:      '/cobertura',
+          linkLabel: 'Ver Cobertura →',
+        });
+      }
+    }
+
+    // 3. Vendedor con menor cumplimiento de cuota
+    if (metaData.length > 0) {
+      const menorCumpl = metaData[metaData.length - 1];
+      if (menorCumpl.pct_cumplimiento < 90) {
+        const falta = (menorCumpl.cuota || 0) - (menorCumpl.venta_neta || 0);
+        items.push({
+          tipo:      menorCumpl.pct_cumplimiento < 60 ? 'rojo' : 'ambar',
+          titulo:    'Menor cumplimiento cuota',
+          valor:     menorCumpl.nombre,
+          sub:       `${menorCumpl.pct_cumplimiento.toFixed(1)}%` + (falta > 0 ? ` · Falta ${falta.toLocaleString('es', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''),
+          link:      null,
+          linkLabel: null,
+        });
+      }
+    }
+
+    // 4. Devoluciones elevadas
+    const pctDev = +(rf?.pct_devolucion || 0);
+    if (pctDev > 8) {
+      items.push({
+        tipo:      pctDev > 15 ? 'rojo' : 'ambar',
+        titulo:    'Devoluciones elevadas',
+        valor:     pct(pctDev),
+        sub:       `${fmt(rf?.devolucion_total ?? rf?.devoluciones ?? 0)} en devoluciones del período`,
+        link:      '/devoluciones',
+        linkLabel: 'Ver Devoluciones →',
+      });
+    }
+
+    // 5. Productos Clave — menor cobertura
+    if (cobPCVendedoresFiltrados.length > 0) {
+      const peorPC = cobPCVendedoresFiltrados[0]; // ya viene sorted ASC
+      if ((peorPC.cobertura_clave_pct || 0) < 60) {
+        items.push({
+          tipo:      (peorPC.cobertura_clave_pct || 0) < 30 ? 'rojo' : 'ambar',
+          titulo:    'Menor cobertura PC',
+          valor:     peorPC.vendedor || `Cód. ${peorPC.cod_asesor}`,
+          sub:       `${(peorPC.cobertura_clave_pct || 0).toFixed(1)}% · ${peorPC.clientes_sin_impacto_clave || 0} clientes pendientes`,
+          link:      null,
+          linkLabel: null,
+        });
+      }
+    }
+
+    // 6. Cobertura general baja
+    if ((rf?.cobertura_pct || 0) < 80 && items.length < 6) {
+      items.push({
+        tipo:      (rf?.cobertura_pct || 0) < 60 ? 'rojo' : 'ambar',
+        titulo:    'Cobertura del equipo',
+        valor:     pct(rf?.cobertura_pct || 0),
+        sub:       `${rf?.clientes_impactados || 0} de ${rf?.clientes_maestro || 0} clientes activos`,
+        link:      '/cobertura',
+        linkLabel: 'Ver Cobertura →',
+      });
+    }
+
+    if (!items.length) {
+      items.push({
+        tipo:      'verde',
+        titulo:    '¡Sin alertas críticas!',
+        valor:     'Todos los indicadores en meta',
+        sub:       'Cobertura, cumplimiento y devoluciones dentro de rangos normales',
+        link:      null,
+        linkLabel: null,
+      });
+    }
+
+    return items.slice(0, 6);
+  }, [metasPorNegocio, top5Criticos, metaData, rf, cobPCVendedoresFiltrados]);
+
   if (!r) {
     return (
       <div className="flex items-center justify-center h-64 text-palumar-muted text-sm">
@@ -562,7 +749,7 @@ export default function Gerencial() {
   return (
     <div className="animate-fade-in">
 
-      {/* ── Filtro de Sede ── */}
+      {/* ── 1. Filtro de Sede ── */}
       <div
         className="flex flex-wrap items-center gap-2 mb-5 px-4 py-3 rounded-xl"
         style={{ background: 'rgba(13,30,43,0.6)', border: '1px solid var(--border-2)' }}
@@ -607,92 +794,93 @@ export default function Gerencial() {
         )}
       </div>
 
-      {/* ── KPIs ── */}
-      <SectionTitle>KPIs Globales</SectionTitle>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 tv:grid-cols-5 gap-3 mb-6">
-        <KpiCard label="Venta Bruta" value={fmt(rf.venta_bruta ?? rf.venta_real ?? 0)} color="blue" />
-        <KpiCard
-          label="Devoluciones"
-          value={fmt(rf.devolucion_total ?? rf.devoluciones ?? rf.devolucion ?? 0)}
-          sub={`<span style="color:var(--red)">${pct(rf.pct_devolucion)}</span> de venta bruta`}
-          color="red"
-        />
-        <KpiCard
-          label="Averías"
-          value={fmt(rf.averia_total ?? rf.averias ?? rf.averia ?? 0)}
-          sub={pct(rf.pct_averia || 0)}
-          color="red"
-        />
-        <KpiCard
-          label="Descuentos"
-          value={fmt(rf.descuento_total || 0)}
-          sub={pct(rf.pct_descuento_total || 0)}
-          color="amber"
-        />
+      {/* ── 2. KPIs Ejecutivos ── */}
+      <SectionTitle>KPIs Ejecutivos</SectionTitle>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <KpiCard label="Venta Neta" value={fmt(rf.venta_neta || 0)} color="green" />
-        {proyeccionCierre && (
+        {proyeccionCierre ? (
           <KpiCard
-            label="Proyección Cierre"
+            label="Proyección"
             value={fmt(proyeccionCierre.proyeccion)}
             sub={proyeccionCierre.pctVsCuota != null
-              ? `${proyeccionCierre.pctVsCuota}% de la meta · día ${proyeccionCierre.habilesTransc}/${proyeccionCierre.habilesTotal}`
-              : `Día hábil ${proyeccionCierre.habilesTransc} de ${proyeccionCierre.habilesTotal} · ${proyeccionCierre.pctAvance}% del mes`}
+              ? `${proyeccionCierre.pctVsCuota}% de meta · día ${proyeccionCierre.habilesTransc}/${proyeccionCierre.habilesTotal}`
+              : `Día ${proyeccionCierre.habilesTransc}/${proyeccionCierre.habilesTotal}`}
             color={proyeccionCierre.pctVsCuota == null ? 'cyan'
               : proyeccionCierre.pctVsCuota >= 100 ? 'green'
               : proyeccionCierre.pctVsCuota >= 75  ? 'amber'
               : 'red'}
           />
+        ) : (
+          <KpiCard label="Ticket Prom." value={fmt(rf.ticket_promedio || 0)} color="blue" />
+        )}
+        {rf.cuota_total > 0 ? (
+          <KpiCard
+            label="Cumpl. Cuota"
+            value={pct(rf.pct_cumplimiento_equipo || 0)}
+            sub={`Meta ${fmt(rf.cuota_total)}`}
+            color={(rf.pct_cumplimiento_equipo || 0) >= 100 ? 'green' : (rf.pct_cumplimiento_equipo || 0) >= 75 ? 'amber' : 'red'}
+            barValue={rf.pct_cumplimiento_equipo || 0}
+          />
+        ) : (
+          <KpiCard
+            label="Efectividad"
+            value={pct(rf.efectividad_pct)}
+            color="purple"
+            barValue={rf.efectividad_pct || 0}
+          />
         )}
         <KpiCard
           label="Cobertura"
           value={pct(rf.cobertura_pct || 0)}
-          sub={`${rf.clientes_impactados ?? 0} de ${rf.clientes_maestro ?? 0} clientes activos`}
-          color="cyan"
+          sub={`${rf.clientes_impactados ?? 0} / ${rf.clientes_maestro ?? 0}`}
+          color={(rf.cobertura_pct || 0) >= 90 ? 'green' : (rf.cobertura_pct || 0) >= 70 ? 'amber' : 'red'}
           barValue={rf.cobertura_pct || 0}
         />
-        <KpiCard label="Ticket Promedio" value={fmt(rf.ticket_promedio)} color="blue" />
         <KpiCard
-          label="Efectividad"
-          value={pct(rf.efectividad_pct)}
-          color="purple"
-          barValue={rf.efectividad_pct || 0}
+          label="Devoluciones"
+          value={fmt(rf.devolucion_total ?? rf.devoluciones ?? rf.devolucion ?? 0)}
+          sub={`${pct(rf.pct_devolucion)} de venta`}
+          color="red"
         />
-        {rf.cuota_total > 0 && (
-          <KpiCard
-            label="Cuota Equipo"
-            value={fmt(rf.cuota_total)}
-            sub={`${pct(rf.pct_cumplimiento_equipo || 0)} cumplimiento`}
-            color="gold"
-            barValue={rf.pct_cumplimiento_equipo || 0}
-          />
-        )}
+        <KpiCard
+          label="Cob. Prod. Clave"
+          value={pct(cobPCResumen.cobertura_clave_pct || 0)}
+          sub={`${cobPCResumen.clientes_impactados_clave || 0} / ${cobPCResumen.total_clientes_activos || 0}`}
+          color={(cobPCResumen.cobertura_clave_pct || 0) >= 70 ? 'green' : (cobPCResumen.cobertura_clave_pct || 0) >= 40 ? 'amber' : 'red'}
+          barValue={cobPCResumen.cobertura_clave_pct || 0}
+        />
       </div>
 
-      {/* ── Venta por Negocio ── */}
-      {neg.length > 0 && (
-        <>
-          <SectionTitle>Venta por Negocio</SectionTitle>
-          <div className="chart-card mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
-                Venta neta del período · ordenado de mayor a menor
-              </span>
-              <span className="font-mono-num font-bold text-palumar-white" style={{ fontSize: '17px' }}>
-                {fmt(rf?.venta_neta ?? 0)}
-              </span>
+      {/* ── 3. Alertas de Gestión ── */}
+      <SectionTitle>Alertas de gestión</SectionTitle>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        {alertasGestion.map((a, i) => {
+          const borderCol = a.tipo === 'rojo' ? 'var(--red)' : a.tipo === 'ambar' ? 'var(--amber)' : 'var(--green)';
+          return (
+            <div key={i} className="table-card" style={{ borderLeft: `3px solid ${borderCol}` }}>
+              <div className="px-4 py-3.5">
+                <div className="text-palumar-muted mb-1" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {a.titulo}
+                </div>
+                <div className="font-bold" style={{ fontSize: '14px', color: borderCol, lineHeight: 1.3 }}>
+                  {a.valor}
+                </div>
+                {a.sub && <div className="text-palumar-muted mt-1" style={{ fontSize: '11px' }}>{a.sub}</div>}
+                {a.link && (
+                  <button
+                    onClick={() => navigate(a.link)}
+                    style={{ marginTop: '8px', fontSize: '11px', color: 'var(--cyan)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    {a.linkLabel}
+                  </button>
+                )}
+              </div>
             </div>
-            <HBarChart
-              labels={neg.map(n => n.negocio)}
-              data={neg.map(n => n.venta)}
-              barColors={neg.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
-              minH={120}
-              rowH={36}
-            />
-          </div>
-        </>
-      )}
+          );
+        })}
+      </div>
 
-      {/* ── Metas por Negocio ── */}
+      {/* ── 4. Metas por Negocio ── */}
       {metasPorNegocio.length > 0 && (
         <>
           <SectionTitle>Metas por Negocio</SectionTitle>
@@ -779,7 +967,109 @@ export default function Gerencial() {
         </>
       )}
 
-      {/* ── Cobertura Productos Clave ── */}
+      {/* ── 5. Ranking Vendedores (Top 5 mejores + 5 más críticos) ── */}
+      {rankingVendedores.length > 0 && (
+        <>
+          <SectionTitle>Ranking Vendedores</SectionTitle>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-3">
+            {/* Top 5 Mejores */}
+            <div className="table-card">
+              <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>🏆 Top 5 Mejores</h3>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>por venta neta</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th style={{ textAlign: 'right' }}>Venta</th>
+                      <th style={{ textAlign: 'right' }}>Cumpl.</th>
+                      <th style={{ textAlign: 'right' }}>Cob.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {top5Mejores.map((v, i) => {
+                      const colC   = v.pct_cumpl == null ? 'var(--muted)' : v.pct_cumpl >= 100 ? 'var(--green)' : v.pct_cumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+                      const colCob = v.cobertura >= 90 ? 'var(--green)' : v.cobertura >= 70 ? 'var(--amber)' : 'var(--red)';
+                      return (
+                        <tr key={v.cod}>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono-num font-bold" style={{ color: i === 0 ? 'var(--gold)' : 'var(--muted)', fontSize: '10px', minWidth: 14 }}>{i + 1}</span>
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                              <span style={{ fontSize: '12px' }}>{v.nombre}</span>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--cyan)' }} className="font-mono-num">{fmt(v.venta)}</td>
+                          <td style={{ textAlign: 'right', color: colC, fontWeight: 700 }} className="font-mono-num">
+                            {v.pct_cumpl != null ? `${v.pct_cumpl.toFixed(0)}%` : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', color: colCob, fontWeight: 700 }} className="font-mono-num">
+                            {v.cobertura > 0 ? `${v.cobertura.toFixed(0)}%` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {/* 5 Más Críticos */}
+            <div className="table-card">
+              <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>⚠ 5 Más Críticos</h3>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>menor cobertura</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th style={{ textAlign: 'right' }}>Venta</th>
+                      <th style={{ textAlign: 'right' }}>Cumpl.</th>
+                      <th style={{ textAlign: 'right' }}>Cob.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {top5Criticos.map((v, i) => {
+                      const colC   = v.pct_cumpl == null ? 'var(--muted)' : v.pct_cumpl >= 100 ? 'var(--green)' : v.pct_cumpl >= 75 ? 'var(--amber)' : 'var(--red)';
+                      const colCob = v.cobertura >= 90 ? 'var(--green)' : v.cobertura >= 70 ? 'var(--amber)' : 'var(--red)';
+                      return (
+                        <tr key={v.cod}>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                              <span style={{ fontSize: '12px' }}>{v.nombre}</span>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--cyan)' }} className="font-mono-num">{fmt(v.venta)}</td>
+                          <td style={{ textAlign: 'right', color: colC, fontWeight: 700 }} className="font-mono-num">
+                            {v.pct_cumpl != null ? `${v.pct_cumpl.toFixed(0)}%` : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right', color: colCob, fontWeight: 700 }} className="font-mono-num">
+                            {v.cobertura > 0 ? `${v.cobertura.toFixed(0)}%` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end mb-6">
+            <button
+              onClick={() => navigate('/panel')}
+              style={{ fontSize: '12px', color: 'var(--cyan)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}
+            >
+              Ver ranking completo en Mi Panel →
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── 6. Cobertura Productos Clave (simplificado) ── */}
       {(cobPCResumen.total_clientes_activos > 0 || cobPCVendedoresFiltrados.length > 0) && (
         <>
           <SectionTitle>Cobertura Productos Clave</SectionTitle>
@@ -821,12 +1111,11 @@ export default function Gerencial() {
           </div>
 
           {/* Ranking por vendedor — menor cobertura primero para priorizar acción */}
+          {/* Tabla PC por vendedor — 6 filas por defecto, expand */}
           {cobPCVendedoresFiltrados.length > 0 && (
             <div className="table-card mb-4">
               <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
-                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-                  Ranking Cobertura por Vendedor
-                </h3>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Cobertura PC por Vendedor</h3>
                 <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
                   {cobPCVendedoresFiltrados.length} vendedores · menor cobertura primero
                 </span>
@@ -836,19 +1125,15 @@ export default function Gerencial() {
                   <thead>
                     <tr>
                       <th>Vendedor</th>
-                      <th>Sede</th>
-                      <th style={{ textAlign: 'right' }}>Activos</th>
-                      <th style={{ textAlign: 'right' }}>Impactados</th>
                       <th style={{ textAlign: 'right' }}>Pendientes</th>
                       <th style={{ minWidth: '160px' }}>Cobertura %</th>
                       <th style={{ textAlign: 'right' }}>Venta clave</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cobPCVendedoresFiltrados.map((v, i) => {
+                    {(showAllPCTable ? cobPCVendedoresFiltrados : cobPCVendedoresFiltrados.slice(0, 6)).map((v, i) => {
                       const c   = v.cobertura_clave_pct || 0;
                       const col = c >= 70 ? 'var(--green)' : c >= 40 ? 'var(--amber)' : 'var(--red)';
-                      const lbl = c >= 70 ? 'Bien' : c >= 40 ? 'En avance' : 'Crítico';
                       return (
                         <tr key={i}>
                           <td>
@@ -857,18 +1142,14 @@ export default function Gerencial() {
                               {v.cod_asesor} — {v.vendedor}
                             </div>
                           </td>
-                          <td><span className="badge badge-blue" style={{ fontSize: '10px' }}>{v.sede || '—'}</span></td>
-                          <td style={{ textAlign: 'right' }}>{v.clientes_activos}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--green)', fontWeight: 700 }}>{v.clientes_impactados_clave}</td>
                           <td style={{ textAlign: 'right', color: 'var(--red)', fontWeight: 700 }}>{v.clientes_sin_impacto_clave}</td>
                           <td>
-                            <div className="flex items-center gap-2 mb-0.5">
+                            <div className="flex items-center gap-2">
                               <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
                                 <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(c, 100)}%`, background: col }} />
                               </div>
                               <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{c.toFixed(1)}%</span>
                             </div>
-                            <span style={{ fontSize: '10px', color: col }}>{lbl}</span>
                           </td>
                           <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(v.venta_productos_clave)}</td>
                         </tr>
@@ -877,77 +1158,68 @@ export default function Gerencial() {
                   </tbody>
                 </table>
               </div>
+              {cobPCVendedoresFiltrados.length > 6 && (
+                <div className="px-5 py-2.5 border-t" style={{ borderColor: 'var(--border-2)' }}>
+                  <button
+                    onClick={() => setShowAllPCTable(!showAllPCTable)}
+                    style={{ fontSize: '12px', color: 'var(--cyan)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    {showAllPCTable ? '▲ Ver menos' : `▼ Ver ${cobPCVendedoresFiltrados.length - 6} vendedores más`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Botón Ver detalle por producto (demanda) */}
+          {/* Botones de acción */}
           <div className="flex flex-wrap gap-3 mb-4">
+            <button
+              onClick={() => {
+                const willOpen = !showSinPC;
+                setShowSinPC(willOpen);
+                if (willOpen) {
+                  const lista = Array.isArray(clientesSinPC) ? clientesSinPC : (clientesSinPC?.clientes || []);
+                  if (!lista.length) loadClientesSinPC?.();
+                }
+              }}
+              style={{
+                padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                border: `1px solid ${showSinPC ? 'rgba(239,68,68,0.4)' : 'var(--border-2)'}`,
+                background: showSinPC ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
+                color: showSinPC ? 'var(--red)' : 'var(--muted)',
+              }}
+            >
+              {showSinPC ? '▲ Ocultar clientes pendientes' : `▼ Ver clientes pendientes (${cobPCResumen.clientes_sin_impacto_clave || 0})`}
+            </button>
             <button
               onClick={() => { setShowPCDetalle(true); loadPCDetalle?.(); }}
               style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 600,
+                padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
                 border: `1px solid ${showPCDetalle ? 'rgba(26,127,166,0.5)' : 'var(--border-2)'}`,
                 background: showPCDetalle ? 'rgba(26,127,166,0.10)' : 'rgba(255,255,255,0.04)',
                 color: showPCDetalle ? 'var(--cyan)' : 'var(--muted)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
               }}
             >
               Ver detalle por producto
             </button>
+            <button
+              onClick={() => navigate('/clientes')}
+              style={{ padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)' }}
+            >
+              Ver en panel Clientes →
+            </button>
           </div>
 
-          {/* ── Clientes pendientes — acordeón (oculto por defecto) ── */}
-          <div className="table-card mb-4">
-            {/* Cabecera siempre visible con contador y botón toggle */}
-            <div
-              className="px-5 py-3.5 flex items-center justify-between"
-              style={{
-                borderBottom: showSinPC ? '1px solid var(--border-2)' : 'none',
-              }}
-            >
-              <div>
-                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-                  Clientes pendientes — Sin Producto Clave
-                </h3>
-                <p className="text-palumar-muted" style={{ fontSize: '11px', marginTop: '2px' }}>
-                  {clientesSinPCFiltrados.length > 0
-                    ? `${clientesSinPCFiltrados.length.toLocaleString()} clientes pendientes · ordenados por venta periodo`
-                    : `${(cobPCResumen.clientes_sin_impacto_clave || 0).toLocaleString()} clientes pendientes`}
-                </p>
+          {/* Listado clientes pendientes (acordeón) */}
+          {showSinPC && (
+            <div className="table-card mb-4">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Clientes pendientes — Sin Producto Clave</h3>
+                <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                  {clientesSinPCFiltrados.length > 0 ? `${clientesSinPCFiltrados.length.toLocaleString()} clientes` : ''}
+                </span>
               </div>
-              <button
-                onClick={() => {
-                  const willOpen = !showSinPC;
-                  setShowSinPC(willOpen);
-                  if (willOpen) {
-                    const lista = Array.isArray(clientesSinPC) ? clientesSinPC : (clientesSinPC?.clientes || []);
-                    if (!lista.length) loadClientesSinPC?.();
-                  }
-                }}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: `1px solid ${showSinPC ? 'rgba(239,68,68,0.4)' : 'var(--border-2)'}`,
-                  background: showSinPC ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.05)',
-                  color: showSinPC ? 'var(--red)' : 'var(--muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  flexShrink: 0,
-                }}
-              >
-                {showSinPC ? 'Ocultar listado' : 'Ver listado'}
-              </button>
-            </div>
-
-            {/* Cuerpo del acordeón */}
-            {showSinPC && (
-              clientesSinPCLoading ? (
+              {clientesSinPCLoading ? (
                 <div className="flex items-center justify-center" style={{ minHeight: 80 }}>
                   <span className="text-palumar-muted" style={{ fontSize: 12 }}>Cargando clientes pendientes…</span>
                 </div>
@@ -969,11 +1241,7 @@ export default function Gerencial() {
                           <td style={{ fontWeight: 600 }}>{c.nombre_cliente || '—'}</td>
                           <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{c.cod_cliente}</td>
                           <td style={{ color: 'var(--muted)' }}>{c.vendedor || c.cod_asesor || '—'}</td>
-                          <td>
-                            {c.sede
-                              ? <span className="badge badge-blue" style={{ fontSize: '10px' }}>{c.sede}</span>
-                              : '—'}
-                          </td>
+                          <td>{c.sede ? <span className="badge badge-blue" style={{ fontSize: '10px' }}>{c.sede}</span> : '—'}</td>
                           <td style={{ textAlign: 'right' }} className="font-mono-num">
                             {c.venta_total_periodo > 0
                               ? <span style={{ color: 'var(--cyan)' }}>{fmt(c.venta_total_periodo)}</span>
@@ -998,8 +1266,9 @@ export default function Gerencial() {
                   </span>
                 </div>
               )
-            )}
+            }
           </div>
+          )}
 
           {/* ── Detalle por producto (carga bajo demanda) ── */}
           {showPCDetalle && (
@@ -1058,27 +1327,22 @@ export default function Gerencial() {
         </>
       )}
 
-      {/* ── Clientes Sin Compra ── */}
-      {(clientesCero.total > 0) && (
-        <>
-          <SectionTitle>Clientes Sin Compra</SectionTitle>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <KpiCard
-              label="Sin compra este período"
-              value={String(sedeFiltro === 'TODOS' ? (clientesCero.total || 0) : ceroCeroTotal)}
-              color="red"
-            />
-            {ceroVendedoresFiltrados.length > 0 && (
-              <KpiCard
-                label="Vendedor c/más ceros"
-                value={ceroVendedoresFiltrados[0]?.vendedor?.split(' ')[0] || '—'}
-                sub={`${ceroVendedoresFiltrados[0]?.cantidad} clientes`}
-                color="amber"
-              />
-            )}
-          </div>
+      {/* ══════════════════════════════════════════════════════════════
+          SECCIONES OPERATIVAS — colapsadas por defecto
+          ══════════════════════════════════════════════════════════ */}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      {/* 7. Clientes Sin Compra */}
+      {clientesCero.total > 0 && (
+        <>
+          <CollapseTitle
+            open={openCeroClientes}
+            onToggle={() => setOpenCeroClientes(!openCeroClientes)}
+            badge={sedeFiltro === 'TODOS' ? clientesCero.total : ceroCeroTotal}
+          >
+            Clientes Sin Compra
+          </CollapseTitle>
+
+          {openCeroClientes && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
             {/* Resumen por vendedor */}
             <div className="table-card">
               <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
@@ -1168,12 +1432,14 @@ export default function Gerencial() {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
         </>
       )}
 
-      {/* ── Top 10 Clientes ── */}
-      {topClientes.top_global?.length > 0 && (
+      {/* ─ Top 10 Clientes y Top 10 por Negocio → movidos a paneles Clientes / Cobertura ─ */}
+
+      {/* 8. Clientes Nuevos */}
+      {false && (
         <>
           <SectionTitle>Top 10 Clientes — Distribuidora</SectionTitle>
           <div className="table-card mb-4">

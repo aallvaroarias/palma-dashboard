@@ -75,8 +75,8 @@ export default function App() {
         <BottomNav />
       </div>
 
-      {/* Consultor IA — flotante en todas las vistas */}
-      <Consultor />
+      {/* Consultor IA — flotante en todas las vistas (OCULTO: cambiar a true para reactivar) */}
+      {false && <Consultor />}
     </>
   );
 }
