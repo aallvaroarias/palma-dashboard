@@ -613,13 +613,13 @@ export default function Gerencial() {
         <KpiCard label="Venta Bruta" value={fmt(rf.venta_bruta ?? rf.venta_real ?? 0)} color="blue" />
         <KpiCard
           label="Devoluciones"
-          value={fmt(rf.devolucion_total || 0)}
+          value={fmt(rf.devolucion_total ?? rf.devoluciones ?? rf.devolucion ?? 0)}
           sub={`<span style="color:var(--red)">${pct(rf.pct_devolucion)}</span> de venta bruta`}
           color="red"
         />
         <KpiCard
           label="Averías"
-          value={fmt(rf.averia_total || 0)}
+          value={fmt(rf.averia_total ?? rf.averias ?? rf.averia ?? 0)}
           sub={pct(rf.pct_averia || 0)}
           color="red"
         />

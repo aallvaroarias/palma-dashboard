@@ -831,13 +831,26 @@ function normalizarTexto_(v) {
 // Averías: daño físico al producto (transporte, empaque, vencimiento).
 // "AVALADOS POR VENTAS" y "AVALADOS POR CALIDAD" quedan como devolución normal.
 const CONCEPTOS_AVERIA_ = [
-  'PRODUCTOVENCIDO',
-  'AVERIAENTRANSPORTE',
-  'PERDIDADEVACIO'
+  // Variantes exactas normalizadas (sin tildes, sin espacios)
+  'PRODUCTOVENCIDO', 'PRODUCTOSENVENCIDOS', 'VENCIDO', 'VENCIDOS',
+  'AVERIAENTRANSPORTE', 'AVERIATRANSPORTE', 'AVERIA', 'AVERIAS',
+  'PERDIDADEVACIO', 'PERDIDA', 'PERDIDAVACIO', 'VACIO',
+  'MERMA', 'MERMAS', 'DANOENTRANSPORTE', 'DANOPRODUCTO', 'DANO',
+  'MALESTADO', 'DETERIORO', 'CONTAMINADO', 'CONTAMINACION',
+  'CADUCADO', 'CADUCADOS', 'EXPIRADO', 'EXPIRADOS',
+];
+// Palabras parciales: si el concepto contiene alguna de estas raíces (normalizado)
+const CONCEPTOS_AVERIA_PARCIAL_ = [
+  'AVERIA', 'VENCIDO', 'PERDIDA', 'VACIO', 'MERMA', 'DANO', 'MALO',
 ];
 
 function esAveria_(concepto) {
-  return CONCEPTOS_AVERIA_.includes(normalizarTexto_(concepto));
+  var norm = normalizarTexto_(concepto);
+  if (CONCEPTOS_AVERIA_.includes(norm)) return true;
+  for (var i = 0; i < CONCEPTOS_AVERIA_PARCIAL_.length; i++) {
+    if (norm.indexOf(CONCEPTOS_AVERIA_PARCIAL_[i]) >= 0) return true;
+  }
+  return false;
 }
 
 function normalizarHeader_(header) {
@@ -845,6 +858,96 @@ function normalizarHeader_(header) {
     .trim().toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
+/**
+ * Busca el índice de una columna entre varios nombres posibles.
+ * Normaliza quitando tildes, espacios, guiones y comparando en MAYÚSCULAS.
+ * Retorna -1 si no se encuentra ninguna de las variantes.
+ */
+function findCol_(headers, posibles) {
+  function norm(s) {
+    return String(s || '').trim().toUpperCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[\s_\-]+/g, '');
+  }
+  const headersNorm = headers.map(norm);
+  for (var i = 0; i < posibles.length; i++) {
+    var idx = headersNorm.indexOf(norm(posibles[i]));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+/**
+ * Convierte cualquier representación monetaria a número.
+ * Soporta: 14688, "14.688", "14,688", "$14,688.00", "(14688)" (negativo).
+ * Para vlr_devol siempre retorna el valor absoluto.
+ */
+function parseMoney_(v) {
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  var s = String(v || '').trim();
+  if (!s) return 0;
+  var negativo = /^\(.*\)$/.test(s) || s.startsWith('-');
+  // Quitar símbolos no numéricos excepto , . -
+  s = s.replace(/[^\d,.\-]/g, '').replace(/\s/g, '');
+  if (!s) return 0;
+  // Si tiene coma Y punto: coma=miles, punto=decimal → quitar comas
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/,/g, '');
+  } else if (s.includes(',') && !s.includes('.')) {
+    // Solo coma: si hay exactamente 2 dígitos después, es decimal; si no, es miles
+    var parts = s.split(',');
+    if (parts.length === 2 && parts[1].length <= 2) {
+      s = s.replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  }
+  var n = Number(s);
+  if (isNaN(n)) return 0;
+  return negativo ? -Math.abs(n) : n;
+}
+
+/**
+ * Detecta la posición de cada columna de DEVOLUCIONES por nombre (robusto a cambios de estructura).
+ * Se llama UNA vez por ejecución y el resultado se reutiliza.
+ */
+var _DEVOL_COL_MAP = null;
+function getDevolucionesColMap_(headers) {
+  // Si ya fue calculado en esta ejecución (múltiples llamadas al mismo endpoint), reutilizar
+  if (_DEVOL_COL_MAP && _DEVOL_COL_MAP._headers === JSON.stringify(headers)) {
+    return _DEVOL_COL_MAP;
+  }
+  function fc(posibles) { return findCol_(headers, posibles); }
+  var map = {
+    _headers:     JSON.stringify(headers),
+    periodo_mes:  fc(['PERIODO MES','PERIODO_MES','FECHA MES','FECHA','MES','PERIODO']),
+    cod_asesor:   fc(['COD ASESOR','COD_ASESOR','CODIGO ASESOR','COD VENDEDOR','CODIGO VENDEDOR','ASESOR COD']),
+    nom_vendedor: fc(['NOM VENDEDOR','NOM_VENDEDOR','NOMBRE VENDEDOR','VENDEDOR','ASESOR','NOMBRE ASESOR','NOM ASESOR']),
+    cod_cliente:  fc(['COD CLIENTE','COD_CLIENTE','CODIGO CLIENTE','ID CLIENTE','NIT','CLIENTE COD']),
+    nom_cliente:  fc(['NOM CLIENTE','NOM_CLIENTE','NOMBRE CLIENTE','CLIENTE','RAZON SOCIAL']),
+    factura:      fc(['FACTURA','NUM FACTURA','NUMERO FACTURA','NRO FACTURA','DOC','DOCUMENTO']),
+    cod_sku:      fc(['COD SKU','COD_SKU','SKU','CODIGO PRODUCTO','COD PRODUCTO','PRODUCTO COD']),
+    nom_producto: fc(['NOM PRODUCTO','NOM_PRODUCTO','NOMBRE PRODUCTO','PRODUCTO','DESCRIPCION','ARTICULO']),
+    cantidad:     fc(['CANTIDAD','CANT','QTY','UNIDADES']),
+    costo_unit:   fc(['COSTO UNIT','COSTO_UNIT','COSTO UNITARIO','PRECIO UNIT','PRECIO']),
+    vlr_devol:    fc(['VLR DEVOL','VLR_DEVOL','VALOR DEVOLUCION','VALOR DEVOLUCION','VALOR DEVOLUC','VLRDEVOLUCION','VALOR','TOTAL','MONTO','IMPORTE','VLR']),
+    concepto:     fc(['CONCEPTO','CAUSAL','MOTIVO','RAZON','RAZON DEVOLUCION','TIPO DEVOLUCION','TIPO']),
+    tipo_producto:fc(['TIPO PRODUCTO','TIPO_PRODUCTO','TIPO PROD','NEGOCIO','LINEA']),
+    periodo_filtro:fc(['PERIODO FILTRO','PERIODO_FILTRO','PERIODO CONTABLE','PERIODO DASHBOARD','PERIODO DASHBOARD','MES FILTRO','PERIODO CIERRE']),
+  };
+  _DEVOL_COL_MAP = map;
+  // Log diagnóstico: qué columnas se detectaron y cuáles faltan
+  var faltantes = ['vlr_devol','concepto','nom_vendedor','periodo_filtro'].filter(function(k) { return map[k] < 0; });
+  Logger.log('[DevColMap] headers=' + JSON.stringify(headers.slice(0,15)));
+  Logger.log('[DevColMap] vlr_devol=' + map.vlr_devol + ' concepto=' + map.concepto +
+    ' cod_asesor=' + map.cod_asesor + ' nom_vendedor=' + map.nom_vendedor +
+    ' periodo_filtro=' + map.periodo_filtro + ' periodo_mes=' + map.periodo_mes);
+  if (faltantes.length) {
+    Logger.log('[DevColMap] ⚠ COLUMNAS CRÍTICAS NO ENCONTRADAS: ' + faltantes.join(', '));
+  }
+  return map;
 }
 
 function obtenerCodAsesor_(valor) {
@@ -1022,40 +1125,107 @@ function getCuotas() {
 // DEVOLUCIONES: HELPERS
 // ════════════════════════════════════════════════════════════════════
 
-// Estructura confirmada de DEVOLUCIONES:
-// r[0]=periodo_mes r[1]=cod_asesor r[2]=nom_vendedor r[3]=cod_cliente
-// r[4]=nom_cliente r[5]=factura    r[6]=cod_sku      r[7]=nom_producto
-// r[8]=cantidad    r[9]=costo_unit r[10]=vlr_devol   r[11]=concepto
-// r[12]=tipo_prod  r[13]=periodo_filtro
+// NOTA: La estructura de DEVOLUCIONES se detecta dinámicamente con getDevolucionesColMap_.
+// Las columnas esperadas (en cualquier orden) son:
+// periodo_mes, cod_asesor, nom_vendedor, cod_cliente, nom_cliente, factura,
+// cod_sku, nom_producto, cantidad, costo_unit, vlr_devol, concepto, tipo_producto, periodo_filtro
+// Ver findCol_() + getDevolucionesColMap_() para los nombres alternativos aceptados.
 
+/**
+ * Devuelve las filas de DEVOLUCIONES del período dado como objetos con propiedades nombradas.
+ * Detección dinámica de columnas mediante getDevolucionesColMap_ para resistir cambios de estructura.
+ */
 function getDevolucionesPeriodoRaw_(periodoYYYYMM) {
   var hDev = getSheet_(HOJAS.DEVOLUCIONES);
-  if (!hDev || hDev.getLastRow() < 2) return [];
+  if (!hDev || hDev.getLastRow() < 2) {
+    Logger.log('[DevRaw] Hoja DEVOLUCIONES vacía o inexistente.');
+    return [];
+  }
 
-  return hDev.getDataRange().getValues().slice(1).filter(function(r) {
-    // r[13]=periodo_filtro (período contable/dashboard) — columna primaria para filtrar.
-    // r[0] =periodo_mes   (fecha del movimiento original) — fallback si r[13] está vacío.
-    // Usar periodo_filtro evita que devoluciones de ventas de meses anteriores queden en $0.
-    var periodoFiltro = periodoYYYYMM_(r[13]);
-    var periodoMes    = periodoYYYYMM_(r[0]);
+  var data    = hDev.getDataRange().getValues();
+  var headers = data[0];
+  var colMap  = getDevolucionesColMap_(headers);
+  var filas   = data.slice(1);
+
+  // Debug: primeras filas para verificar detección
+  if (filas.length > 0) {
+    var ejR = filas[0];
+    Logger.log('[DevRaw] Muestra fila 0 — vlr_devol(idx=' + colMap.vlr_devol + ')=' +
+      ejR[colMap.vlr_devol] + ' concepto(idx=' + colMap.concepto + ')=' + ejR[colMap.concepto] +
+      ' periodo_filtro(idx=' + colMap.periodo_filtro + ')=' + ejR[colMap.periodo_filtro]);
+  }
+
+  var montosCero = 0, filasFiltradas = 0, filasValidas = 0;
+  var resultado = [];
+
+  filas.forEach(function(r, idx) {
+    // ── Período ──
+    var periodoFiltro = colMap.periodo_filtro >= 0 ? periodoYYYYMM_(r[colMap.periodo_filtro]) : '';
+    var periodoMes    = colMap.periodo_mes    >= 0 ? periodoYYYYMM_(r[colMap.periodo_mes])    : '';
     var periodo       = periodoFiltro || periodoMes;
-    var cod           = obtenerCodAsesor_(r[1]);
-    var vendedor      = String(r[2] || '').trim();
-    if (periodoYYYYMM && periodo !== periodoYYYYMM) return false;
-    return esVendedorValido_(cod, vendedor);
+
+    if (periodoYYYYMM && periodo !== periodoYYYYMM) {
+      filasFiltradas++;
+      return;
+    }
+
+    // ── Vendedor ──
+    var codRaw   = colMap.cod_asesor   >= 0 ? r[colMap.cod_asesor]   : '';
+    var nomRaw   = colMap.nom_vendedor >= 0 ? r[colMap.nom_vendedor] : '';
+    var cod      = obtenerCodAsesor_(codRaw);
+    var vendedor = String(nomRaw || '').trim();
+    if (!esVendedorValido_(cod, vendedor)) return;
+
+    // ── Monto ──
+    var vlrRaw = colMap.vlr_devol >= 0 ? r[colMap.vlr_devol] : 0;
+    var monto  = Math.abs(parseMoney_(vlrRaw));
+    if (!monto) {
+      montosCero++;
+      if (montosCero <= 3) {
+        Logger.log('[DevRaw] ⚠ fila ' + (idx+2) + ' monto=0 — raw=' + vlrRaw +
+          ' cod=' + cod + ' concepto=' + (colMap.concepto >= 0 ? r[colMap.concepto] : '?'));
+      }
+    }
+
+    filasValidas++;
+    resultado.push({
+      periodo_mes:   colMap.periodo_mes    >= 0 ? r[colMap.periodo_mes]    : '',
+      cod_asesor:    cod,
+      nom_vendedor:  vendedor,
+      cod_cliente:   colMap.cod_cliente    >= 0 ? r[colMap.cod_cliente]    : '',
+      nom_cliente:   colMap.nom_cliente    >= 0 ? r[colMap.nom_cliente]    : '',
+      factura:       colMap.factura        >= 0 ? r[colMap.factura]        : '',
+      cod_sku:       colMap.cod_sku        >= 0 ? r[colMap.cod_sku]        : '',
+      nom_producto:  colMap.nom_producto   >= 0 ? r[colMap.nom_producto]   : '',
+      cantidad:      colMap.cantidad       >= 0 ? (Number(r[colMap.cantidad]) || 0) : 0,
+      costo_unit:    colMap.costo_unit     >= 0 ? parseMoney_(r[colMap.costo_unit]) : 0,
+      vlr_devol:     monto,
+      concepto:      colMap.concepto       >= 0 ? String(r[colMap.concepto]      || '').trim() : '',
+      tipo_producto: colMap.tipo_producto  >= 0 ? String(r[colMap.tipo_producto] || '').trim() : '',
+      periodo_filtro: periodo,
+      _raw:          r,   // ← referencia original para diagnóstico
+    });
   });
+
+  Logger.log('[DevRaw] periodo=' + (periodoYYYYMM||'ALL') +
+    ' → válidas=' + filasValidas + ' filtradas=' + filasFiltradas +
+    ' montosCero=' + montosCero);
+  return resultado;
 }
 
 function getTotalesDevolucionesPeriodo_(periodoYYYYMM) {
   const totales = { devoluciones: 0, averias: 0, total: 0 };
-  getDevolucionesPeriodoRaw_(periodoYYYYMM).forEach(r => {
-    const monto   = Math.abs(parseFloat(r[10]) || 0);
-    const concepto = String(r[11] || '').trim();
+  getDevolucionesPeriodoRaw_(periodoYYYYMM).forEach(function(r) {
+    var monto   = r.vlr_devol;
+    var concepto = r.concepto;
     if (!monto) return;
     if (esAveria_(concepto)) totales.averias      += monto;
     else                     totales.devoluciones += monto;
     totales.total += monto;
   });
+  Logger.log('[DevTotales] periodo=' + periodoYYYYMM +
+    ' devoluciones=' + totales.devoluciones +
+    ' averias=' + totales.averias + ' total=' + totales.total);
   return {
     devoluciones: round2_(totales.devoluciones),
     averias:      round2_(totales.averias),
@@ -1069,17 +1239,17 @@ function getTotalDevolucionesPeriodo_(periodoYYYYMM) {
 
 function getDevolucionesPorCodAsesor_(periodoYYYYMM) {
   const devMap = {};
-  getDevolucionesPeriodoRaw_(periodoYYYYMM).forEach(r => {
-    const cod      = obtenerCodAsesor_(r[1]);
-    const monto    = Math.abs(parseFloat(r[10]) || 0);
-    const concepto = String(r[11] || '').trim();
+  getDevolucionesPeriodoRaw_(periodoYYYYMM).forEach(function(r) {
+    var cod      = r.cod_asesor;
+    var monto    = r.vlr_devol;
+    var concepto = r.concepto;
     if (!cod || !monto) return;
     if (!devMap[cod]) devMap[cod] = { devoluciones:0, averias:0, total:0 };
     if (esAveria_(concepto)) devMap[cod].averias      += monto;
     else                     devMap[cod].devoluciones += monto;
     devMap[cod].total += monto;
   });
-  Object.keys(devMap).forEach(cod => {
+  Object.keys(devMap).forEach(function(cod) {
     devMap[cod].devoluciones = round2_(devMap[cod].devoluciones);
     devMap[cod].averias      = round2_(devMap[cod].averias);
     devMap[cod].total        = round2_(devMap[cod].total);
@@ -1201,7 +1371,56 @@ function invalidarCache_() {
     'dn_marcas', 'marcas', 'skus', 'top_clientes',
     'necesidad', 'cob_pc', 'cob_pc_vend', 'clientes_sin_pc', 'pc_detalle'
   ]);
+  // Resetear mapa de columnas en memoria para que la próxima llamada re-detecte
+  _DEVOL_COL_MAP = null;
   Logger.log('[invalidarCache_] Cache limpiado.');
+}
+
+/**
+ * Llama esta función desde el menú de Apps Script cada vez que actualices las bases.
+ * Invalida el cache de CacheService para que los endpoints devuelvan datos frescos.
+ * Luego precalienta el cache llamando los endpoints más pesados.
+ *
+ * Uso: En Apps Script → Ejecutar → refrescarDespuesDeActualizarBases_
+ */
+function refrescarDespuesDeActualizarBases_() {
+  Logger.log('[Refresh] Iniciando invalidación de cache y precalentamiento...');
+  // 1. Limpiar cache
+  invalidarCache_();
+  // 2. Resetear mapa de columnas (ya hecho en invalidarCache_, por si acaso)
+  _DEVOL_COL_MAP = null;
+  // 3. Diagnóstico rápido de columnas antes de calentar
+  try {
+    var hDev = getSheet_(HOJAS.DEVOLUCIONES);
+    if (hDev && hDev.getLastRow() > 1) {
+      var headers = hDev.getDataRange().getValues()[0];
+      Logger.log('[Refresh] Headers DEVOLUCIONES: ' + JSON.stringify(headers));
+      var colMap = getDevolucionesColMap_(headers);
+      Logger.log('[Refresh] ColMap → vlr_devol=' + colMap.vlr_devol +
+        ' concepto=' + colMap.concepto + ' periodo_filtro=' + colMap.periodo_filtro);
+      // Muestra de las primeras 3 filas para confirmar valores
+      var data = hDev.getDataRange().getValues().slice(1, 4);
+      data.forEach(function(row, i) {
+        Logger.log('[Refresh] Fila ' + (i+2) +
+          ' vlr_devol=' + row[colMap.vlr_devol] +
+          ' concepto='  + row[colMap.concepto] +
+          ' periodo='   + row[colMap.periodo_filtro]);
+      });
+    } else {
+      Logger.log('[Refresh] ⚠ Hoja DEVOLUCIONES vacía o no encontrada.');
+    }
+  } catch(e) {
+    Logger.log('[Refresh] Error en diagnóstico: ' + e.message);
+  }
+  // 4. Precalentar los endpoints más pesados
+  try {
+    Logger.log('[Refresh] Precalentando warmCache_...');
+    warmCache_();
+    Logger.log('[Refresh] ✓ warmCache_ completado.');
+  } catch(e) {
+    Logger.log('[Refresh] Error en warmCache_: ' + e.message);
+  }
+  Logger.log('[Refresh] ✓ Listo. Cache refrescado con datos actualizados.');
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1298,8 +1517,8 @@ function getResumen() {
   SEDES.forEach(function(s) { sedeDevTotales[s] = { devoluciones: 0, averias: 0 }; });
 
   getDevolucionesPeriodoRaw_(periodoActual).forEach(function(row) {
-    var monto    = Math.abs(parseFloat(row[10]) || 0);
-    var concepto = String(row[11] || '').trim();
+    var monto    = row.vlr_devol;   // ya es Math.abs y parseMoney_
+    var concepto = row.concepto;
     if (!monto) return;
     var esAv = esAveria_(concepto);
     var d    = esAv ? 0 : monto;
@@ -1308,7 +1527,7 @@ function getResumen() {
     sedeDevTotales['TODOS'].devoluciones += d;
     sedeDevTotales['TODOS'].averias      += a;
     // Por sede según cod del asesor (SIN_SEDE si no es parseable)
-    var cod  = obtenerCodAsesor_(row[1]);
+    var cod  = row.cod_asesor;
     var sede = cod ? normSedeCod_(cod) : 'SIN_SEDE';
     sedeDevTotales[sede].devoluciones += d;
     sedeDevTotales[sede].averias      += a;
@@ -1760,17 +1979,14 @@ function getDevoluciones() {
   if (!raw.length) {
     var todosRaw = getDevolucionesPeriodoRaw_('');   // sin filtro de período
     if (todosRaw.length) {
+      // raw ya son objetos nombrados; usar .periodo_filtro directamente
       var maxPeriodo = todosRaw.reduce(function(max, r) {
-        var pf = periodoYYYYMM_(r[13]);
-        var pm = periodoYYYYMM_(r[0]);
-        var p  = pf || pm;
+        var p = r.periodo_filtro;
         return p > max ? p : max;
       }, '');
       if (maxPeriodo) {
         raw = todosRaw.filter(function(r) {
-          var pf = periodoYYYYMM_(r[13]);
-          var pm = periodoYYYYMM_(r[0]);
-          return (pf || pm) === maxPeriodo;
+          return r.periodo_filtro === maxPeriodo;
         });
         Logger.log('[getDevoluciones] periodoActual BASE=' + periodoActual +
           ' → sin datos en DEVOLUCIONES; usando período más reciente: ' + maxPeriodo);
@@ -1786,22 +2002,22 @@ function getDevoluciones() {
   var detalle         = [];
 
   raw.forEach(function(r) {
-    var periodoMes  = fechaISO_(r[0]);
-    var cod         = obtenerCodAsesor_(r[1]);
-    var vendedor    = String(r[2]  || '').trim();
-    var codCliente  = String(r[3]  || '').trim();
-    var nomCliente  = String(r[4]  || '').trim();
-    var factura     = String(r[5]  || '').trim();
-    var codSku      = String(r[6]  || '').trim();
-    var nomProducto = String(r[7]  || '').trim();
-    var cantidad    = parseFloat(r[8])  || 0;
-    var costoUnit   = parseFloat(r[9])  || 0;
-    var monto       = Math.abs(parseFloat(r[10]) || 0);
-    var concepto    = String(r[11] || 'Sin concepto').trim();
-    var tipoProducto= String(r[12] || '').trim();
+    // raw ya son objetos nombrados — sin índices fijos
+    var periodoMes  = fechaISO_(r.periodo_mes);
+    var cod         = r.cod_asesor;
+    var vendedor    = r.nom_vendedor;
+    var codCliente  = r.cod_cliente;
+    var nomCliente  = r.nom_cliente;
+    var factura     = String(r.factura  || '').trim();
+    var codSku      = String(r.cod_sku  || '').trim();
+    var nomProducto = String(r.nom_producto || '').trim();
+    var cantidad    = r.cantidad    || 0;
+    var costoUnit   = r.costo_unit  || 0;
+    var monto       = r.vlr_devol;   // ya es Math.abs + parseMoney_
+    var concepto    = r.concepto || 'Sin concepto';
+    var tipoProducto= r.tipo_producto || '';
 
     // Saltar solo si no hay NINGÚN identificador de vendedor (cod Y nombre ambos vacíos).
-    // Muchas filas de DEVOLUCIONES tienen r[1] vacío pero r[2] válido → incluirlas.
     if (!vendedor && !cod) return;
     if (!monto) return;
 
@@ -1838,11 +2054,11 @@ function getDevoluciones() {
   // Top 10 clientes con más devoluciones por vendedor
   var cliVendMap = {};
   raw.forEach(function(r) {
-    var cod    = obtenerCodAsesor_(r[1]);
-    var vend   = String(r[2] || '').trim();
-    var codCli = String(r[3] || '').trim();
-    var nomCli = String(r[4] || '').trim();
-    var monto  = Math.abs(parseFloat(r[10]) || 0);
+    var cod    = r.cod_asesor;
+    var vend   = r.nom_vendedor;
+    var codCli = r.cod_cliente;
+    var nomCli = r.nom_cliente;
+    var monto  = r.vlr_devol;
     // Necesitamos al menos un identificador de vendedor y un cliente para registrar el top
     if (!vend || !codCli || !monto) return;
     // Clave: cod si está disponible, sino nombre del vendedor
