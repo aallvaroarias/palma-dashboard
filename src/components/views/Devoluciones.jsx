@@ -115,16 +115,27 @@ export default function Devoluciones() {
   return (
     <div className="animate-fade-in">
       <SectionTitle>Resumen Devoluciones</SectionTitle>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         <KpiCard
-          label={filterVendedor ? `Devolución · ${labelVend(filterVendedor)}` : 'Total Devoluciones'}
+          label={filterVendedor ? `Devoluciones · ${labelVend(filterVendedor)}` : 'Devoluciones'}
+          value={fmt(hasFilter ? totalFiltrado : (d.total_devoluciones ?? d.total ?? 0))}
+          color="red"
+        />
+        <KpiCard
+          label="Averías"
+          value={fmt(hasFilter ? 0 : (d.total_averias ?? 0))}
+          sub={hasFilter ? 'Filtrar por vendedor suma devoluciones + averías' : undefined}
+          color="amber"
+        />
+        <KpiCard
+          label={hasFilter ? `Total devolución + averías` : 'Total impacto'}
           value={fmt(hasFilter ? totalFiltrado : (d.total || 0))}
           color="red"
         />
         <KpiCard
           label="Top Concepto"
           value={filterVendedor ? (conceptos[0]?.concepto || '—') : topConcepto}
-          color="amber"
+          color="blue"
         />
         <KpiCard
           label={filterVendedor ? 'Conceptos' : 'Top Vendedor'}

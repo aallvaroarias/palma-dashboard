@@ -821,7 +821,7 @@ export default function Gerencial() {
 
       {/* ── 2. KPIs Ejecutivos ── */}
       <SectionTitle>KPIs Ejecutivos</SectionTitle>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
         <KpiCard label="Venta Bruta" value={fmt(rf.venta_bruta || 0)} color="cyan" />
         <KpiCard label="Venta Neta" value={fmt(rf.venta_neta || 0)} color="green" />
         {proyeccionCierre ? (
@@ -867,6 +867,12 @@ export default function Gerencial() {
           value={fmt(rf.devolucion_total ?? rf.devoluciones ?? rf.devolucion ?? 0)}
           sub={`${pct(rf.venta_bruta > 0 ? (rf.devolucion_total ?? rf.devoluciones ?? rf.devolucion ?? 0) / rf.venta_bruta * 100 : rf.pct_devolucion)} de venta bruta`}
           color="red"
+        />
+        <KpiCard
+          label="Averías"
+          value={fmt(rf.averia_total ?? rf.averias ?? rf.averiados ?? 0)}
+          sub={`${pct(rf.venta_bruta > 0 ? (rf.averia_total ?? rf.averias ?? 0) / rf.venta_bruta * 100 : rf.pct_averia ?? 0)} de venta bruta`}
+          color="amber"
         />
         <KpiCard
           label="Cob. Prod. Clave"
