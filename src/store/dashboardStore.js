@@ -105,11 +105,17 @@ const useDashboardStore = create((set, get) => ({
   clientesSinPC:  { total: 0, clientes: [] },
   pcDetalle:      { productos: [] },
 
+  // ── Combos ───────────────────────────────────────────────────────────────
+  combosResumen:  null,
+  combosVendedor: [],
+  combosDetalle:  null,
+
   // Estado de carga
   loading:       false,   // Fase 1 en progreso
   loadingFase2:  false,   // Fase 2 en progreso
   pcDetalleLoading: false,
   clientesSinPCLoading: false,
+  combosDetalleLoading: false,
   lastUpdate:    null,
   error:         null,
 
@@ -192,6 +198,8 @@ const useDashboardStore = create((set, get) => ({
       ['top_clientes',      1600, d => ({ topClientes: d })],
       ['dn_marcas',         1900, d => ({ dnMarcas: d })],
       ['necesidad_cliente', 2200, d => ({ necesidadCliente: d })],
+      ['combos_resumen',    2500, d => ({ combosResumen: d })],
+      ['combos_vendedor',   2800, d => ({ combosVendedor: d?.vendedores ?? [] })],
       // clientes_sin_pc movido a carga bajo demanda (loadClientesSinPC) — ~359 KB, no auto-cargar
     ];
     console.log('▶ Fase 2 (' + fase2.length + ' endpoints, diferidos):', fase2.map(f => f[0]).join(', '));
@@ -269,6 +277,26 @@ const useDashboardStore = create((set, get) => ({
       console.warn('[Store] loadClientesSinPC error:', e.message);
     } finally {
       set({ clientesSinPCLoading: false });
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // loadCombosDetalle — carga lazy de combos_detalle (solo bajo demanda)
+  // ─────────────────────────────────────────────────────────────────────────
+  loadCombosDetalle: async () => {
+    if (get().combosDetalle !== null) return; // ya cargado
+    if (get().combosDetalleLoading) return;   // prevenir doble carga
+    set({ combosDetalleLoading: true });
+    console.group('[Combos Debug] loadCombosDetalle');
+    try {
+      const data = await fetchSheet('combos_detalle', {}, { fallbackDirect: false });
+      console.log('[Combos Debug] combos_detalle recibido:', data);
+      if (data) set({ combosDetalle: data });
+    } catch (e) {
+      console.warn('[Combos Debug] loadCombosDetalle error:', e.message);
+    } finally {
+      set({ combosDetalleLoading: false });
+      console.groupEnd();
     }
   },
 

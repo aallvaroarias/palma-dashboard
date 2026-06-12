@@ -714,7 +714,8 @@ const HOJAS = {
   MAESTRO_CLIENTES:   'MAESTRO_CLIENTES',
   CUOTAS:             'CUOTAS',           // metas mensuales por asesor
   CARTERA:            'CARTERA',          // reporte CxC (pegar desde sistema)
-  PRODUCTOS_CLAVE:    'PRODUCTOS_CLAVE'  // catálogo: Nombre|Detalle|GTINSE|SAP|Negocio|TR|Estado
+  PRODUCTOS_CLAVE:    'PRODUCTOS_CLAVE',  // catálogo: Nombre|Detalle|GTINSE|SAP|Negocio|TR|Estado
+  COMBOS:             'COMBOS'            // combos activos: SAP|PRODUCTO|NEGOCIO|META_UNIDADES|META_CLIENTES|ACTIVO
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -762,6 +763,16 @@ function doGet(e) {
         data = withCache_('necesidad',    300, getNecesidadCliente); break;
       case 'dn_marcas':
         data = withCache_('dn_marcas',    300, getDNMarcas);     break;
+
+      // ── Combos ───────────────────────────────────────────────────────────
+      case 'combos':
+        data = withCache_('combos',          300, getCombos_);          break;
+      case 'combos_resumen':
+        data = withCache_('combos_resumen',  300, getCombosResumen_);   break;
+      case 'combos_vendedor':
+        data = withCache_('combos_vendedor', 300, getCombosVendedor_);  break;
+      case 'combos_detalle':
+        data = withCache_('combos_detalle',  300, getCombosDetalle_);   break;
 
       // ── Productos clave (pesados) ─────────────────────────────────────────
       case 'cobertura_productos_clave':
@@ -2030,6 +2041,8 @@ function getDevoluciones() {
   var vendedorMap     = {};
   var vendConceptoMap = {};
   var detalle         = [];
+  var totalDevoluciones = 0;
+  var totalAverias      = 0;
 
   raw.forEach(function(r) {
     // raw ya son objetos nombrados — sin índices fijos
@@ -2050,6 +2063,10 @@ function getDevoluciones() {
     // Saltar solo si no hay NINGÚN identificador de vendedor (cod Y nombre ambos vacíos).
     if (!vendedor && !cod) return;
     if (!monto) return;
+
+    // Separar averías de devoluciones puras
+    if (esAveria_(concepto)) totalAverias      += monto;
+    else                     totalDevoluciones += monto;
 
     // Si cod está vacío, usar solo el nombre del vendedor como clave de agrupación
     var nombreFinal = cod ? (cod + ' - ' + vendedor) : vendedor;
@@ -2079,7 +2096,8 @@ function getDevoluciones() {
   });
 
   var total = detalle.reduce(function(s, r) { return s + (parseFloat(r.vlr_devolucion) || 0); }, 0);
-  Logger.log('[getDevoluciones] detalle.length=' + detalle.length + '  total=' + round2_(total));
+  Logger.log('[getDevoluciones] detalle.length=' + detalle.length + '  total=' + round2_(total) +
+    '  devoluciones=' + round2_(totalDevoluciones) + '  averias=' + round2_(totalAverias));
 
   // Top 10 clientes con más devoluciones por vendedor
   var cliVendMap = {};
@@ -2119,7 +2137,9 @@ function getDevoluciones() {
   });
 
   return {
-    total: round2_(total),
+    total:               round2_(total),
+    total_devoluciones:  round2_(totalDevoluciones),
+    total_averias:       round2_(totalAverias),
     por_concepto: Object.entries(conceptoMap)
       .map(([concepto, monto]) => ({ concepto, monto: round2_(monto) }))
       .sort((a, b) => b.monto - a.monto),
@@ -3434,6 +3454,248 @@ function getProductosClaveDetalle_() {
     };
   }).sort(function(a, b) {
     return b.clientes_impactados - a.clientes_impactados || b.venta - a.venta;
+  });
+
+  return { productos: productos };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COMBOS
+// Lee la hoja COMBOS (SAP|PRODUCTO|NEGOCIO|META_UNIDADES|META_CLIENTES|ACTIVO)
+// y cruza contra BASE_ACUMULADA para medir gestión comercial de combos.
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Lee la hoja COMBOS y devuelve array de combos activos.
+ * Normaliza SAP igual que el resto del sistema (limpiarSap_).
+ */
+function cargarCombosActivos_() {
+  var filas = sheetToJSON(HOJAS.COMBOS);
+  if (!filas.length) return [];
+  return filas.filter(function(r) {
+    return normalizarTexto_(r.activo || r.ACTIVO || '') === 'SI';
+  }).map(function(r) {
+    return {
+      sap:           limpiarSap_(r.sap),
+      producto:      String(r.producto      || '').trim(),
+      negocio:       String(r.negocio       || '').trim(),
+      meta_unidades: parseFloat(String(r.meta_unidades || '0').replace(/[,$]/g, '')) || 0,
+      meta_clientes: parseFloat(String(r.meta_clientes || '0').replace(/[,$]/g, '')) || 0,
+    };
+  }).filter(function(r) { return r.sap; });
+}
+
+// Endpoint ?sheet=combos — lista de combos activos
+function getCombos_() {
+  var combos = cargarCombosActivos_();
+  return {
+    total_combos: combos.length,
+    combos: combos.map(function(c) {
+      return {
+        sap:           c.sap,
+        producto:      c.producto,
+        negocio:       c.negocio,
+        meta_unidades: c.meta_unidades,
+        meta_clientes: c.meta_clientes,
+        activo:        'SI'
+      };
+    })
+  };
+}
+
+/**
+ * Helper compartido: cruza BASE_ACUMULADA con combos activos.
+ * Devuelve estructuras pre-calculadas para los 3 endpoints de combos.
+ */
+function calcularCombosBase_() {
+  var combos  = cargarCombosActivos_();
+  var base    = getBasePeriodoActual_();
+  var sedeMap = cargarSedeMap_();
+
+  var combosSet = new Set(combos.map(function(c) { return c.sap; }));
+  var comboInfo = {};  // sap → { producto, negocio, meta_unidades, meta_clientes }
+  combos.forEach(function(c) { comboInfo[c.sap] = c; });
+
+  // Acumuladores globales
+  var clientesImpactados = new Set();
+  var unidadesVendidas   = 0;
+  var ventaCombos        = 0;
+  var sapVendido         = new Set();
+
+  // Por vendedor: cod_asesor → acumuladores
+  var vendMap = {};  // cod → { nombre, sede, clientes:Set, unidades, venta, saps:Set }
+
+  // Por SAP: sap → { clientes:Set, unidades, venta }
+  var sapMap = {};
+
+  var sapInvalido    = 0;
+  var sapNoCombo     = 0;
+
+  base.forEach(function(r) {
+    var codCli  = String(r[1]  || '').trim();
+    var codAs   = obtenerCodAsesor_(String(r[3] || '').trim());
+    var nomVend = String(r[4]  || '').trim();
+    var sap     = limpiarSap_(r[6]);
+    var cant    = parseFloat(r[13]) || 0;
+    var venta   = parseFloat(r[14]) || 0;
+
+    if (!codAs || !nomVend || !esVendedorValido_(codAs, nomVend)) return;
+    if (venta <= 0) return;
+
+    if (!sap)              { sapInvalido++; return; }
+    if (!combosSet.has(sap)) { sapNoCombo++;   return; }
+
+    // Acumuladores globales
+    clientesImpactados.add(codCli);
+    unidadesVendidas += Math.max(cant, 0);
+    ventaCombos      += venta;
+    sapVendido.add(sap);
+
+    // Por vendedor
+    if (!vendMap[codAs]) {
+      var sede = String(sedeMap[codAs] || '').trim();
+      vendMap[codAs] = {
+        nombre: nomVend,
+        sede:   sede,
+        clientes: new Set(),
+        unidades: 0,
+        venta:    0,
+        saps:     new Set()
+      };
+    }
+    vendMap[codAs].clientes.add(codCli);
+    vendMap[codAs].unidades += Math.max(cant, 0);
+    vendMap[codAs].venta    += venta;
+    vendMap[codAs].saps.add(sap);
+
+    // Por SAP
+    if (!sapMap[sap]) sapMap[sap] = { clientes: new Set(), unidades: 0, venta: 0 };
+    sapMap[sap].clientes.add(codCli);
+    sapMap[sap].unidades += Math.max(cant, 0);
+    sapMap[sap].venta    += venta;
+  });
+
+  // Totales de metas
+  var metaUnidadesTotal = combos.reduce(function(s, c) { return s + c.meta_unidades; }, 0);
+  var metaClientesTotal = combos.reduce(function(s, c) { return s + c.meta_clientes; }, 0);
+
+  Logger.log('[COMBOS] total combos activos=' + combos.length);
+  Logger.log('[COMBOS] SAP combos set size=' + combosSet.size);
+  Logger.log('[COMBOS] clientes impactados=' + clientesImpactados.size);
+  Logger.log('[COMBOS] unidades vendidas=' + Math.round(unidadesVendidas));
+  Logger.log('[COMBOS] venta combos=' + round2_(ventaCombos));
+  Logger.log('[COMBOS] sap_invalido=' + sapInvalido + '  sap_no_combo=' + sapNoCombo);
+  if (combos.length > 0) Logger.log('[COMBOS] primer combo=' + JSON.stringify(combos[0]));
+
+  // Debug si no cruzó nada
+  if (clientesImpactados.size === 0 && base.length > 0) {
+    var primerSapCombo = combos.slice(0, 3).map(function(c) { return c.sap; });
+    var primerSapBase  = base.slice(0, 3).map(function(r) { return limpiarSap_(r[6]); });
+    Logger.log('[COMBOS][DEBUG] sin cruces — SAP combos: ' + primerSapCombo.join(', '));
+    Logger.log('[COMBOS][DEBUG] SAP en BASE: ' + primerSapBase.join(', '));
+  }
+
+  return {
+    combos:            combos,
+    comboInfo:         comboInfo,
+    clientesImpactados: clientesImpactados,
+    unidadesVendidas:  unidadesVendidas,
+    ventaCombos:       ventaCombos,
+    sapVendido:        sapVendido,
+    vendMap:           vendMap,
+    sapMap:            sapMap,
+    metaUnidadesTotal: metaUnidadesTotal,
+    metaClientesTotal: metaClientesTotal
+  };
+}
+
+// Endpoint ?sheet=combos_resumen — KPIs gerenciales globales
+function getCombosResumen_() {
+  var c = calcularCombosBase_();
+  var imp  = c.clientesImpactados.size;
+  var uni  = Math.round(c.unidadesVendidas);
+  var vent = round2_(c.ventaCombos);
+  var cumplUni = c.metaUnidadesTotal > 0 ? round2_(uni  / c.metaUnidadesTotal * 100) : 0;
+  var cumplCli = c.metaClientesTotal > 0 ? round2_(imp  / c.metaClientesTotal * 100) : 0;
+  return {
+    clientes_impactados:       imp,
+    unidades_vendidas:         uni,
+    venta_combos:              vent,
+    meta_unidades_total:       Math.round(c.metaUnidadesTotal),
+    meta_clientes_total:       Math.round(c.metaClientesTotal),
+    cumplimiento_unidades_pct: cumplUni,
+    cumplimiento_clientes_pct: cumplCli,
+    combos_vendidos:           c.sapVendido.size,
+    combos_sin_venta:          c.combos.length - c.sapVendido.size,
+    total_combos_activos:      c.combos.length
+  };
+}
+
+// Endpoint ?sheet=combos_vendedor — ranking por vendedor
+function getCombosVendedor_() {
+  var c = calcularCombosBase_();
+  var metaUniTotal = c.metaUnidadesTotal;
+  var metaCliTotal = c.metaClientesTotal;
+  var nVend = Object.keys(c.vendMap).length || 1;
+
+  // Meta proporcional por vendedor (si no hay meta individual, repartir equitativamente)
+  var metaUniPorVend = metaUniTotal > 0 ? round2_(metaUniTotal / nVend) : 0;
+  var metaCliPorVend = metaCliTotal > 0 ? round2_(metaCliTotal / nVend) : 0;
+
+  var vendedores = Object.keys(c.vendMap).map(function(cod) {
+    var v = c.vendMap[cod];
+    var imp  = v.clientes.size;
+    var uni  = Math.round(v.unidades);
+    var vent = round2_(v.venta);
+    var cumplCli = metaCliPorVend > 0 ? round2_(imp / metaCliPorVend * 100) : 0;
+    var cumplUni = metaUniPorVend > 0 ? round2_(uni / metaUniPorVend * 100) : 0;
+    return {
+      cod_asesor:                cod,
+      vendedor:                  cod + ' - ' + v.nombre,
+      sede:                      v.sede,
+      clientes_impactados:       imp,
+      unidades_vendidas:         uni,
+      venta_combos:              vent,
+      meta_unidades:             metaUniPorVend,
+      meta_clientes:             metaCliPorVend,
+      cumplimiento_unidades_pct: cumplUni,
+      cumplimiento_clientes_pct: cumplCli,
+      score_combo:               round2_((cumplCli * 0.5) + (cumplUni * 0.5))
+    };
+  }).sort(function(a, b) {
+    return (b.cumplimiento_clientes_pct - a.cumplimiento_clientes_pct)
+        || (b.cumplimiento_unidades_pct - a.cumplimiento_unidades_pct)
+        || (b.venta_combos - a.venta_combos);
+  });
+
+  return { vendedores: vendedores };
+}
+
+// Endpoint ?sheet=combos_detalle — desglose por producto/SAP
+function getCombosDetalle_() {
+  var c = calcularCombosBase_();
+
+  var productos = c.combos.map(function(combo) {
+    var d       = c.sapMap[combo.sap] || {};
+    var imp     = d.clientes ? d.clientes.size : 0;
+    var uni     = Math.round(d.unidades || 0);
+    var vent    = round2_(d.venta || 0);
+    var cumplUni = combo.meta_unidades > 0 ? round2_(uni / combo.meta_unidades * 100) : 0;
+    var cumplCli = combo.meta_clientes > 0 ? round2_(imp / combo.meta_clientes * 100) : 0;
+    return {
+      sap:                       combo.sap,
+      producto:                  combo.producto,
+      negocio:                   combo.negocio,
+      clientes_impactados:       imp,
+      unidades_vendidas:         uni,
+      venta_combos:              vent,
+      meta_unidades:             combo.meta_unidades,
+      meta_clientes:             combo.meta_clientes,
+      cumplimiento_unidades_pct: cumplUni,
+      cumplimiento_clientes_pct: cumplCli
+    };
+  }).sort(function(a, b) {
+    return (b.clientes_impactados - a.clientes_impactados) || (b.venta_combos - a.venta_combos);
   });
 
   return { productos: productos };

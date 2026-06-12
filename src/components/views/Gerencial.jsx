@@ -82,6 +82,11 @@ export default function Gerencial() {
     pcDetalleLoading,
     loadClientesSinPC,
     clientesSinPCLoading,
+    combosResumen,
+    combosVendedor,
+    combosDetalle,
+    loadCombosDetalle,
+    combosDetalleLoading,
     loadingFase2,
     config,
   } = useDashboardStore();
@@ -106,6 +111,7 @@ export default function Gerencial() {
   const [openAnalisis,    setOpenAnalisis]    = useState(false);
   const [openMarcas,      setOpenMarcas]      = useState(false);
   const [showAllPCTable,  setShowAllPCTable]  = useState(false); // más filas en tabla PC
+  const [showCombosDetalle, setShowCombosDetalle] = useState(false);
 
   const applyNuevosG = useCallback(async (desde, hasta, label) => {
     setLoadingNuevosG(true);
@@ -623,6 +629,31 @@ export default function Gerencial() {
       return (sedeC || asesorSedeMap[cod] || '') === sedeFiltro;
     });
   }, [clientesSinPC, asesorSedeMap, sedeFiltro]);
+
+  // ── Combos: filtrado por sede ──────────────────────────────────────────────
+  const combosVendedorFiltrados = useMemo(() => {
+    if (sedeFiltro === 'TODOS') return combosVendedor;
+    return combosVendedor.filter(v => normalizarSede(v.sede || '') === sedeFiltro);
+  }, [combosVendedor, sedeFiltro]);
+
+  const combosResumenFiltrado = useMemo(() => {
+    if (sedeFiltro === 'TODOS' && combosResumen) return combosResumen;
+    const vends = combosVendedorFiltrados;
+    if (!vends.length) return combosResumen || null;
+    const muTotal = vends.reduce((s, v) => s + (v.meta_unidades || 0), 0);
+    const mcTotal = vends.reduce((s, v) => s + (v.meta_clientes || 0), 0);
+    const u       = vends.reduce((s, v) => s + (v.unidades_vendidas || 0), 0);
+    const c       = vends.reduce((s, v) => s + (v.clientes_impactados || 0), 0);
+    return {
+      clientes_impactados:       c,
+      unidades_vendidas:         u,
+      venta_combos:              vends.reduce((s, v) => s + (v.venta_combos || 0), 0),
+      meta_unidades_total:       muTotal,
+      meta_clientes_total:       mcTotal,
+      cumplimiento_unidades_pct: muTotal > 0 ? Math.round(u / muTotal * 1000) / 10 : 0,
+      cumplimiento_clientes_pct: mcTotal > 0 ? Math.round(c / mcTotal * 1000) / 10 : 0,
+    };
+  }, [combosResumen, combosVendedorFiltrados, sedeFiltro]);
 
   const navigate = useNavigate();
 
@@ -2032,6 +2063,184 @@ export default function Gerencial() {
           </div>
         </>
       )}
+
+      {/* ── Gestión de Combos ── */}
+      {(combosResumenFiltrado || combosVendedorFiltrados.length > 0) && (() => {
+        const cr = combosResumenFiltrado;
+        const cv = [...combosVendedorFiltrados].sort((a, b) => (b.score_combo || 0) - (a.score_combo || 0));
+        return (
+          <>
+            <SectionTitle>Gestión de Combos</SectionTitle>
+
+            {/* 4 KPIs */}
+            {cr && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <KpiCard
+                  label="Clientes impactados"
+                  value={String(cr.clientes_impactados || 0)}
+                  sub={cr.meta_clientes_total > 0 ? `Meta: ${cr.meta_clientes_total}` : undefined}
+                  color="teal"
+                />
+                <KpiCard
+                  label="Unidades vendidas"
+                  value={String(cr.unidades_vendidas || 0)}
+                  sub={cr.meta_unidades_total > 0 ? `Meta: ${cr.meta_unidades_total}` : undefined}
+                  color="cyan"
+                />
+                <KpiCard
+                  label="Cumpl. Unidades"
+                  value={pct(cr.cumplimiento_unidades_pct || 0)}
+                  sub={`Clientes: ${pct(cr.cumplimiento_clientes_pct || 0)}`}
+                  color={(cr.cumplimiento_unidades_pct || 0) >= 100 ? 'green' : (cr.cumplimiento_unidades_pct || 0) >= 70 ? 'amber' : 'red'}
+                  barValue={cr.cumplimiento_unidades_pct || 0}
+                />
+                <KpiCard
+                  label="Venta Combos"
+                  value={fmt(cr.venta_combos || 0)}
+                  color="purple"
+                />
+              </div>
+            )}
+
+            {/* Ranking por vendedor */}
+            {cv.length > 0 && (
+              <div className="table-card mb-4">
+                <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                  <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Ranking Combos por Vendedor</h3>
+                  <span className="text-palumar-muted" style={{ fontSize: '11px' }}>{cv.length} vendedores</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>Vendedor</th>
+                        <th style={{ textAlign: 'right' }}>Clientes</th>
+                        <th style={{ textAlign: 'right' }}>Unidades</th>
+                        <th style={{ minWidth: '140px' }}>Cumpl. %</th>
+                        <th style={{ textAlign: 'right' }}>Venta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cv.slice(0, 8).map((v, i) => {
+                        const c   = v.cumplimiento_unidades_pct || 0;
+                        const col = c >= 100 ? 'var(--green)' : c >= 70 ? 'var(--amber)' : 'var(--red)';
+                        return (
+                          <tr key={v.cod_asesor || i}>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: VEND_COLORS[i % VEND_COLORS.length] }} />
+                                {v.cod_asesor} — {v.vendedor}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 600 }}>{v.clientes_impactados}</td>
+                            <td style={{ textAlign: 'right' }}>{v.unidades_vendidas}</td>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
+                                  <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(c, 100)}%`, background: col }} />
+                                </div>
+                                <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{c.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(v.venta_combos)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Botón detalle por producto */}
+                <div className="px-5 py-2.5 border-t" style={{ borderColor: 'var(--border-2)' }}>
+                  <button
+                    onClick={() => {
+                      const next = !showCombosDetalle;
+                      setShowCombosDetalle(next);
+                      if (next) loadCombosDetalle?.();
+                    }}
+                    style={{
+                      padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                      border: `1px solid ${showCombosDetalle ? 'rgba(26,127,166,0.5)' : 'var(--border-2)'}`,
+                      background: showCombosDetalle ? 'rgba(26,127,166,0.10)' : 'rgba(255,255,255,0.04)',
+                      color: showCombosDetalle ? 'var(--cyan)' : 'var(--muted)',
+                    }}
+                  >
+                    {showCombosDetalle ? '▲ Ocultar detalle por producto' : '▼ Ver detalle por producto'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Detalle por producto — carga bajo demanda */}
+            {showCombosDetalle && (
+              <div className="table-card mb-6">
+                {combosDetalleLoading ? (
+                  <div className="flex items-center justify-center" style={{ minHeight: 80 }}>
+                    <span className="text-palumar-muted" style={{ fontSize: 12 }}>Cargando detalle de combos…</span>
+                  </div>
+                ) : (combosDetalle?.productos || []).length > 0 ? (
+                  <>
+                    <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                      <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Detalle por Producto Combo</h3>
+                      <span className="text-palumar-muted" style={{ fontSize: '11px' }}>{(combosDetalle?.productos || []).length} combos activos</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="palma-table">
+                        <thead>
+                          <tr>
+                            <th>Producto</th>
+                            <th>SAP</th>
+                            <th>Negocio</th>
+                            <th style={{ textAlign: 'right' }}>Clientes</th>
+                            <th style={{ textAlign: 'right' }}>Unidades</th>
+                            <th style={{ minWidth: '130px' }}>Cumpl. %</th>
+                            <th style={{ textAlign: 'right' }}>Venta</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(combosDetalle?.productos || []).map((p, i) => {
+                            const c   = p.cumplimiento_unidades_pct || 0;
+                            const col = c >= 100 ? 'var(--green)' : c >= 70 ? 'var(--amber)' : 'var(--red)';
+                            return (
+                              <tr key={i} style={{ opacity: p.unidades_vendidas === 0 ? 0.55 : 1 }}>
+                                <td style={{ fontWeight: p.unidades_vendidas > 0 ? 600 : 400 }}>
+                                  {p.producto}
+                                  {p.unidades_vendidas === 0 && (
+                                    <span className="badge badge-red" style={{ fontSize: '9px', marginLeft: '6px' }}>sin venta</span>
+                                  )}
+                                </td>
+                                <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{p.sap}</td>
+                                <td style={{ color: 'var(--muted)' }}>{normNeg(p.negocio) || '—'}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.clientes_impactados}</td>
+                                <td style={{ textAlign: 'right' }}>{p.unidades_vendidas}</td>
+                                <td>
+                                  <div className="flex items-center gap-2">
+                                    <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
+                                      <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(c, 100)}%`, background: col }} />
+                                    </div>
+                                    <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{c.toFixed(1)}%</span>
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(p.venta_combos)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center" style={{ minHeight: 64 }}>
+                    <span className="text-palumar-muted" style={{ fontSize: 12 }}>
+                      No se pudo cargar el detalle de combos. Intenta nuevamente.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* ── Ranking Completo ── */}
       <SectionTitle>Ranking Completo</SectionTitle>

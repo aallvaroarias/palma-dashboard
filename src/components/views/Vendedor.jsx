@@ -17,7 +17,8 @@ export default function Vendedor() {
           cobertura, cobNegocio, efectividad, skus, clientesNuevos,
           clientesCero, topClientes, cuotas, devoluciones, dnMarcas, refetchClientes,
           coberturaVendedoresPC, clientesSinPC,
-          loadClientesSinPC, config } = useDashboardStore();
+          loadClientesSinPC, config,
+          combosVendedor } = useDashboardStore();
 
   // Cargar clientes sin producto clave en cuanto hay un vendedor seleccionado
   useEffect(() => { if (cod) loadClientesSinPC?.(); }, [cod]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -271,6 +272,12 @@ export default function Vendedor() {
       String(c.cod_asesor || '').trim() === myCod
     );
   }, [clientesSinPC, v]);
+
+  const combosVendedorEntry = useMemo(() => {
+    if (!v) return null;
+    const myCod = String(v.cod).trim();
+    return combosVendedor.find(x => String(x.cod_asesor).trim() === myCod) || null;
+  }, [combosVendedor, v]);
 
   if (!cod) {
     // ── Debug ──────────────────────────────────────────────────────────────
@@ -1251,6 +1258,41 @@ export default function Vendedor() {
               </div>
             </div>
           )}
+        </>
+      )}
+
+      {/* ── Mis Combos ── */}
+      {combosVendedorEntry && (
+        <>
+          <SectionTitle>Mis Combos</SectionTitle>
+
+          {/* 4 KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <KpiCard
+              label="Clientes impactados"
+              value={String(combosVendedorEntry.clientes_impactados || 0)}
+              sub={combosVendedorEntry.meta_clientes > 0 ? `Meta: ${combosVendedorEntry.meta_clientes}` : undefined}
+              color="teal"
+            />
+            <KpiCard
+              label="Unidades vendidas"
+              value={String(combosVendedorEntry.unidades_vendidas || 0)}
+              sub={combosVendedorEntry.meta_unidades > 0 ? `Meta: ${combosVendedorEntry.meta_unidades}` : undefined}
+              color="cyan"
+            />
+            <KpiCard
+              label="Cumpl. Clientes"
+              value={pct(combosVendedorEntry.cumplimiento_clientes_pct || 0)}
+              color={(combosVendedorEntry.cumplimiento_clientes_pct || 0) >= 100 ? 'green' : (combosVendedorEntry.cumplimiento_clientes_pct || 0) >= 70 ? 'amber' : 'red'}
+              barValue={combosVendedorEntry.cumplimiento_clientes_pct || 0}
+            />
+            <KpiCard
+              label="Venta Combos"
+              value={fmt(combosVendedorEntry.venta_combos || 0)}
+              sub={`Unidades: ${pct(combosVendedorEntry.cumplimiento_unidades_pct || 0)}`}
+              color="purple"
+            />
+          </div>
         </>
       )}
     </div>
