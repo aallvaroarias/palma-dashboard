@@ -17,7 +17,7 @@ export default function Vendedor() {
           cobertura, cobNegocio, efectividad, skus, clientesNuevos,
           clientesCero, topClientes, cuotas, devoluciones, dnMarcas, refetchClientes,
           coberturaVendedoresPC, clientesSinPC,
-          loadClientesSinPC } = useDashboardStore();
+          loadClientesSinPC, config } = useDashboardStore();
 
   // Cargar clientes sin producto clave en cuanto hay un vendedor seleccionado
   useEffect(() => { if (cod) loadClientesSinPC?.(); }, [cod]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,19 +196,32 @@ export default function Vendedor() {
   }, [cuotas, v]);
 
   // Factor de proyección de cierre de mes
+  // Usa DIAS_HABILES_RESTANTES desde CONFIG cuando está disponible
   const factorProyeccion = useMemo(() => {
     function diasHabiles(desde, hasta) {
       let c = 0; const d = new Date(desde);
       while (d <= hasta) { if (d.getDay() !== 0) c++; d.setDate(d.getDate() + 1); }
       return c;
     }
-    const hoy = new Date();
+    const hoy    = new Date();
     const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const fin    = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
     const transc = diasHabiles(inicio, hoy);
-    const total  = diasHabiles(inicio, fin);
+    const configDias = config?.dias_habiles_restantes || 0;
+    const total  = configDias > 0 ? transc + configDias : diasHabiles(inicio, fin);
     return transc > 0 ? total / transc : 1;
-  }, []);
+  }, [config]);
+
+  const diasHabilesRestantes = useMemo(() => {
+    const configDias = config?.dias_habiles_restantes || 0;
+    if (configDias > 0) return configDias;
+    const hoy = new Date();
+    const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    let c = 0, d = new Date(hoy);
+    d.setDate(d.getDate() + 1);
+    while (d <= fin) { if (d.getDay() !== 0) c++; d.setDate(d.getDate() + 1); }
+    return c;
+  }, [config]);
 
   // Top clientes por negocio de este vendedor
   const topNegociosVend = useMemo(() => {
@@ -439,10 +452,17 @@ export default function Vendedor() {
                     style={{ width: `${barW}%`, height: '10px', background: colorBar, transition: 'width 0.6s ease' }}
                   />
                 </div>
-                <div className="text-right mb-4" style={{ fontSize: '10px', color: colorBar, fontWeight: 600 }}>
+                <div className="text-right mb-1" style={{ fontSize: '10px', color: colorBar, fontWeight: 600 }}>
                   {falta > 0
                     ? `Faltan ${fmt(falta)} para alcanzar la meta`
                     : `✓ Meta superada — excediste por ${fmt(Math.abs(falta))}`}
+                </div>
+                <div className="text-right mb-4">
+                  {falta > 0 && diasHabilesRestantes > 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                      Faltan {fmt(falta)} · {fmt(Math.round(falta / diasHabilesRestantes))} diarios por {diasHabilesRestantes} días
+                    </span>
+                  )}
                 </div>
 
                 {/* Tres stats */}
@@ -498,6 +518,7 @@ export default function Vendedor() {
                     <th style={{ textAlign: 'right' }}>Proyección</th>
                     <th style={{ textAlign: 'right' }}>Cumplimiento</th>
                     <th style={{ textAlign: 'right' }}>Falta / Exceso</th>
+                    <th style={{ textAlign: 'right' }}>Diario requerido</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -527,6 +548,15 @@ export default function Vendedor() {
                             {falta <= 0 ? '+' : ''}{fmt(Math.abs(falta))}
                           </span>
                         </td>
+                        <td style={{ textAlign: 'right' }} className="font-mono-num">
+                          {item.meta === 0
+                            ? <span style={{ color: 'var(--muted)' }}>—</span>
+                            : falta <= 0
+                              ? <span style={{ color: 'var(--green)', fontWeight: 600 }}>Meta alcanzada</span>
+                              : diasHabilesRestantes === 0
+                                ? <span style={{ color: 'var(--amber)' }}>Configurar días</span>
+                                : <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{fmt(Math.round(falta / diasHabilesRestantes))}</span>}
+                        </td>
                       </tr>
                     );
                   })}
@@ -535,7 +565,7 @@ export default function Vendedor() {
                     <td style={{ textAlign: 'right', fontWeight: 700 }} className="font-mono-num">{fmt(metasPorNegocio.reduce((s, x) => s + x.meta, 0))}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--green)' }} className="font-mono-num">{fmt(metasPorNegocio.reduce((s, x) => s + x.venta, 0))}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }} className="font-mono-num">{fmt(metasPorNegocio.reduce((s, x) => s + Math.round(x.venta * factorProyeccion), 0))}</td>
-                    <td colSpan={2} />
+                    <td colSpan={3} />
                   </tr>
                 </tbody>
               </table>

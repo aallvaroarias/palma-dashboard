@@ -92,6 +92,7 @@ const useDashboardStore = create((set, get) => ({
   cartera:         { total_pendiente: 0, total_facturas: 0, por_vendedor: [], por_tramo: [], top_clientes: [], detalle: [] },
   necesidadCliente:{ total: 0, total_clasificados: 0, por_necesidad: [] },
   dnMarcas:        [],
+  config:          null,
   // ── Productos clave ──────────────────────────────────────────────────────────
   productosClaveList:   { total_catalogo: 0, total_productos_clave: 0, productos: [] },
   coberturaPC: {
@@ -131,7 +132,7 @@ const useDashboardStore = create((set, get) => ({
       'resumen', 'cobertura', 'cob_negocio', 'efectividad',
       'cuotas', 'clientes_cero', 'clientes_nuevos', 'cartera',
       'productos_clave', 'cobertura_productos_clave', 'cobertura_pc_vendedor',
-      'vendedores',
+      'vendedores', 'config',
     ];
     console.log('▶ Fase 1 (' + fase1.length + ' endpoints):', fase1.join(', '));
 
@@ -140,7 +141,7 @@ const useDashboardStore = create((set, get) => ({
         resumen, cobertura, cobNegocio, efectividad,
         cuotas, cero, nuevos, cartera,
         productosClaveRaw, coberturaPC, coberturaVendedoresRaw,
-        vendedoresRaw,
+        vendedoresRaw, configData,
       ] = await Promise.all(
         fase1.map(s => fetchSheet(s, {}, { fallbackDirect: true }))
       );
@@ -160,6 +161,7 @@ const useDashboardStore = create((set, get) => ({
         coberturaPC:          coberturaPC          || get().coberturaPC,
         coberturaVendedoresPC: coberturaVendedoresRaw?.vendedores ?? get().coberturaVendedoresPC,
         vendedores:           normalizeVendedores(vendedoresRaw),
+        config:               configData               || get().config,
         loading:    false,
         lastUpdate: new Date(),
       });

@@ -83,6 +83,7 @@ export default function Gerencial() {
     loadClientesSinPC,
     clientesSinPCLoading,
     loadingFase2,
+    config,
   } = useDashboardStore();
 
   const [sedeFiltro, setSedeFiltro]       = useState('TODOS'); // 'TODOS' | 'CENTRALES' | 'CHIRIQUI'
@@ -525,6 +526,7 @@ export default function Gerencial() {
   }, [vendedoresFiltrados, rf]);
 
   // Proyección de cierre de mes basada en días hábiles (lun–sáb)
+  // Usa DIAS_HABILES_RESTANTES desde CONFIG cuando está disponible
   const proyeccionCierre = useMemo(() => {
     if (!rf?.venta_neta) return null;
     const hoy   = new Date();
@@ -543,16 +545,39 @@ export default function Gerencial() {
       return c;
     }
 
-    const habilesTotal  = diasHabiles(inicio, fin);
     const habilesTransc = diasHabiles(inicio, hoy);
     if (habilesTransc === 0) return null;
+
+    const configDias   = config?.dias_habiles_restantes || 0;
+    const habilesTotal = configDias > 0
+      ? habilesTransc + configDias
+      : diasHabiles(inicio, fin);
 
     const proyeccion  = Math.round(rf.venta_neta / habilesTransc * habilesTotal);
     const pctAvance   = Math.round(habilesTransc / habilesTotal * 100);
     const cuota       = rf.cuota_total || 0;
     const pctVsCuota  = cuota > 0 ? Math.round(proyeccion / cuota * 100) : null;
     return { proyeccion, pctAvance, habilesTransc, habilesTotal, pctVsCuota };
-  }, [rf]);
+  }, [rf, config]);
+
+  const diasHabilesRestantes = useMemo(() => {
+    const configDias = config?.dias_habiles_restantes || 0;
+    if (configDias > 0) return configDias;
+    if (proyeccionCierre) return proyeccionCierre.habilesTotal - proyeccionCierre.habilesTransc;
+    return 0;
+  }, [config, proyeccionCierre]);
+
+  useMemo(() => {
+    if (!config || !rf) return;
+    const faltante = Math.max(0, (rf.cuota_total || 0) - (rf.venta_neta || 0));
+    const diario   = diasHabilesRestantes > 0 ? Math.round(faltante / diasHabilesRestantes) : 0;
+    console.group('[DiasHabiles Config]');
+    console.log('config:', config);
+    console.log('dias_habiles_restantes:', diasHabilesRestantes);
+    console.log('faltante gerencial:', faltante);
+    console.log('diario requerido gerencial:', diario);
+    console.groupEnd();
+  }, [config, rf, diasHabilesRestantes]);
 
   // ── Productos Clave: filtrado por sede ──────────────────────────────────────
   // ⚠ DEBEN estar ANTES del early return `if (!r)`.
@@ -850,6 +875,18 @@ export default function Gerencial() {
           barValue={cobPCResumen.cobertura_clave_pct || 0}
         />
       </div>
+
+      {/* Días hábiles restantes — faltante diario */}
+      {diasHabilesRestantes > 0 && (rf.cuota_total || 0) > 0 && (() => {
+        const faltante = Math.max(0, (rf.cuota_total || 0) - (rf.venta_neta || 0));
+        if (faltante <= 0) return null;
+        const diario = Math.round(faltante / diasHabilesRestantes);
+        return (
+          <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '-14px', marginBottom: '20px', textAlign: 'right' }}>
+            Faltan {fmt(faltante)} · {fmt(diario)} diarios por {diasHabilesRestantes} días
+          </p>
+        );
+      })()}
 
       {/* ── 3. Alertas de Gestión ── */}
       <SectionTitle>Alertas de gestión</SectionTitle>

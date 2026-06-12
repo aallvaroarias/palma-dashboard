@@ -741,6 +741,7 @@ function doGet(e) {
       case 'clientes_cero':   data = getClientesCero();        break;
       case 'clientes_nuevos': data = getClientesNuevos(e.parameter.desde, e.parameter.hasta); break;
       case 'productos_clave': data = getProductosClave_();     break;
+      case 'config':          data = getConfig_();             break;
 
       // ── Pesados: leen BASE_ACUMULADA — con cache 300 s ────────────────────
       case 'resumen':
@@ -1421,6 +1422,35 @@ function refrescarDespuesDeActualizarBases_() {
     Logger.log('[Refresh] Error en warmCache_: ' + e.message);
   }
   Logger.log('[Refresh] ✓ Listo. Cache refrescado con datos actualizados.');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CONFIG — hoja CONFIG con clave/valor de configuración
+// Estructura: CLAVE | VALOR  (fila 1 = cabecera, filas 2+ = datos)
+// ════════════════════════════════════════════════════════════════════
+
+function getConfig_() {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CONFIG');
+  if (!sh) {
+    return {
+      dias_habiles_restantes: 0,
+      dias_habiles_mes:       0,
+      fecha_corte:            null,
+      debug:                  'Hoja CONFIG no encontrada'
+    };
+  }
+  const values = sh.getDataRange().getValues();
+  const config = {};
+  for (let i = 1; i < values.length; i++) {
+    const clave = String(values[i][0] || '').trim().toUpperCase();
+    const valor = values[i][1];
+    if (clave) config[clave] = valor;
+  }
+  return {
+    dias_habiles_restantes: Number(config['DIAS_HABILES_RESTANTES'] || 0),
+    dias_habiles_mes:       Number(config['DIAS_HABILES_MES']       || 0),
+    fecha_corte:            config['FECHA_CORTE'] || null
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════
