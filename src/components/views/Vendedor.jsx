@@ -18,10 +18,13 @@ export default function Vendedor() {
           clientesCero, topClientes, cuotas, devoluciones, dnMarcas, refetchClientes,
           coberturaVendedoresPC, clientesSinPC,
           loadClientesSinPC, config,
-          combosVendedor } = useDashboardStore();
+          combosVendedor,
+          combosVendedorDetalle, loadCombosVendedorDetalle, combosVendedorDetalleLoading } = useDashboardStore();
 
   // Cargar clientes sin producto clave en cuanto hay un vendedor seleccionado
   useEffect(() => { if (cod) loadClientesSinPC?.(); }, [cod]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Cargar desglose por vendedor+producto de combos, bajo demanda
+  useEffect(() => { if (cod) loadCombosVendedorDetalle?.(); }, [cod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const v = useMemo(
     () => vendedores.find(x => String(x.cod) === String(cod)),
@@ -278,6 +281,12 @@ export default function Vendedor() {
     const myCod = String(v.cod).trim();
     return combosVendedor.find(x => String(x.cod_asesor).trim() === myCod) || null;
   }, [combosVendedor, v]);
+
+  const combosVendedorDetalleEntry = useMemo(() => {
+    if (!v || !combosVendedorDetalle?.vendedores) return null;
+    const myCod = String(v.cod).trim();
+    return combosVendedorDetalle.vendedores.find(x => String(x.cod_asesor).trim() === myCod) || null;
+  }, [combosVendedorDetalle, v]);
 
   if (!cod) {
     // ── Debug ──────────────────────────────────────────────────────────────
@@ -1262,36 +1271,87 @@ export default function Vendedor() {
       )}
 
       {/* ── Mis Combos ── */}
-      {combosVendedorEntry && (
+      {(combosVendedorEntry || combosVendedorDetalleLoading || combosVendedorDetalleEntry) && (
         <>
           <SectionTitle>Mis Combos</SectionTitle>
 
-          {/* 4 KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <KpiCard
-              label="Clientes impactados"
-              value={String(combosVendedorEntry.clientes_impactados || 0)}
-              sub={combosVendedorEntry.meta_clientes > 0 ? `Meta: ${combosVendedorEntry.meta_clientes}` : undefined}
-              color="teal"
-            />
-            <KpiCard
-              label="Unidades vendidas"
-              value={String(combosVendedorEntry.unidades_vendidas || 0)}
-              sub={combosVendedorEntry.meta_unidades > 0 ? `Meta: ${combosVendedorEntry.meta_unidades}` : undefined}
-              color="cyan"
-            />
-            <KpiCard
-              label="Cumpl. Clientes"
-              value={pct(combosVendedorEntry.cumplimiento_clientes_pct || 0)}
-              color={(combosVendedorEntry.cumplimiento_clientes_pct || 0) >= 100 ? 'green' : (combosVendedorEntry.cumplimiento_clientes_pct || 0) >= 70 ? 'amber' : 'red'}
-              barValue={combosVendedorEntry.cumplimiento_clientes_pct || 0}
-            />
-            <KpiCard
-              label="Venta Combos"
-              value={fmt(combosVendedorEntry.venta_combos || 0)}
-              sub={`Unidades: ${pct(combosVendedorEntry.cumplimiento_unidades_pct || 0)}`}
-              color="purple"
-            />
+          {/* 4 KPIs — solo ejecución, sin metas ni cumplimiento */}
+          {combosVendedorEntry && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <KpiCard
+                label="Clientes del maestro"
+                value={String(v?.maestro || 0)}
+                color="blue"
+              />
+              <KpiCard
+                label="Clientes con combos"
+                value={String(combosVendedorEntry.clientes_impactados || 0)}
+                color="teal"
+              />
+              <KpiCard
+                label="Unidades combos"
+                value={String(combosVendedorEntry.unidades_vendidas || 0)}
+                color="cyan"
+              />
+              <KpiCard
+                label="Venta combos"
+                value={fmt(combosVendedorEntry.venta_combos || 0)}
+                color="purple"
+              />
+            </div>
+          )}
+
+          {/* Tabla detalle por producto */}
+          <div className="table-card mb-4">
+            {combosVendedorDetalleLoading ? (
+              <div className="flex items-center justify-center" style={{ minHeight: 80 }}>
+                <span className="text-palumar-muted" style={{ fontSize: 12 }}>Cargando combos del vendedor…</span>
+              </div>
+            ) : combosVendedorDetalleEntry?.productos?.length > 0 ? (
+              <>
+                <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                  <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Detalle por Producto Combo</h3>
+                  <span className="text-palumar-muted" style={{ fontSize: '11px' }}>{combosVendedorDetalleEntry.productos.length} productos</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>SAP</th>
+                        <th>Negocio</th>
+                        <th style={{ textAlign: 'right' }}>Clientes</th>
+                        <th style={{ textAlign: 'right' }}>Unidades</th>
+                        <th style={{ textAlign: 'right' }}>Venta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {combosVendedorDetalleEntry.productos.map((p, i) => (
+                        <tr key={i} style={{ opacity: p.unidades_vendidas === 0 ? 0.55 : 1 }}>
+                          <td style={{ fontWeight: p.unidades_vendidas > 0 ? 600 : 400 }}>
+                            {p.producto || p.sap}
+                            {p.unidades_vendidas === 0 && (
+                              <span className="badge badge-red" style={{ fontSize: '9px', marginLeft: '6px' }}>sin venta</span>
+                            )}
+                          </td>
+                          <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{p.sap}</td>
+                          <td style={{ color: 'var(--muted)' }}>{p.negocio || '—'}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.clientes_impactados}</td>
+                          <td style={{ textAlign: 'right' }}>{p.unidades_vendidas}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(p.venta_combos)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center" style={{ minHeight: 64 }}>
+                <span className="text-palumar-muted" style={{ fontSize: 12 }}>
+                  Este vendedor aún no tiene ventas de combos.
+                </span>
+              </div>
+            )}
           </div>
         </>
       )}

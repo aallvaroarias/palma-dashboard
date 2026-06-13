@@ -3,7 +3,7 @@ import { vendedorValido, esBodega, getCoberturaVendedor } from '../utils/formatt
 
 // Always route through /api/datos → Vite proxy in dev, Vercel serverless in prod
 const BASE       = '/api/datos';
-const APPS_DIRECT = 'https://script.google.com/macros/s/AKfycbxon9PiTxLibNmihjEGdRoCqYO4YdTEFes88w8Ub2YqDXfZaTPCm1Wk9L0-m-ONXSAh/exec';
+const APPS_DIRECT = 'https://script.google.com/macros/s/AKfycbyxYpVLvC8aXHn-B42w6mvy4_KvD3BvWDunX9Sw_X1plH-oirl7kHp34UgT3onAc5yl/exec';
 
 function buildUrl(base, sheet, params = {}) {
   const sep = base.includes('?') ? '&' : '?';
@@ -106,9 +106,10 @@ const useDashboardStore = create((set, get) => ({
   pcDetalle:      { productos: [] },
 
   // ── Combos ───────────────────────────────────────────────────────────────
-  combosResumen:  null,
-  combosVendedor: [],
-  combosDetalle:  null,
+  combosResumen:         null,
+  combosVendedor:        [],
+  combosDetalle:         null,
+  combosVendedorDetalle: null,  // desglose por vendedor+producto, cargado bajo demanda
 
   // Estado de carga
   loading:       false,   // Fase 1 en progreso
@@ -116,6 +117,7 @@ const useDashboardStore = create((set, get) => ({
   pcDetalleLoading: false,
   clientesSinPCLoading: false,
   combosDetalleLoading: false,
+  combosVendedorDetalleLoading: false,
   lastUpdate:    null,
   error:         null,
 
@@ -297,6 +299,23 @@ const useDashboardStore = create((set, get) => ({
     } finally {
       set({ combosDetalleLoading: false });
       console.groupEnd();
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // loadCombosVendedorDetalle — desglose por vendedor+producto, solo bajo demanda
+  // ─────────────────────────────────────────────────────────────────────────
+  loadCombosVendedorDetalle: async () => {
+    if (get().combosVendedorDetalle !== null) return;
+    if (get().combosVendedorDetalleLoading) return;
+    set({ combosVendedorDetalleLoading: true });
+    try {
+      const data = await fetchSheet('combos_vendedor_detalle', {}, { fallbackDirect: false });
+      if (data) set({ combosVendedorDetalle: data });
+    } catch (e) {
+      console.warn('[Combos Debug] loadCombosVendedorDetalle error:', e.message);
+    } finally {
+      set({ combosVendedorDetalleLoading: false });
     }
   },
 

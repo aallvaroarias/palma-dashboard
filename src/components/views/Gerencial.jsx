@@ -110,8 +110,11 @@ export default function Gerencial() {
   const [openNuevos,      setOpenNuevos]      = useState(false);
   const [openAnalisis,    setOpenAnalisis]    = useState(false);
   const [openMarcas,      setOpenMarcas]      = useState(false);
-  const [showAllPCTable,  setShowAllPCTable]  = useState(false); // más filas en tabla PC
-  const [showCombosDetalle, setShowCombosDetalle] = useState(false);
+  const [showAllPCTable,      setShowAllPCTable]      = useState(false);
+  const [showCombosDetalle,   setShowCombosDetalle]   = useState(false);
+  const [showAllCombosTable,  setShowAllCombosTable]  = useState(false); // ver todos los vendedores combos
+  const [negocioAnalisisFiltro, setNegocioAnalisisFiltro] = useState(''); // filtro análisis SKUs/marcas
+  const [skusLimit,           setSkusLimit]           = useState(15); // paginación "Ver más" SKUs
 
   const applyNuevosG = useCallback(async (desde, hasta, label) => {
     setLoadingNuevosG(true);
@@ -637,23 +640,36 @@ export default function Gerencial() {
   }, [combosVendedor, sedeFiltro]);
 
   const combosResumenFiltrado = useMemo(() => {
-    if (sedeFiltro === 'TODOS' && combosResumen) return combosResumen;
+    // Debug temporal
+    console.group('[Combos Cumplimiento Debug]');
+    console.log('combosResumen:', combosResumen);
+    console.log('combosVendedor:', combosVendedor);
+    console.log('primer vendedor:', combosVendedor?.[0]);
+    console.groupEnd();
+
+    if (sedeFiltro === 'TODOS') return combosResumen || null;
+
+    // Para vistas filtradas por sede: re-agregar actuals de los vendedores filtrados.
+    // Las metas vienen siempre del resumen global (COMBOS no tiene metas por sede).
     const vends = combosVendedorFiltrados;
     if (!vends.length) return combosResumen || null;
-    const muTotal = vends.reduce((s, v) => s + (v.meta_unidades || 0), 0);
-    const mcTotal = vends.reduce((s, v) => s + (v.meta_clientes || 0), 0);
-    const u       = vends.reduce((s, v) => s + (v.unidades_vendidas || 0), 0);
-    const c       = vends.reduce((s, v) => s + (v.clientes_impactados || 0), 0);
+
+    const u  = vends.reduce((s, v) => s + (v.unidades_vendidas || 0), 0);
+    const c  = vends.reduce((s, v) => s + (v.clientes_impactados || 0), 0);
+    const vc = vends.reduce((s, v) => s + (v.venta_combos || 0), 0);
+    // Metas globales del resumen (aplican al equipo completo, se muestran como referencia)
+    const muTotal = combosResumen?.meta_unidades_total || 0;
+    const mcTotal = combosResumen?.meta_clientes_total || 0;
     return {
       clientes_impactados:       c,
       unidades_vendidas:         u,
-      venta_combos:              vends.reduce((s, v) => s + (v.venta_combos || 0), 0),
+      venta_combos:              vc,
       meta_unidades_total:       muTotal,
       meta_clientes_total:       mcTotal,
       cumplimiento_unidades_pct: muTotal > 0 ? Math.round(u / muTotal * 1000) / 10 : 0,
       cumplimiento_clientes_pct: mcTotal > 0 ? Math.round(c / mcTotal * 1000) / 10 : 0,
     };
-  }, [combosResumen, combosVendedorFiltrados, sedeFiltro]);
+  }, [combosResumen, combosVendedor, combosVendedorFiltrados, sedeFiltro]);
 
   const navigate = useNavigate();
 
@@ -1925,76 +1941,133 @@ export default function Gerencial() {
         ))}
       </div>
 
-      {/* ── Top Marcas & SKUs ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        {marcas.length > 0 && (
-          <div className="table-card">
-            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
-              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-                Top Marcas
-              </h3>
-              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>Por venta</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="palma-table">
-                <thead>
-                  <tr>
-                    <th>Marca</th>
-                    <th>Negocio</th>
-                    <th style={{ textAlign: 'right' }}>Venta</th>
-                    <th style={{ textAlign: 'right' }}>%</th>
-                    <th style={{ textAlign: 'right' }}>Clientes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {marcas.slice(0, 10).map((m, i) => (
-                    <tr key={i}>
-                      <td>{m.marca}</td>
-                      <td>{m.negocio}</td>
-                      <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(m.venta)}</td>
-                      <td style={{ textAlign: 'right' }}>{m.pct}%</td>
-                      <td style={{ textAlign: 'right' }}>{m.clientes}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+      {/* ── Análisis por Negocio — Marcas & SKUs ── */}
+      {(marcas.length > 0 || skus.global?.length > 0) && (() => {
+        const negociosSet = new Set();
+        marcas.forEach(m => { const n = normNeg(m.negocio); if (n) negociosSet.add(n); });
+        skus.global?.forEach(s => { const n = normNeg(s.negocio); if (n) negociosSet.add(n); });
+        const negocioOpts = [...negociosSet].sort();
 
-        {skus.global?.length > 0 && (
-          <div className="table-card">
-            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
-              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
-                Top SKUs
-              </h3>
-              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>Por venta</span>
+        const marcasFiltradas = negocioAnalisisFiltro
+          ? marcas.filter(m => normNeg(m.negocio) === negocioAnalisisFiltro)
+          : marcas;
+        const skusFiltrados = negocioAnalisisFiltro
+          ? (skus.global || []).filter(s => normNeg(s.negocio) === negocioAnalisisFiltro)
+          : (skus.global || []);
+
+        return (
+          <>
+            <SectionTitle>Análisis por Negocio</SectionTitle>
+
+            {/* Filtro negocio */}
+            <div className="flex items-center gap-3 mb-4">
+              <select
+                className="palma-select"
+                value={negocioAnalisisFiltro}
+                onChange={e => { setNegocioAnalisisFiltro(e.target.value); setSkusLimit(15); }}
+                style={{ maxWidth: 220 }}
+              >
+                <option value="">Todos los negocios</option>
+                {negocioOpts.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              {negocioAnalisisFiltro && (
+                <button
+                  onClick={() => { setNegocioAnalisisFiltro(''); setSkusLimit(15); }}
+                  style={{ fontSize: '11px', color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
+                >
+                  ✕ Limpiar
+                </button>
+              )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="palma-table">
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Negocio</th>
-                    <th style={{ textAlign: 'right' }}>Venta</th>
-                    <th style={{ textAlign: 'right' }}>Clientes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {skus.global.slice(0, 15).map((s, i) => (
-                    <tr key={i}>
-                      <td>{s.nombre || s.sku}</td>
-                      <td>{s.negocio}</td>
-                      <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(s.venta)}</td>
-                      <td style={{ textAlign: 'right' }}>{s.clientes}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              {marcasFiltradas.length > 0 && (
+                <div className="table-card">
+                  <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                    <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Top Marcas</h3>
+                    <span className="text-palumar-muted" style={{ fontSize: '11px' }}>Por venta</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="palma-table">
+                      <thead>
+                        <tr>
+                          <th>Marca</th>
+                          {!negocioAnalisisFiltro && <th>Negocio</th>}
+                          <th style={{ textAlign: 'right' }}>Venta</th>
+                          <th style={{ textAlign: 'right' }}>%</th>
+                          <th style={{ textAlign: 'right' }}>Clientes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {marcasFiltradas.slice(0, 10).map((m, i) => (
+                          <tr key={i}>
+                            <td>{m.marca}</td>
+                            {!negocioAnalisisFiltro && <td style={{ color: 'var(--muted)' }}>{normNeg(m.negocio) || '—'}</td>}
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(m.venta)}</td>
+                            <td style={{ textAlign: 'right' }}>{m.pct}%</td>
+                            <td style={{ textAlign: 'right' }}>{m.clientes}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {skusFiltrados.length > 0 && (
+                <div className="table-card">
+                  <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+                    <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Top SKUs</h3>
+                    <span className="text-palumar-muted" style={{ fontSize: '11px' }}>Por venta</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="palma-table">
+                      <thead>
+                        <tr>
+                          <th>SKU</th>
+                          {!negocioAnalisisFiltro && <th>Negocio</th>}
+                          <th style={{ textAlign: 'right' }}>Venta</th>
+                          <th style={{ textAlign: 'right' }}>Clientes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {skusFiltrados.slice(0, skusLimit).map((s, i) => (
+                          <tr key={i}>
+                            <td>{s.nombre || s.sku}</td>
+                            {!negocioAnalisisFiltro && <td style={{ color: 'var(--muted)' }}>{normNeg(s.negocio) || '—'}</td>}
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(s.venta)}</td>
+                            <td style={{ textAlign: 'right' }}>{s.clientes}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {skusFiltrados.length > skusLimit && (
+                    <div className="px-5 py-2.5 border-t" style={{ borderColor: 'var(--border-2)' }}>
+                      <button
+                        onClick={() => setSkusLimit(n => n + 15)}
+                        style={{ padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)' }}
+                      >
+                        ▼ Ver más ({skusFiltrados.length - skusLimit} restantes)
+                      </button>
+                    </div>
+                  )}
+                  {skusLimit > 15 && (
+                    <div className="px-5 py-2.5 border-t" style={{ borderColor: 'var(--border-2)' }}>
+                      <button
+                        onClick={() => setSkusLimit(15)}
+                        style={{ padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)' }}
+                      >
+                        ▲ Ver menos
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        )}
-      </div>
+          </>
+        );
+      })()}
 
       {/* ── Top 10 por Vendedor ── */}
       {topClientes.top_por_vendedor?.length > 0 && (
@@ -2067,7 +2140,8 @@ export default function Gerencial() {
       {/* ── Gestión de Combos ── */}
       {(combosResumenFiltrado || combosVendedorFiltrados.length > 0) && (() => {
         const cr = combosResumenFiltrado;
-        const cv = [...combosVendedorFiltrados].sort((a, b) => (b.score_combo || 0) - (a.score_combo || 0));
+        const cv = [...combosVendedorFiltrados].sort((a, b) => (b.unidades_vendidas || 0) - (a.unidades_vendidas || 0));
+        const cvShown = showAllCombosTable ? cv : cv.slice(0, 8);
         return (
           <>
             <SectionTitle>Gestión de Combos</SectionTitle>
@@ -2078,17 +2152,17 @@ export default function Gerencial() {
                 <KpiCard
                   label="Clientes impactados"
                   value={String(cr.clientes_impactados || 0)}
-                  sub={cr.meta_clientes_total > 0 ? `Meta: ${cr.meta_clientes_total}` : undefined}
+                  sub={cr.meta_clientes_total > 0 ? `/ ${cr.meta_clientes_total}` : undefined}
                   color="teal"
                 />
                 <KpiCard
                   label="Unidades vendidas"
                   value={String(cr.unidades_vendidas || 0)}
-                  sub={cr.meta_unidades_total > 0 ? `Meta: ${cr.meta_unidades_total}` : undefined}
+                  sub={cr.meta_unidades_total > 0 ? `/ ${cr.meta_unidades_total}` : undefined}
                   color="cyan"
                 />
                 <KpiCard
-                  label="Cumpl. Unidades"
+                  label="Cumpl. equipo"
                   value={pct(cr.cumplimiento_unidades_pct || 0)}
                   sub={`Clientes: ${pct(cr.cumplimiento_clientes_pct || 0)}`}
                   color={(cr.cumplimiento_unidades_pct || 0) >= 100 ? 'green' : (cr.cumplimiento_unidades_pct || 0) >= 70 ? 'amber' : 'red'}
@@ -2107,7 +2181,7 @@ export default function Gerencial() {
               <div className="table-card mb-4">
                 <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
                   <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>Ranking Combos por Vendedor</h3>
-                  <span className="text-palumar-muted" style={{ fontSize: '11px' }}>{cv.length} vendedores</span>
+                  <span className="text-palumar-muted" style={{ fontSize: '11px' }}>% equipo = unidades del vendedor ÷ unidades totales del equipo</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="palma-table">
@@ -2116,14 +2190,13 @@ export default function Gerencial() {
                         <th>Vendedor</th>
                         <th style={{ textAlign: 'right' }}>Clientes</th>
                         <th style={{ textAlign: 'right' }}>Unidades</th>
-                        <th style={{ minWidth: '140px' }}>Cumpl. %</th>
+                        <th style={{ minWidth: '140px' }}>% Equipo</th>
                         <th style={{ textAlign: 'right' }}>Venta</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {cv.slice(0, 8).map((v, i) => {
-                        const c   = v.cumplimiento_unidades_pct || 0;
-                        const col = c >= 100 ? 'var(--green)' : c >= 70 ? 'var(--amber)' : 'var(--red)';
+                      {cvShown.map((v, i) => {
+                        const p = v.pct_contribucion_unidades || 0;
                         return (
                           <tr key={v.cod_asesor || i}>
                             <td>
@@ -2137,9 +2210,9 @@ export default function Gerencial() {
                             <td>
                               <div className="flex items-center gap-2">
                                 <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
-                                  <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(c, 100)}%`, background: col }} />
+                                  <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(p, 100)}%`, background: 'var(--cyan)' }} />
                                 </div>
-                                <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{c.toFixed(1)}%</span>
+                                <span style={{ color: 'var(--cyan)', fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{p.toFixed(1)}%</span>
                               </div>
                             </td>
                             <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(v.venta_combos)}</td>
@@ -2150,8 +2223,19 @@ export default function Gerencial() {
                   </table>
                 </div>
 
-                {/* Botón detalle por producto */}
-                <div className="px-5 py-2.5 border-t" style={{ borderColor: 'var(--border-2)' }}>
+                {/* Ver todos / Ver menos + botón detalle por producto */}
+                <div className="px-5 py-2.5 border-t flex items-center gap-3" style={{ borderColor: 'var(--border-2)' }}>
+                  {cv.length > 8 && (
+                    <button
+                      onClick={() => setShowAllCombosTable(s => !s)}
+                      style={{
+                        padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                        border: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)',
+                      }}
+                    >
+                      {showAllCombosTable ? `▲ Ver menos (${cv.length})` : `▼ Ver todos (${cv.length})`}
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       const next = !showCombosDetalle;
@@ -2189,38 +2273,39 @@ export default function Gerencial() {
                         <thead>
                           <tr>
                             <th>Producto</th>
-                            <th>SAP</th>
                             <th>Negocio</th>
-                            <th style={{ textAlign: 'right' }}>Clientes</th>
-                            <th style={{ textAlign: 'right' }}>Unidades</th>
-                            <th style={{ minWidth: '130px' }}>Cumpl. %</th>
+                            <th style={{ textAlign: 'right' }}>Clientes / Meta</th>
+                            <th style={{ textAlign: 'right' }}>Unidades / Meta</th>
+                            <th style={{ textAlign: 'right' }}>Cumpl. cli.</th>
+                            <th style={{ textAlign: 'right' }}>Cumpl. und.</th>
                             <th style={{ textAlign: 'right' }}>Venta</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(combosDetalle?.productos || []).map((p, i) => {
-                            const c   = p.cumplimiento_unidades_pct || 0;
-                            const col = c >= 100 ? 'var(--green)' : c >= 70 ? 'var(--amber)' : 'var(--red)';
+                            const cu  = p.cumplimiento_unidades_pct || 0;
+                            const cc  = p.cumplimiento_clientes_pct || 0;
+                            const colU = cu >= 100 ? 'var(--green)' : cu >= 70 ? 'var(--amber)' : 'var(--red)';
+                            const colC = cc >= 100 ? 'var(--green)' : cc >= 70 ? 'var(--amber)' : 'var(--red)';
                             return (
                               <tr key={i} style={{ opacity: p.unidades_vendidas === 0 ? 0.55 : 1 }}>
                                 <td style={{ fontWeight: p.unidades_vendidas > 0 ? 600 : 400 }}>
-                                  {p.producto}
+                                  {p.producto || p.sap}
                                   {p.unidades_vendidas === 0 && (
                                     <span className="badge badge-red" style={{ fontSize: '9px', marginLeft: '6px' }}>sin venta</span>
                                   )}
                                 </td>
-                                <td className="font-mono-num" style={{ color: 'var(--muted)', fontSize: '11px' }}>{p.sap}</td>
                                 <td style={{ color: 'var(--muted)' }}>{normNeg(p.negocio) || '—'}</td>
-                                <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.clientes_impactados}</td>
-                                <td style={{ textAlign: 'right' }}>{p.unidades_vendidas}</td>
-                                <td>
-                                  <div className="flex items-center gap-2">
-                                    <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
-                                      <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(c, 100)}%`, background: col }} />
-                                    </div>
-                                    <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{c.toFixed(1)}%</span>
-                                  </div>
+                                <td style={{ textAlign: 'right' }}>
+                                  <span style={{ fontWeight: 600 }}>{p.clientes_impactados}</span>
+                                  {p.meta_clientes > 0 && <span style={{ color: 'var(--muted)', fontSize: '11px' }}> / {p.meta_clientes}</span>}
                                 </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <span style={{ fontWeight: 600 }}>{p.unidades_vendidas}</span>
+                                  {p.meta_unidades > 0 && <span style={{ color: 'var(--muted)', fontSize: '11px' }}> / {p.meta_unidades}</span>}
+                                </td>
+                                <td style={{ textAlign: 'right', color: colC, fontWeight: 700 }}>{cc.toFixed(1)}%</td>
+                                <td style={{ textAlign: 'right', color: colU, fontWeight: 700 }}>{cu.toFixed(1)}%</td>
                                 <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(p.venta_combos)}</td>
                               </tr>
                             );
