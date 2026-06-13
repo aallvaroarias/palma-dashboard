@@ -2027,6 +2027,7 @@ export default function Gerencial() {
                           <th>SKU</th>
                           {!negocioAnalisisFiltro && <th>Negocio</th>}
                           <th style={{ textAlign: 'right' }}>Venta</th>
+                          <th style={{ textAlign: 'right' }}>Unidades</th>
                           <th style={{ textAlign: 'right' }}>Clientes</th>
                         </tr>
                       </thead>
@@ -2036,6 +2037,7 @@ export default function Gerencial() {
                             <td>{s.nombre || s.sku}</td>
                             {!negocioAnalisisFiltro && <td style={{ color: 'var(--muted)' }}>{normNeg(s.negocio) || '—'}</td>}
                             <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(s.venta)}</td>
+                            <td style={{ textAlign: 'right' }}>{(s.unidades || 0).toLocaleString()}</td>
                             <td style={{ textAlign: 'right' }}>{s.clientes}</td>
                           </tr>
                         ))}
@@ -2147,34 +2149,50 @@ export default function Gerencial() {
             <SectionTitle>Gestión de Combos</SectionTitle>
 
             {/* 4 KPIs */}
-            {cr && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <KpiCard
-                  label="Clientes impactados"
-                  value={String(cr.clientes_impactados || 0)}
-                  sub={cr.meta_clientes_total > 0 ? `/ ${cr.meta_clientes_total}` : undefined}
-                  color="teal"
-                />
-                <KpiCard
-                  label="Unidades vendidas"
-                  value={String(cr.unidades_vendidas || 0)}
-                  sub={cr.meta_unidades_total > 0 ? `/ ${cr.meta_unidades_total}` : undefined}
-                  color="cyan"
-                />
-                <KpiCard
-                  label="Cumpl. equipo"
-                  value={pct(cr.cumplimiento_unidades_pct || 0)}
-                  sub={`Clientes: ${pct(cr.cumplimiento_clientes_pct || 0)}`}
-                  color={(cr.cumplimiento_unidades_pct || 0) >= 100 ? 'green' : (cr.cumplimiento_unidades_pct || 0) >= 70 ? 'amber' : 'red'}
-                  barValue={cr.cumplimiento_unidades_pct || 0}
-                />
-                <KpiCard
-                  label="Venta Combos"
-                  value={fmt(cr.venta_combos || 0)}
-                  color="purple"
-                />
-              </div>
-            )}
+            {cr && (() => {
+              const avCli = cr.meta_clientes_total > 0
+                ? Math.round(cr.clientes_impactados / cr.meta_clientes_total * 1000) / 10
+                : null;
+              const avUni = cr.meta_unidades_total > 0
+                ? Math.round(cr.unidades_vendidas / cr.meta_unidades_total * 1000) / 10
+                : null;
+              const colCli = avCli == null ? 'teal' : avCli >= 100 ? 'green' : avCli >= 70 ? 'amber' : 'red';
+              const colUni = avUni == null ? 'cyan'  : avUni >= 100 ? 'green' : avUni >= 70 ? 'amber' : 'red';
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <KpiCard
+                    label="Clientes impactados"
+                    value={cr.meta_clientes_total > 0
+                      ? `${(cr.clientes_impactados || 0).toLocaleString()} / ${cr.meta_clientes_total.toLocaleString()}`
+                      : String(cr.clientes_impactados || 0)}
+                    sub={avCli != null ? `${avCli.toFixed(1)}% avance` : 'Sin meta'}
+                    color={colCli}
+                    barValue={avCli ?? 0}
+                  />
+                  <KpiCard
+                    label="Unidades vendidas"
+                    value={cr.meta_unidades_total > 0
+                      ? `${(cr.unidades_vendidas || 0).toLocaleString()} / ${cr.meta_unidades_total.toLocaleString()}`
+                      : String(cr.unidades_vendidas || 0)}
+                    sub={avUni != null ? `${avUni.toFixed(1)}% avance` : 'Sin meta'}
+                    color={colUni}
+                    barValue={avUni ?? 0}
+                  />
+                  <KpiCard
+                    label="Cumpl. equipo"
+                    value={pct(cr.cumplimiento_unidades_pct || 0)}
+                    sub={`Clientes: ${pct(cr.cumplimiento_clientes_pct || 0)}`}
+                    color={(cr.cumplimiento_unidades_pct || 0) >= 100 ? 'green' : (cr.cumplimiento_unidades_pct || 0) >= 70 ? 'amber' : 'red'}
+                    barValue={cr.cumplimiento_unidades_pct || 0}
+                  />
+                  <KpiCard
+                    label="Venta Combos"
+                    value={fmt(cr.venta_combos || 0)}
+                    color="purple"
+                  />
+                </div>
+              );
+            })()}
 
             {/* Ranking por vendedor */}
             {cv.length > 0 && (
@@ -2188,7 +2206,7 @@ export default function Gerencial() {
                     <thead>
                       <tr>
                         <th>Vendedor</th>
-                        <th style={{ textAlign: 'right' }}>Clientes</th>
+                        <th style={{ textAlign: 'right' }}>Clientes combos</th>
                         <th style={{ textAlign: 'right' }}>Unidades</th>
                         <th style={{ minWidth: '140px' }}>% Equipo</th>
                         <th style={{ textAlign: 'right' }}>Venta</th>
@@ -2196,7 +2214,9 @@ export default function Gerencial() {
                     </thead>
                     <tbody>
                       {cvShown.map((v, i) => {
-                        const p = v.pct_contribucion_unidades || 0;
+                        const p    = v.pct_contribucion_unidades || 0;
+                        const tot  = v.total_clientes_vendedor || 0;
+                        const cob  = v.cobertura_combos_pct || 0;
                         return (
                           <tr key={v.cod_asesor || i}>
                             <td>
@@ -2205,7 +2225,15 @@ export default function Gerencial() {
                                 {v.cod_asesor} — {v.vendedor}
                               </div>
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 600 }}>{v.clientes_impactados}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <span style={{ fontWeight: 600 }}>{v.clientes_impactados}</span>
+                              {tot > 0 && (
+                                <>
+                                  <span style={{ color: 'var(--muted)', fontSize: '11px' }}> / {tot}</span>
+                                  <div style={{ color: 'var(--muted)', fontSize: '10px' }}>{cob.toFixed(1)}% cob.</div>
+                                </>
+                              )}
+                            </td>
                             <td style={{ textAlign: 'right' }}>{v.unidades_vendidas}</td>
                             <td>
                               <div className="flex items-center gap-2">

@@ -772,7 +772,9 @@ function doGet(e) {
       case 'combos_vendedor':
         data = withCache_('combos_vendedor', 300, getCombosVendedor_);  break;
       case 'combos_detalle':
-        data = withCache_('combos_detalle',  300, getCombosDetalle_);   break;
+        data = withCache_('combos_detalle',         300, getCombosDetalle_);          break;
+      case 'combos_vendedor_detalle':
+        data = withCache_('combos_vend_detalle',    300, getCombosVendedorDetalle_);  break;
 
       // ── Productos clave (pesados) ─────────────────────────────────────────
       case 'cobertura_productos_clave':
@@ -2628,13 +2630,14 @@ function getTopSKUs() {
     .map(s => ({ sku:s.sku, nombre:s.nombre, negocio:s.negocio, marca:s.marca,
                  venta:round2_(s.venta), clientes:s.clientes.size, unidades:Math.round(s.unidades) }))
     .sort((a, b) => b.venta - a.venta)
-    .slice(0, 20);
+    .slice(0, 150);  // aumentado para permitir filtro por negocio en frontend
 
   const por_vendedor = Object.entries(vendSkuMap).map(([cod, skus]) => ({
     cod,
     skus: Object.values(skus)
       .map(s => ({ sku:s.sku, nombre:s.nombre, negocio:s.negocio,
-                   venta:round2_(s.venta), clientes:s.clientes.size }))
+                   venta:round2_(s.venta), clientes:s.clientes.size,
+                   unidades:Math.round(s.unidades || 0) }))
       .sort((a, b) => b.venta - a.venta)
       .slice(0, 15)
   }));
@@ -2777,10 +2780,12 @@ function getTopMarcas() {
   mesData.forEach(r => {
     const marca   = String(r[10] || '').trim();
     const negocio = String(r[8]  || '').trim();
+    const cant    = parseFloat(r[13]) || 0;
     const valor   = parseFloat(r[14]) || 0;
     if (!marca || valor <= 0) return;
-    if (!marcaMap[marca]) marcaMap[marca] = { marca, negocio, venta:0, clientes:new Set() };
-    marcaMap[marca].venta += valor;
+    if (!marcaMap[marca]) marcaMap[marca] = { marca, negocio, venta:0, unidades:0, clientes:new Set() };
+    marcaMap[marca].venta    += valor;
+    marcaMap[marca].unidades += Math.max(cant, 0);
     marcaMap[marca].clientes.add(String(r[1]));
   });
 
@@ -2792,10 +2797,10 @@ function getTopMarcas() {
       negocio:  m.negocio,
       venta:    round2_(m.venta),
       clientes: m.clientes.size,
+      unidades: Math.round(m.unidades || 0),
       pct:      total > 0 ? round2_(m.venta / total * 100) : 0
     }))
-    .sort((a, b) => b.venta - a.venta)
-    .slice(0, 15);
+    .sort((a, b) => b.venta - a.venta);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -3634,37 +3639,43 @@ function getCombosResumen_() {
 // Endpoint ?sheet=combos_vendedor — ranking por vendedor
 function getCombosVendedor_() {
   var c = calcularCombosBase_();
-  var metaUniTotal = c.metaUnidadesTotal;
-  var metaCliTotal = c.metaClientesTotal;
-  var nVend = Object.keys(c.vendMap).length || 1;
+  var maestro = cargarMaestroActivos_();  // byAsesor → { cod: Set<cod_cliente> }
 
-  // Meta proporcional por vendedor (si no hay meta individual, repartir equitativamente)
-  var metaUniPorVend = metaUniTotal > 0 ? round2_(metaUniTotal / nVend) : 0;
-  var metaCliPorVend = metaCliTotal > 0 ? round2_(metaCliTotal / nVend) : 0;
+  // Totales reales del equipo para calcular % de contribución por vendedor.
+  // NO se divide la meta global entre vendedores — esa lógica generaba porcentajes
+  // ficticios (ej. 280%) porque la hoja COMBOS solo tiene metas de equipo, no por vendedor.
+  var totalUniEquipo = Math.round(c.unidadesVendidas) || 1;
+  var totalCliEquipo = c.clientesImpactados.size      || 1;
 
   var vendedores = Object.keys(c.vendMap).map(function(cod) {
-    var v = c.vendMap[cod];
+    var v    = c.vendMap[cod];
     var imp  = v.clientes.size;
     var uni  = Math.round(v.unidades);
     var vent = round2_(v.venta);
-    var cumplCli = metaCliPorVend > 0 ? round2_(imp / metaCliPorVend * 100) : 0;
-    var cumplUni = metaUniPorVend > 0 ? round2_(uni / metaUniPorVend * 100) : 0;
+
+    // % contribución: qué parte del total de combos del equipo aportó este vendedor
+    var pctUni = round2_(uni  / totalUniEquipo * 100);
+    var pctCli = round2_(imp  / totalCliEquipo * 100);
+
+    // Total de clientes asignados al vendedor en su maestro activo
+    var totalCli = (maestro.byAsesor[cod] || new Set()).size;
+    var cobCombos = totalCli > 0 ? round2_(imp / totalCli * 100) : 0;
+
     return {
       cod_asesor:                cod,
       vendedor:                  cod + ' - ' + v.nombre,
       sede:                      v.sede,
       clientes_impactados:       imp,
+      total_clientes_vendedor:   totalCli,
+      cobertura_combos_pct:      cobCombos,
       unidades_vendidas:         uni,
       venta_combos:              vent,
-      meta_unidades:             metaUniPorVend,
-      meta_clientes:             metaCliPorVend,
-      cumplimiento_unidades_pct: cumplUni,
-      cumplimiento_clientes_pct: cumplCli,
-      score_combo:               round2_((cumplCli * 0.5) + (cumplUni * 0.5))
+      pct_contribucion_clientes: pctCli,
+      pct_contribucion_unidades: pctUni
     };
   }).sort(function(a, b) {
-    return (b.cumplimiento_clientes_pct - a.cumplimiento_clientes_pct)
-        || (b.cumplimiento_unidades_pct - a.cumplimiento_unidades_pct)
+    return (b.unidades_vendidas - a.unidades_vendidas)
+        || (b.clientes_impactados - a.clientes_impactados)
         || (b.venta_combos - a.venta_combos);
   });
 
@@ -3699,4 +3710,87 @@ function getCombosDetalle_() {
   });
 
   return { productos: productos };
+}
+
+// Endpoint ?sheet=combos_vendedor_detalle
+// Desglose por vendedor + productos vendidos por ese vendedor.
+// Sin metas ni cumplimiento — solo ejecución real (para Mi Panel).
+function getCombosVendedorDetalle_() {
+  var combos  = cargarCombosActivos_();
+  var base    = getBasePeriodoActual_();
+  var sedeMap = cargarSedeMap_();
+
+  var combosSet = new Set(combos.map(function(c) { return c.sap; }));
+  var comboInfo = {};
+  combos.forEach(function(c) { comboInfo[c.sap] = c; });
+
+  // vendMap: cod → { nombre, sede, clientes:Set, unidades, venta,
+  //                  sapMap: { sap → { clientes:Set, unidades, venta } } }
+  var vendMap = {};
+
+  base.forEach(function(r) {
+    var codCli  = String(r[1]  || '').trim();
+    var codAs   = obtenerCodAsesor_(String(r[3] || '').trim());
+    var nomVend = String(r[4]  || '').trim();
+    var sap     = limpiarSap_(r[6]);
+    var cant    = parseFloat(r[13]) || 0;
+    var venta   = parseFloat(r[14]) || 0;
+
+    if (!codAs || !nomVend || !esVendedorValido_(codAs, nomVend)) return;
+    if (venta <= 0) return;
+    if (!sap || !combosSet.has(sap)) return;
+
+    if (!vendMap[codAs]) {
+      vendMap[codAs] = {
+        nombre:  nomVend,
+        sede:    String(sedeMap[codAs] || '').trim(),
+        clientes: new Set(),
+        unidades: 0,
+        venta:    0,
+        sapMap:   {}
+      };
+    }
+    vendMap[codAs].clientes.add(codCli);
+    vendMap[codAs].unidades += Math.max(cant, 0);
+    vendMap[codAs].venta    += venta;
+
+    var sm = vendMap[codAs].sapMap;
+    if (!sm[sap]) sm[sap] = { clientes: new Set(), unidades: 0, venta: 0 };
+    sm[sap].clientes.add(codCli);
+    sm[sap].unidades += Math.max(cant, 0);
+    sm[sap].venta    += venta;
+  });
+
+  var vendedores = Object.keys(vendMap).map(function(cod) {
+    var v = vendMap[cod];
+
+    var productos = Object.keys(v.sapMap).map(function(sap) {
+      var s    = v.sapMap[sap];
+      var info = comboInfo[sap] || {};
+      return {
+        sap:                 sap,
+        producto:            info.producto || sap,
+        negocio:             info.negocio  || '',
+        clientes_impactados: s.clientes.size,
+        unidades_vendidas:   Math.round(s.unidades),
+        venta_combos:        round2_(s.venta)
+      };
+    }).sort(function(a, b) {
+      return (b.unidades_vendidas - a.unidades_vendidas) || (b.venta_combos - a.venta_combos);
+    });
+
+    return {
+      cod_asesor:                 cod,
+      vendedor:                   cod + ' - ' + v.nombre,
+      sede:                       v.sede,
+      clientes_impactados_combos: v.clientes.size,
+      unidades_vendidas:          Math.round(v.unidades),
+      venta_combos:               round2_(v.venta),
+      productos:                  productos
+    };
+  }).sort(function(a, b) {
+    return (b.unidades_vendidas - a.unidades_vendidas) || (b.venta_combos - a.venta_combos);
+  });
+
+  return { vendedores: vendedores };
 }
