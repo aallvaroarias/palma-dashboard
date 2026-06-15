@@ -798,7 +798,10 @@ function doGet(e) {
       case 'cuota_debug':       data = getCuotaDebug_();       break;
       case 'diagnostico':       data = getDiagnosticoAPI();    break;
       case 'fechas_debug':      data = getFechasDebug_();      break;
-      case 'auditoria_resumen': data = getAuditoriaResumen_(); break;
+      case 'auditoria_resumen':
+        data = withCache_('audit_' + (e.parameter.modo || 'light'), 60,
+          function() { return getAuditoriaResumen_(e.parameter.modo || 'light'); });
+        break;
       default:                  data = getResumen();           break;
     }
 
@@ -1384,7 +1387,8 @@ function invalidarCache_() {
   CacheService.getScriptCache().removeAll([
     'resumen', 'vendedores', 'devoluciones', 'tendencia',
     'dn_marcas', 'marcas', 'skus', 'top_clientes',
-    'necesidad', 'cob_pc', 'cob_pc_vend', 'clientes_sin_pc', 'pc_detalle'
+    'necesidad', 'cob_pc', 'cob_pc_vend', 'clientes_sin_pc', 'pc_detalle',
+    'audit_light', 'audit_full'
   ]);
   // Resetear mapa de columnas en memoria para que la próxima llamada re-detecte
   _DEVOL_COL_MAP = null;
@@ -1771,12 +1775,16 @@ function getResumen() {
 
 // ════════════════════════════════════════════════════════════════════
 // AUDITORÍA RESUMEN — compara dashboard vs informe del sistema
-// Endpoint: ?sheet=auditoria_resumen
+// Endpoint: ?sheet=auditoria_resumen[&modo=light|full]
+// Por defecto modo=light (respuesta compacta, sin timeout).
 // Referencia fija: INFORME DE VENTAS X ASESOR (sistema externo, Jun 2026 Q1)
 // ════════════════════════════════════════════════════════════════════
 
-function getAuditoriaResumen_() {
-  // ── Valores de referencia del sistema (tomados del informe impreso) ────────
+function getAuditoriaResumen_(modo) {
+  var t0 = Date.now();
+  var isLight = (modo !== 'full');
+
+  // ── Referencia del sistema (hardcoded del informe impreso) ────────────────
   var SISTEMA = {
     '201': { asesor: '201 ANAYS CASTILLO',          venta_bruta: 12967.00, devoluciones: 1390.98, averias:  527.72, venta_neta: 11048.30 },
     '202': { asesor: '202 MELISSA ZULAY CASTILLO',  venta_bruta: 13646.92, devoluciones: 2554.15, averias:  803.67, venta_neta: 10289.10 },
@@ -1795,147 +1803,208 @@ function getAuditoriaResumen_() {
   };
   var sistemaTotal = { venta_bruta: 184357.82, devoluciones: 24616.82, averias: 6397.23, venta_neta: 153343.77 };
 
-  // ── Período actual ─────────────────────────────────────────────────────────
-  var periodoActual = getPeriodoActualDesdeBase_();
-
-  // ── Venta neta por asesor desde BASE_ACUMULADA ─────────────────────────────
-  var mesData  = getBasePeriodoActual_();
-  var baseMap  = {};
+  // ── Período y totales del dashboard ───────────────────────────────────────
+  // LIGHT: usa el resumen cacheado (instant) + solo lee DEVOLUCIONES (~4-6 s).
+  //        NO lee BASE_ACUMULADA (14k filas → 8-10 s más → timeout en Vercel).
+  // FULL: lee BASE + DEVOLUCIONES para el desglose de venta_neta por asesor.
+  var periodoActual;
+  var dashboardTotal;
+  var baseMap = {};
   var filasBase = 0;
-  mesData.forEach(function(row) {
-    filasBase++;
-    var cod    = obtenerCodAsesor_(row[3]);
-    var nombre = String(row[4] || '').trim();
-    var valor  = parseFloat(row[14]) || 0;
-    if (!cod || !nombre) return;
-    if (!esVendedorValido_(cod, nombre)) return;
-    if (!baseMap[cod]) baseMap[cod] = { cod: cod, nombre: nombre, venta_neta_vmx: 0 };
-    baseMap[cod].venta_neta_vmx += valor;
-  });
 
-  // ── Devoluciones/averías por asesor desde DEVOLUCIONES ────────────────────
-  var devMap = getDevolucionesPorCodAsesor_(periodoActual);
+  // Resumen cacheado (warmCache_ lo renueva cada 5 min)
+  var resumenCache = withCache_('resumen', 300, getResumen);
+  var tResumen = Date.now();
 
-  // ── Inventario de conceptos usados en DEVOLUCIONES ────────────────────────
-  var devRaw       = getDevolucionesPeriodoRaw_(periodoActual);
-  var conceptosMap = {};
-  var devSinCod    = 0;
-  var devSinCodMonto = 0;
+  if (isLight && resumenCache) {
+    // Período desde cache — no leer BASE.
+    // TOTALES de devol/averias: se calcularán DESPUÉS del pase fresco sobre
+    // DEVOLUCIONES para mantener consistencia con por_asesor.
+    // venta_neta viene del cache (BASE es demasiado pesada para light).
+    periodoActual = resumenCache.periodo || '';
+    dashboardTotal = null;  // se completa abajo tras leer DEVOLUCIONES
+  } else {
+    // FULL o sin cache: leer BASE para totales y desglose VN por asesor
+    periodoActual = getPeriodoActualDesdeBase_();
+    var mesData = getBasePeriodoActual_();
+    mesData.forEach(function(row) {
+      filasBase++;
+      var cod    = obtenerCodAsesor_(row[3]);
+      var nombre = String(row[4] || '').trim();
+      var valor  = parseFloat(row[14]) || 0;
+      if (!cod || !nombre || !esVendedorValido_(cod, nombre)) return;
+      if (!baseMap[cod]) baseMap[cod] = { cod: cod, nombre: nombre, vn: 0 };
+      baseMap[cod].vn += valor;
+    });
+    // dashboardTotal se construye abajo después de combinar con devol
+    dashboardTotal = null;
+  }
+  var tBase = Date.now();
+
+  // ── DEVOLUCIONES — un solo pase: devMap + conceptos + fuera de rango ──────
+  var devRaw          = getDevolucionesPeriodoRaw_(periodoActual);
+  var devMap             = {};
+  var conceptosMap       = {};
+  var devSinCod          = 0;
+  var devSinCodDevol     = 0;
+  var devSinCodAverias   = 0;
+  var devolFueraDetalle  = [];
+  var devolFueraMonto    = 0;
+
   devRaw.forEach(function(r) {
-    var conc = r.concepto || '(vacío)';
-    var esAv = esAveria_(conc);
+    var cod   = r.cod_asesor;
+    var monto = r.vlr_devol;
+    var conc  = r.concepto || '(vacío)';
+    var esAv  = esAveria_(conc);
+
+    if (cod && monto) {
+      if (!devMap[cod]) devMap[cod] = { devoluciones: 0, averias: 0 };
+      if (esAv) devMap[cod].averias      += monto;
+      else      devMap[cod].devoluciones += monto;
+    } else if (!cod) {
+      devSinCod++;
+      if (esAv) devSinCodAverias += monto || 0;
+      else      devSinCodDevol   += monto || 0;
+    }
+
     if (!conceptosMap[conc]) conceptosMap[conc] = { concepto: conc, tipo: esAv ? 'AVERIA' : 'DEVOLUCION', monto: 0, filas: 0 };
-    conceptosMap[conc].monto  += r.vlr_devol;
-    conceptosMap[conc].filas  += 1;
-    if (!r.cod_asesor) { devSinCod++; devSinCodMonto += r.vlr_devol; }
+    conceptosMap[conc].monto += monto || 0;
+    conceptosMap[conc].filas++;
+
+    var n = parseInt(cod) || 0;
+    if (n < 201 || n > 214) {
+      devolFueraMonto += monto || 0;
+      if (!isLight || devolFueraDetalle.length < 20) {
+        devolFueraDetalle.push({ cod_asesor: cod, nom_vendedor: r.nom_vendedor, concepto: conc, monto: monto, tipo: esAv ? 'AVERIA' : 'DEVOLUCION' });
+      }
+    }
   });
+
+  Object.keys(devMap).forEach(function(cod) {
+    devMap[cod].devoluciones = round2_(devMap[cod].devoluciones);
+    devMap[cod].averias      = round2_(devMap[cod].averias);
+  });
+  var tDevol = Date.now();
+
+  // ── Top conceptos ─────────────────────────────────────────────────────────
   var conceptosList = Object.values(conceptosMap)
     .sort(function(a, b) { return b.monto - a.monto; })
+    .slice(0, isLight ? 20 : 999)
     .map(function(c) { return { concepto: c.concepto, tipo: c.tipo, monto: round2_(c.monto), filas: c.filas }; });
 
-  // ── Por asesor: combinar base + devoluciones ───────────────────────────────
-  var todosLosAsesores = new Set();
-  Object.keys(baseMap).forEach(function(c) { todosLosAsesores.add(c); });
-  Object.keys(devMap).forEach(function(c) { todosLosAsesores.add(c); });
-  Object.keys(SISTEMA).forEach(function(c) { todosLosAsesores.add(c); });
+  // ── Por asesor ────────────────────────────────────────────────────────────
+  var todosLosAsesores = {};
+  Object.keys(baseMap).forEach(function(c) { todosLosAsesores[c] = true; });
+  Object.keys(devMap).forEach(function(c)  { todosLosAsesores[c] = true; });
+  Object.keys(SISTEMA).forEach(function(c) { todosLosAsesores[c] = true; });
 
-  var porAsesor = [];
-  todosLosAsesores.forEach(function(cod) {
+  var porAsesorAll  = [];
+  var asesoresExtra = [];
+  var dtVB = 0, dtDev = 0, dtAv = 0, dtVN = 0;
+  var exVB = 0, exDev = 0, exAv = 0, exVN = 0;
+
+  Object.keys(todosLosAsesores).forEach(function(cod) {
     var bm = baseMap[cod];
     var dm = devMap[cod] || { devoluciones: 0, averias: 0 };
     var sm = SISTEMA[cod];
 
-    var vn = round2_(bm ? bm.venta_neta_vmx : 0);
-    var d  = round2_(dm.devoluciones || 0);
-    var a  = round2_(dm.averias      || 0);
-    var vb = round2_(vn + d + a);
+    var vn = bm ? round2_(bm.vn) : null;  // null en light si no leímos BASE
+    var d  = dm.devoluciones || 0;
+    var a  = dm.averias      || 0;
+    var vb = vn !== null ? round2_(vn + d + a) : null;
     var enDash = !!(bm || d > 0 || a > 0);
 
-    porAsesor.push({
-      cod_asesor:        cod,
-      asesor_dashboard:  bm ? (cod + ' - ' + bm.nombre) : (sm ? sm.asesor : cod),
-      en_sistema:        !!sm,
-      en_dashboard:      enDash,
-      venta_bruta_dashboard:  vb,
+    if (enDash) { if (vb !== null) dtVB += vb; dtDev += d; dtAv += a; if (vn !== null) dtVN += vn; }
+
+    var difDev = sm ? round2_(d  - sm.devoluciones) : null;
+    var difAv  = sm ? round2_(a  - sm.averias)      : null;
+    var difVB  = (sm && vb !== null) ? round2_(vb - sm.venta_bruta) : null;
+    var difVN  = (sm && vn !== null) ? round2_(vn - sm.venta_neta)  : null;
+
+    var obj = {
+      cod_asesor:             cod,
+      asesor_dashboard:       bm ? (cod + ' - ' + bm.nombre) : (sm ? sm.asesor : cod),
+      en_sistema:             !!sm,
+      en_dashboard:           enDash,
       devoluciones_dashboard: d,
       averias_dashboard:      a,
-      venta_neta_dashboard:   vn,
-      venta_bruta_sistema:    sm ? sm.venta_bruta  : null,
+      venta_bruta_dashboard:  vb,       // null en light (no leímos BASE)
+      venta_neta_dashboard:   vn,       // null en light
       devoluciones_sistema:   sm ? sm.devoluciones : null,
       averias_sistema:        sm ? sm.averias      : null,
+      venta_bruta_sistema:    sm ? sm.venta_bruta  : null,
       venta_neta_sistema:     sm ? sm.venta_neta   : null,
-      dif_venta_bruta:        sm ? round2_(vb - sm.venta_bruta)  : null,
-      dif_devoluciones:       sm ? round2_(d  - sm.devoluciones) : null,
-      dif_averias:            sm ? round2_(a  - sm.averias)      : null,
-      dif_venta_neta:         sm ? round2_(vn - sm.venta_neta)   : null,
-    });
+      dif_devoluciones:       difDev,
+      dif_averias:            difAv,
+      dif_venta_bruta:        difVB,
+      dif_venta_neta:         difVN,
+    };
+
+    if (enDash && !sm) {
+      asesoresExtra.push(obj);
+      exDev += d; exAv += a;
+      if (vb !== null) exVB += vb;
+      if (vn !== null) exVN += vn;
+    }
+
+    var tieneDif = (difDev !== null && difDev !== 0) || (difAv !== null && difAv !== 0) ||
+                   (difVB  !== null && difVB  !== 0) || (difVN  !== null && difVN  !== 0);
+    if (!isLight || !sm || tieneDif || (!enDash && sm)) {
+      porAsesorAll.push(obj);
+    }
   });
 
-  porAsesor.sort(function(a, b) {
+  porAsesorAll.sort(function(a, b) {
     return (parseInt(a.cod_asesor) || 9999) - (parseInt(b.cod_asesor) || 9999);
   });
+  var tPorAsesor = Date.now();
 
-  // ── Totales del dashboard (solo asesores que tienen datos) ────────────────
-  var dtVB = 0, dtDev = 0, dtAv = 0, dtVN = 0;
-  porAsesor.filter(function(a) { return a.en_dashboard; }).forEach(function(a) {
-    dtVB  += a.venta_bruta_dashboard;
-    dtDev += a.devoluciones_dashboard;
-    dtAv  += a.averias_dashboard;
-    dtVN  += a.venta_neta_dashboard;
-  });
-  var dashboardTotal = {
-    venta_bruta:  round2_(dtVB),
-    devoluciones: round2_(dtDev),
-    averias:      round2_(dtAv),
-    venta_neta:   round2_(dtVN)
-  };
+  // Totales de devol/averias desde el pase fresco (consistente con por_asesor)
+  var freshDev = round2_(Object.values(devMap).reduce(function(s,d){return s+d.devoluciones;},0) + devSinCodDevol);
+  var freshAv  = round2_(Object.values(devMap).reduce(function(s,d){return s+d.averias;},0)      + devSinCodAverias);
 
-  // ── Asesores extra (en dashboard pero no en sistema) ──────────────────────
-  var asesoresExtra = porAsesor.filter(function(a) { return a.en_dashboard && !a.en_sistema; });
-  var exVB = 0, exDev = 0, exAv = 0, exVN = 0;
-  asesoresExtra.forEach(function(a) {
-    exVB  += a.venta_bruta_dashboard;
-    exDev += a.devoluciones_dashboard;
-    exAv  += a.averias_dashboard;
-    exVN  += a.venta_neta_dashboard;
-  });
+  if (isLight) {
+    // venta_neta desde cache (no leer BASE en light); devol/av desde hoja fresca
+    var vnCache = resumenCache ? round2_(resumenCache.venta_neta || 0) : 0;
+    dashboardTotal = {
+      venta_bruta:  round2_(vnCache + freshDev + freshAv),
+      devoluciones: freshDev,
+      averias:      freshAv,
+      venta_neta:   vnCache,
+    };
+  } else {
+    // FULL: VN desde BASE (dtVN); devol/av desde hoja fresca (más preciso que dtDev/dtAv)
+    dashboardTotal = {
+      venta_bruta:  round2_(dtVN + freshDev + freshAv),
+      devoluciones: freshDev,
+      averias:      freshAv,
+      venta_neta:   round2_(dtVN),
+    };
+  }
 
-  // ── LOGS obligatorios ─────────────────────────────────────────────────────
-  Logger.log('[AUDITORIA RESUMEN] periodo=' + periodoActual + ' filasBase=' + filasBase);
+  // ── LOGS ─────────────────────────────────────────────────────────────────
+  var msTotal = tPorAsesor - t0;
+  Logger.log('[AUDITORIA RESUMEN] modo=' + (isLight ? 'light' : 'full') +
+    ' periodo=' + periodoActual + ' ms=' + msTotal +
+    ' (resumen=' + (tResumen-t0) + ' base=' + (tBase-tResumen) +
+    ' devol=' + (tDevol-tBase) + ' porasesor=' + (tPorAsesor-tDevol) + ')');
   Logger.log('[AUDITORIA RESUMEN] venta_bruta_dashboard='  + dashboardTotal.venta_bruta);
   Logger.log('[AUDITORIA RESUMEN] devoluciones_dashboard=' + dashboardTotal.devoluciones);
   Logger.log('[AUDITORIA RESUMEN] averias_dashboard='      + dashboardTotal.averias);
   Logger.log('[AUDITORIA RESUMEN] venta_neta_dashboard='   + dashboardTotal.venta_neta);
-  Logger.log('[AUDITORIA RESUMEN] asesores incluidos='     + JSON.stringify(Object.keys(baseMap).sort()));
   Logger.log('[AUDITORIA RESUMEN] asesores con devol='     + JSON.stringify(Object.keys(devMap).sort()));
-  Logger.log('[AUDITORIA RESUMEN] ventas sin asesor valido (excluidas de base)=n/a — ver filasBase');
-  Logger.log('[AUDITORIA RESUMEN] devolucionesSinAsesor filas=' + devSinCod + ' monto=' + round2_(devSinCodMonto));
-  Logger.log('[AUDITORIA RESUMEN] conceptosAverias=' + JSON.stringify(conceptosList.filter(function(c) { return c.tipo === 'AVERIA'; }).map(function(c) { return c.concepto + '=' + c.monto; })));
-  Logger.log('[AUDITORIA RESUMEN] asesoresExtra (no en sistema): ' +
-    asesoresExtra.map(function(a) { return a.cod_asesor + '=' + a.asesor_dashboard + ' VB=' + a.venta_bruta_dashboard + ' Dev=' + a.devoluciones_dashboard + ' Av=' + a.averias_dashboard; }).join(' | '));
-  Logger.log('[AUDITORIA RESUMEN] total_extra_no_en_sistema VB=' + round2_(exVB) + ' Dev=' + round2_(exDev) + ' Av=' + round2_(exAv) + ' VN=' + round2_(exVN));
-
-  // ── Filas de DEVOLUCIONES para asesores fuera del rango 201-214 ──────────
-  var devolFueraRango = [];
-  devRaw.forEach(function(r) {
-    var n = parseInt(r.cod_asesor) || 0;
-    if (n < 201 || n > 214) {
-      devolFueraRango.push({
-        cod_asesor: r.cod_asesor,
-        nom_vendedor: r.nom_vendedor,
-        concepto: r.concepto,
-        monto: r.vlr_devol,
-        tipo: esAveria_(r.concepto) ? 'AVERIA' : 'DEVOLUCION'
-      });
-    }
-  });
-  var devolFueraTotal = round2_(devolFueraRango.reduce(function(s, r) { return s + r.monto; }, 0));
-  Logger.log('[AUDITORIA RESUMEN] devol fuera rango 201-214: filas=' + devolFueraRango.length + ' total=' + devolFueraTotal);
+  Logger.log('[AUDITORIA RESUMEN] devolucionesSinAsesor filas=' + devSinCod + ' devol=' + round2_(devSinCodDevol) + ' av=' + round2_(devSinCodAverias));
+  Logger.log('[AUDITORIA RESUMEN] conceptosAverias=' + JSON.stringify(
+    conceptosList.filter(function(c) { return c.tipo === 'AVERIA'; }).map(function(c) { return c.concepto + '=' + c.monto; })));
+  Logger.log('[AUDITORIA RESUMEN] asesoresExtra=' +
+    asesoresExtra.map(function(a) { return a.cod_asesor + '=' + a.asesor_dashboard; }).join(' | '));
+  Logger.log('[AUDITORIA RESUMEN] devolucionesFueraRango201_214 filas=' + devolFueraDetalle.length + ' total=' + round2_(devolFueraMonto));
 
   return {
-    ok: true,
+    ok:      true,
+    modo:    isLight ? 'light' : 'full',
     periodo: periodoActual,
-    filas_base: filasBase,
+    nota:    isLight ? 'light: VB/VN por asesor omitidos (usan BASE). Usa ?modo=full para detalle completo.' : null,
     sistema_referencia: sistemaTotal,
     dashboard: dashboardTotal,
     diferencia: {
@@ -1944,17 +2013,24 @@ function getAuditoriaResumen_() {
       averias:      round2_(dashboardTotal.averias      - sistemaTotal.averias),
       venta_neta:   round2_(dashboardTotal.venta_neta   - sistemaTotal.venta_neta),
     },
-    por_asesor: porAsesor,
-    conceptos_devoluciones: conceptosList,
+    por_asesor:               porAsesorAll,
+    conceptos_devoluciones:   conceptosList,
     asesores_extra_en_dashboard: asesoresExtra,
     total_extra_no_en_sistema: {
-      venta_bruta:  round2_(exVB),
+      venta_bruta:  round2_(exVB)  || null,
       devoluciones: round2_(exDev),
       averias:      round2_(exAv),
-      venta_neta:   round2_(exVN),
+      venta_neta:   round2_(exVN)  || null,
     },
-    devolucionesSinAsesor: { filas: devSinCod, monto: round2_(devSinCodMonto) },
-    devolucionesFueraRango201_214: { filas: devolFueraRango.length, total: devolFueraTotal, detalle: devolFueraRango },
+    devolucionesSinAsesor:        { filas: devSinCod, devol: round2_(devSinCodDevol), averias: round2_(devSinCodAverias) },
+    devolucionesFueraRango201_214: { filas: devolFueraDetalle.length, total: round2_(devolFueraMonto), detalle: devolFueraDetalle },
+    debug_ms: msTotal,
+    debug_counts: {
+      filas_base:      filasBase,
+      filas_devol:     devRaw.length,
+      asesores_devol:  Object.keys(devMap).length,
+      conceptos_unicos: Object.keys(conceptosMap).length,
+    },
   };
 }
 
