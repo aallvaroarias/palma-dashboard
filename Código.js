@@ -795,10 +795,11 @@ function doGet(e) {
         invalidarCache_();
         data = { ok: true };
         break;
-      case 'cuota_debug':   data = getCuotaDebug_();     break;
-      case 'diagnostico':   data = getDiagnosticoAPI();  break;
-      case 'fechas_debug':  data = getFechasDebug_();    break;
-      default:              data = getResumen();         break;
+      case 'cuota_debug':       data = getCuotaDebug_();       break;
+      case 'diagnostico':       data = getDiagnosticoAPI();    break;
+      case 'fechas_debug':      data = getFechasDebug_();      break;
+      case 'auditoria_resumen': data = getAuditoriaResumen_(); break;
+      default:                  data = getResumen();           break;
     }
 
     Logger.log('[doGet] sheet=' + sheet + ' ms=' + (Date.now() - t0));
@@ -1765,6 +1766,195 @@ function getResumen() {
       CHIRIQUI:  buildSedeKPIs_('CHIRIQUI'),
       SIN_SEDE:  buildSedeKPIs_('SIN_SEDE')
     }
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUDITORÍA RESUMEN — compara dashboard vs informe del sistema
+// Endpoint: ?sheet=auditoria_resumen
+// Referencia fija: INFORME DE VENTAS X ASESOR (sistema externo, Jun 2026 Q1)
+// ════════════════════════════════════════════════════════════════════
+
+function getAuditoriaResumen_() {
+  // ── Valores de referencia del sistema (tomados del informe impreso) ────────
+  var SISTEMA = {
+    '201': { asesor: '201 ANAYS CASTILLO',          venta_bruta: 12967.00, devoluciones: 1390.98, averias:  527.72, venta_neta: 11048.30 },
+    '202': { asesor: '202 MELISSA ZULAY CASTILLO',  venta_bruta: 13646.92, devoluciones: 2554.15, averias:  803.67, venta_neta: 10289.10 },
+    '203': { asesor: '203 RAUL CASTRO',             venta_bruta: 14321.78, devoluciones: 2228.66, averias:  522.92, venta_neta: 11570.20 },
+    '204': { asesor: '204 ALAY WOODS',              venta_bruta: 13346.77, devoluciones: 1753.41, averias:  797.60, venta_neta: 10795.76 },
+    '205': { asesor: '205 RENE ISAIAS MUÑOZ',       venta_bruta: 11975.22, devoluciones: 3415.89, averias:  612.90, venta_neta:  7946.43 },
+    '206': { asesor: '206 GRACIELA CASSINO',        venta_bruta:  8508.86, devoluciones:  929.21, averias:  507.18, venta_neta:  7072.47 },
+    '207': { asesor: '207 JAIME ELIAS CASTILLO',    venta_bruta: 11866.96, devoluciones: 1528.34, averias:  330.97, venta_neta: 10007.65 },
+    '208': { asesor: '208 ARIEL GONZALEZ',          venta_bruta:  8786.30, devoluciones: 1318.10, averias:  456.96, venta_neta:  7011.24 },
+    '209': { asesor: '209 ENRIQUE JIMENEZ',         venta_bruta: 13309.30, devoluciones: 2795.59, averias:  597.87, venta_neta:  9915.84 },
+    '210': { asesor: '210 JOHNNY PITTY',            venta_bruta: 10992.18, devoluciones: 1422.23, averias:  489.68, venta_neta:  9080.27 },
+    '211': { asesor: '211 HAYMETH LEWIS',           venta_bruta: 18775.09, devoluciones:  596.99, averias:  150.23, venta_neta: 18027.87 },
+    '212': { asesor: '212 ISMALDO GOMEZ',           venta_bruta: 24047.84, devoluciones: 2150.56, averias:   92.57, venta_neta: 21804.71 },
+    '213': { asesor: '213 GUSTAVO ROJAS',           venta_bruta: 17240.38, devoluciones: 1115.25, averias:  221.58, venta_neta: 15903.55 },
+    '214': { asesor: '214 RUTA CENTRALES 2',        venta_bruta:  4573.22, devoluciones: 1417.46, averias:  285.38, venta_neta:  2870.38 },
+  };
+  var sistemaTotal = { venta_bruta: 184357.82, devoluciones: 24616.82, averias: 6397.23, venta_neta: 153343.77 };
+
+  // ── Período actual ─────────────────────────────────────────────────────────
+  var periodoActual = getPeriodoActualDesdeBase_();
+
+  // ── Venta neta por asesor desde BASE_ACUMULADA ─────────────────────────────
+  var mesData  = getBasePeriodoActual_();
+  var baseMap  = {};
+  var filasBase = 0;
+  mesData.forEach(function(row) {
+    filasBase++;
+    var cod    = obtenerCodAsesor_(row[3]);
+    var nombre = String(row[4] || '').trim();
+    var valor  = parseFloat(row[14]) || 0;
+    if (!cod || !nombre) return;
+    if (!esVendedorValido_(cod, nombre)) return;
+    if (!baseMap[cod]) baseMap[cod] = { cod: cod, nombre: nombre, venta_neta_vmx: 0 };
+    baseMap[cod].venta_neta_vmx += valor;
+  });
+
+  // ── Devoluciones/averías por asesor desde DEVOLUCIONES ────────────────────
+  var devMap = getDevolucionesPorCodAsesor_(periodoActual);
+
+  // ── Inventario de conceptos usados en DEVOLUCIONES ────────────────────────
+  var devRaw       = getDevolucionesPeriodoRaw_(periodoActual);
+  var conceptosMap = {};
+  var devSinCod    = 0;
+  var devSinCodMonto = 0;
+  devRaw.forEach(function(r) {
+    var conc = r.concepto || '(vacío)';
+    var esAv = esAveria_(conc);
+    if (!conceptosMap[conc]) conceptosMap[conc] = { concepto: conc, tipo: esAv ? 'AVERIA' : 'DEVOLUCION', monto: 0, filas: 0 };
+    conceptosMap[conc].monto  += r.vlr_devol;
+    conceptosMap[conc].filas  += 1;
+    if (!r.cod_asesor) { devSinCod++; devSinCodMonto += r.vlr_devol; }
+  });
+  var conceptosList = Object.values(conceptosMap)
+    .sort(function(a, b) { return b.monto - a.monto; })
+    .map(function(c) { return { concepto: c.concepto, tipo: c.tipo, monto: round2_(c.monto), filas: c.filas }; });
+
+  // ── Por asesor: combinar base + devoluciones ───────────────────────────────
+  var todosLosAsesores = new Set();
+  Object.keys(baseMap).forEach(function(c) { todosLosAsesores.add(c); });
+  Object.keys(devMap).forEach(function(c) { todosLosAsesores.add(c); });
+  Object.keys(SISTEMA).forEach(function(c) { todosLosAsesores.add(c); });
+
+  var porAsesor = [];
+  todosLosAsesores.forEach(function(cod) {
+    var bm = baseMap[cod];
+    var dm = devMap[cod] || { devoluciones: 0, averias: 0 };
+    var sm = SISTEMA[cod];
+
+    var vn = round2_(bm ? bm.venta_neta_vmx : 0);
+    var d  = round2_(dm.devoluciones || 0);
+    var a  = round2_(dm.averias      || 0);
+    var vb = round2_(vn + d + a);
+    var enDash = !!(bm || d > 0 || a > 0);
+
+    porAsesor.push({
+      cod_asesor:        cod,
+      asesor_dashboard:  bm ? (cod + ' - ' + bm.nombre) : (sm ? sm.asesor : cod),
+      en_sistema:        !!sm,
+      en_dashboard:      enDash,
+      venta_bruta_dashboard:  vb,
+      devoluciones_dashboard: d,
+      averias_dashboard:      a,
+      venta_neta_dashboard:   vn,
+      venta_bruta_sistema:    sm ? sm.venta_bruta  : null,
+      devoluciones_sistema:   sm ? sm.devoluciones : null,
+      averias_sistema:        sm ? sm.averias      : null,
+      venta_neta_sistema:     sm ? sm.venta_neta   : null,
+      dif_venta_bruta:        sm ? round2_(vb - sm.venta_bruta)  : null,
+      dif_devoluciones:       sm ? round2_(d  - sm.devoluciones) : null,
+      dif_averias:            sm ? round2_(a  - sm.averias)      : null,
+      dif_venta_neta:         sm ? round2_(vn - sm.venta_neta)   : null,
+    });
+  });
+
+  porAsesor.sort(function(a, b) {
+    return (parseInt(a.cod_asesor) || 9999) - (parseInt(b.cod_asesor) || 9999);
+  });
+
+  // ── Totales del dashboard (solo asesores que tienen datos) ────────────────
+  var dtVB = 0, dtDev = 0, dtAv = 0, dtVN = 0;
+  porAsesor.filter(function(a) { return a.en_dashboard; }).forEach(function(a) {
+    dtVB  += a.venta_bruta_dashboard;
+    dtDev += a.devoluciones_dashboard;
+    dtAv  += a.averias_dashboard;
+    dtVN  += a.venta_neta_dashboard;
+  });
+  var dashboardTotal = {
+    venta_bruta:  round2_(dtVB),
+    devoluciones: round2_(dtDev),
+    averias:      round2_(dtAv),
+    venta_neta:   round2_(dtVN)
+  };
+
+  // ── Asesores extra (en dashboard pero no en sistema) ──────────────────────
+  var asesoresExtra = porAsesor.filter(function(a) { return a.en_dashboard && !a.en_sistema; });
+  var exVB = 0, exDev = 0, exAv = 0, exVN = 0;
+  asesoresExtra.forEach(function(a) {
+    exVB  += a.venta_bruta_dashboard;
+    exDev += a.devoluciones_dashboard;
+    exAv  += a.averias_dashboard;
+    exVN  += a.venta_neta_dashboard;
+  });
+
+  // ── LOGS obligatorios ─────────────────────────────────────────────────────
+  Logger.log('[AUDITORIA RESUMEN] periodo=' + periodoActual + ' filasBase=' + filasBase);
+  Logger.log('[AUDITORIA RESUMEN] venta_bruta_dashboard='  + dashboardTotal.venta_bruta);
+  Logger.log('[AUDITORIA RESUMEN] devoluciones_dashboard=' + dashboardTotal.devoluciones);
+  Logger.log('[AUDITORIA RESUMEN] averias_dashboard='      + dashboardTotal.averias);
+  Logger.log('[AUDITORIA RESUMEN] venta_neta_dashboard='   + dashboardTotal.venta_neta);
+  Logger.log('[AUDITORIA RESUMEN] asesores incluidos='     + JSON.stringify(Object.keys(baseMap).sort()));
+  Logger.log('[AUDITORIA RESUMEN] asesores con devol='     + JSON.stringify(Object.keys(devMap).sort()));
+  Logger.log('[AUDITORIA RESUMEN] ventas sin asesor valido (excluidas de base)=n/a — ver filasBase');
+  Logger.log('[AUDITORIA RESUMEN] devolucionesSinAsesor filas=' + devSinCod + ' monto=' + round2_(devSinCodMonto));
+  Logger.log('[AUDITORIA RESUMEN] conceptosAverias=' + JSON.stringify(conceptosList.filter(function(c) { return c.tipo === 'AVERIA'; }).map(function(c) { return c.concepto + '=' + c.monto; })));
+  Logger.log('[AUDITORIA RESUMEN] asesoresExtra (no en sistema): ' +
+    asesoresExtra.map(function(a) { return a.cod_asesor + '=' + a.asesor_dashboard + ' VB=' + a.venta_bruta_dashboard + ' Dev=' + a.devoluciones_dashboard + ' Av=' + a.averias_dashboard; }).join(' | '));
+  Logger.log('[AUDITORIA RESUMEN] total_extra_no_en_sistema VB=' + round2_(exVB) + ' Dev=' + round2_(exDev) + ' Av=' + round2_(exAv) + ' VN=' + round2_(exVN));
+
+  // ── Filas de DEVOLUCIONES para asesores fuera del rango 201-214 ──────────
+  var devolFueraRango = [];
+  devRaw.forEach(function(r) {
+    var n = parseInt(r.cod_asesor) || 0;
+    if (n < 201 || n > 214) {
+      devolFueraRango.push({
+        cod_asesor: r.cod_asesor,
+        nom_vendedor: r.nom_vendedor,
+        concepto: r.concepto,
+        monto: r.vlr_devol,
+        tipo: esAveria_(r.concepto) ? 'AVERIA' : 'DEVOLUCION'
+      });
+    }
+  });
+  var devolFueraTotal = round2_(devolFueraRango.reduce(function(s, r) { return s + r.monto; }, 0));
+  Logger.log('[AUDITORIA RESUMEN] devol fuera rango 201-214: filas=' + devolFueraRango.length + ' total=' + devolFueraTotal);
+
+  return {
+    ok: true,
+    periodo: periodoActual,
+    filas_base: filasBase,
+    sistema_referencia: sistemaTotal,
+    dashboard: dashboardTotal,
+    diferencia: {
+      venta_bruta:  round2_(dashboardTotal.venta_bruta  - sistemaTotal.venta_bruta),
+      devoluciones: round2_(dashboardTotal.devoluciones - sistemaTotal.devoluciones),
+      averias:      round2_(dashboardTotal.averias      - sistemaTotal.averias),
+      venta_neta:   round2_(dashboardTotal.venta_neta   - sistemaTotal.venta_neta),
+    },
+    por_asesor: porAsesor,
+    conceptos_devoluciones: conceptosList,
+    asesores_extra_en_dashboard: asesoresExtra,
+    total_extra_no_en_sistema: {
+      venta_bruta:  round2_(exVB),
+      devoluciones: round2_(exDev),
+      averias:      round2_(exAv),
+      venta_neta:   round2_(exVN),
+    },
+    devolucionesSinAsesor: { filas: devSinCod, monto: round2_(devSinCodMonto) },
+    devolucionesFueraRango201_214: { filas: devolFueraRango.length, total: devolFueraTotal, detalle: devolFueraRango },
   };
 }
 

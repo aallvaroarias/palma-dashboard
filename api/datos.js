@@ -2,7 +2,7 @@
 // Cache fresco: 300 s (5 min).  Stale usado como fallback ante timeout.
 // Timeout hacia Apps Script: 9.2 s (límite Vercel Hobby = 10 s).
 const APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycby_P9FMXYM63k4IL3eA5Hxvvtw98SQ8BFUg1wh-vZVhls7mTZeuEmKH0S5Zzd05oylg/exec';
+  'https://script.google.com/macros/s/AKfycbxNDPLNvT4UJb0ocMgIdrBKz6b3WOm8_MCiFySwNtExABy_b9o979FC8BD6INH-dbhC/exec';
 
 // TTL por sheet (ms). Omitir = usar CACHE_DEFAULT_TTL.
 const CACHE_DEFAULT_TTL = 300_000; // 5 min
