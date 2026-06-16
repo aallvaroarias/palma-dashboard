@@ -1431,6 +1431,11 @@ function verificarTriggersWarmCache_() {
   return activos.length;
 }
 
+// ── Wrappers públicos (sin _ ) para ejecutar manualmente desde el editor ─────
+function instalarTriggerWarmCache()   { return instalarTriggerWarmCache_();   }
+function verificarTriggersWarmCache() { return verificarTriggersWarmCache_(); }
+function limpiarTriggersWarmCache()   { return limpiarTriggersWarmCache_();   }
+
 /** Invalida todo el cache (correr tras actualizar datos en Sheets). */
 function invalidarCache_() {
   CacheService.getScriptCache().removeAll([
