@@ -12,6 +12,7 @@ const TABS = [
   { label: 'Cartera', path: '/cartera' },
   { label: 'Nómina',     path: '/nomina' },
   { label: 'Inventario', path: '/inventario' },
+  { label: 'Mi Gerencia', path: '/mi-gerencia' },
 ];
 
 export default function Topbar({ onRefresh }) {

@@ -763,6 +763,8 @@ function doGet(e) {
         data = withCache_('necesidad',    300, getNecesidadCliente); break;
       case 'dn_marcas':
         data = withCache_('dn_marcas',    300, getDNMarcas);     break;
+      case 'mi_gerencia':
+        data = withCache_('mi_gerencia',  300, getMiGerencia_);  break;
 
       // ── Combos ───────────────────────────────────────────────────────────
       case 'combos':
@@ -1375,6 +1377,7 @@ function warmCache_() {
     withCache_('necesidad',    300, getNecesidadCliente);
     withCache_('cob_pc',       300, getCoberturaProductosClave_);
     withCache_('cob_pc_vend',  300, getCoberturaProductosClaveVendedor_);
+    withCache_('mi_gerencia',  300, getMiGerencia_);       // ~5 KB
     // ⚠ NO calentar — respuesta > 100 KB (CacheService no puede almacenarlos):
     //   'devoluciones'   ~219 KB — incluye array `detalle` completo
     //   'clientes_sin_pc' ~359 KB — lista completa de clientes
@@ -3464,6 +3467,168 @@ function getDNMarcas() {
       por_vendedor
     };
   }).sort(function(a, b) { return b.venta - a.venta; });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MI GERENCIA — Panel privado vs meta ECOM real
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Normaliza nombre de negocio para emparejar venta_por_negocio con METAS_ECOM.
+ * Replica la lógica de normNeg() del frontend (Gerencial.jsx).
+ */
+function normNegMiG_(nombre) {
+  var MAPA = {
+    'CHOCOLATES': 'Chocolates',  'CHOCOLATE': 'Chocolates',
+    'GALLETAS':   'Galletas',    'GALLETA':   'Galletas',
+    'CARNICO':    'Cárnico',     'CARNICOS':  'Cárnico',   'CARNICA': 'Cárnico',
+    'CAFE':       'Café',        'CAF':       'Café',
+    'BEBIDAS TMLUC': 'Bebidas TMLUC', 'BEBIDAS': 'Bebidas TMLUC', 'TMLUC': 'Bebidas TMLUC',
+    'SNACKS TMLUC':  'Snacks TMLUC',  'SNACKS':  'Snacks TMLUC',
+    'OTROS TMLUC':   'Otros TMLUC',   'OTROS':   'Otros TMLUC',
+    'NUTRICION EXPERTA': 'Nutrición Experta', 'NUTRICION': 'Nutrición Experta',
+    'NUTRICIUN EXPERTA': 'Nutrición Experta', 'NUTRICIUN': 'Nutrición Experta',
+    'BARRAS CORTAS': 'Barras Cortas', 'BARRAS': 'Barras Cortas',
+    'TAJADOS': 'Tajados', 'TAJADO': 'Tajados',
+  };
+  if (!nombre) return '';
+  var s = String(nombre).trim().replace(/^\d+\s*[-_]\s*/, '');
+  var limpio = s.trim();
+  var key = s.toUpperCase()
+    .replace(/[ÁÀÂÄ]/g, 'A').replace(/[ÉÈÊË]/g, 'E')
+    .replace(/[ÍÌÎÏ]/g, 'I').replace(/[ÓÒÔÖ]/g, 'O')
+    .replace(/[ÚÙÛÜ]/g, 'U').replace(/Ñ/g, 'N')
+    .replace(/\s+/g, ' ').trim();
+  return MAPA[key] || limpio;
+}
+
+/**
+ * Panel privado gerencial: venta real vs meta ECOM (interna).
+ * Lee la hoja METAS_ECOM (columnas A=NEGOCIO, B=META_ECOM).
+ * Si la hoja no existe, usa valores por defecto hardcodeados.
+ */
+function getMiGerencia_() {
+  // ── Metas por defecto (si la hoja METAS_ECOM no existe aún) ──────────────
+  var DEFAULTS = {
+    'Chocolates':    170589,
+    'Cárnico':       137796,
+    'Galletas':      85681,
+    'Bebidas TMLUC': 34247,
+    'Café':          31562,
+    'Snacks TMLUC':  2037,
+    'Otros TMLUC':   50,
+  };
+
+  // ── 1. Leer hoja METAS_ECOM ───────────────────────────────────────────────
+  var hME = getSheet_('METAS_ECOM');
+  var metasEcom = {};
+  var sinHoja = !hME || hME.getLastRow() < 2;
+
+  if (!sinHoja) {
+    hME.getDataRange().getValues().slice(1).forEach(function(r) {
+      var neg  = normNegMiG_(String(r[0] || '').trim());
+      var meta = parseFloat(r[1]) || 0;
+      if (neg && meta > 0) metasEcom[neg] = meta;
+    });
+    if (Object.keys(metasEcom).length === 0) sinHoja = true;
+  }
+  if (sinHoja) {
+    Object.keys(DEFAULTS).forEach(function(k) { metasEcom[k] = DEFAULTS[k]; });
+  }
+
+  // ── 2. Venta real por negocio (desde resumen cacheado) ───────────────────
+  var resumenData = withCache_('resumen', 300, getResumen);
+  var ventaMap = {};
+  (resumenData.venta_por_negocio || []).forEach(function(v) {
+    var neg = normNegMiG_(v.negocio);
+    if (neg) ventaMap[neg] = round2_((ventaMap[neg] || 0) + (v.venta || 0));
+  });
+
+  // ── 3. Meta PALMA por negocio (desde cuotas — suma de todos los asesores) ─
+  var cuotasData = getCuotas();
+  var metaPalmaMap = {};
+  cuotasData.forEach(function(c) {
+    (c.por_negocio || []).forEach(function(n) {
+      var neg = normNegMiG_(n.negocio);
+      if (neg) metaPalmaMap[neg] = round2_((metaPalmaMap[neg] || 0) + (n.meta || 0));
+    });
+  });
+
+  // ── 4. Config: días hábiles restantes ────────────────────────────────────
+  var config = getConfig_();
+  var diasRestantes = Number(config.dias_habiles_restantes) || 0;
+
+  // ── 5. Factor de proyección: hTotal / hTranscurridos ─────────────────────
+  var hoy = new Date();
+  var inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  var fin    = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  function diasHabMiG_(a, b) {
+    var n = 0, d = new Date(a);
+    while (d <= b) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
+    return n;
+  }
+  var hTotal  = diasHabMiG_(inicio, fin);
+  var hTransc = hTotal - diasRestantes;
+  var factor  = hTransc > 0 ? round2_(hTotal / hTransc) : 1;
+
+  // ── 6. Filas por negocio ─────────────────────────────────────────────────
+  var allNegs = {};
+  Object.keys(metasEcom).forEach(function(k) { allNegs[k] = true; });
+  Object.keys(ventaMap).forEach(function(k) { allNegs[k] = true; });
+
+  var negocios = Object.keys(allNegs).map(function(neg) {
+    var metaE  = metasEcom[neg] || 0;
+    var venta  = ventaMap[neg]  || 0;
+    var metaP  = metaPalmaMap[neg] || 0;
+    var proyec = round2_(venta * factor);
+    var cumplPct     = metaE > 0 ? round2_(venta  / metaE * 100) : null;
+    var cumplProyPct = metaE > 0 ? round2_(proyec / metaE * 100) : null;
+    var faltaHoy     = metaE > 0 ? round2_(metaE - venta)  : null;
+    var faltaProyec  = metaE > 0 ? round2_(metaE - proyec) : null;
+    var diarioReq    = diasRestantes > 0 && faltaHoy > 0 ? round2_(faltaHoy / diasRestantes) : 0;
+    var difMeta      = metaE > 0 && metaP > 0 ? round2_(metaP - metaE)                  : null;
+    var infladoPct   = metaE > 0 && metaP > 0 ? round2_((metaP / metaE - 1) * 100)      : null;
+    return {
+      negocio:                    neg,
+      meta_ecom:                  metaE,
+      meta_palma:                 round2_(metaP),
+      venta_real:                 round2_(venta),
+      proyeccion:                 proyec,
+      cumplimiento_pct:           cumplPct,
+      cumplimiento_proyectado_pct:cumplProyPct,
+      falta_hoy:                  faltaHoy,
+      falta_proyectada:           faltaProyec,
+      diario_requerido:           diarioReq,
+      diferencia_meta:            difMeta,
+      inflado_pct:                infladoPct,
+    };
+  }).sort(function(a, b) {
+    return (b.meta_ecom || 0) - (a.meta_ecom || 0) || (b.venta_real || 0) - (a.venta_real || 0);
+  });
+
+  // ── 7. Totales ────────────────────────────────────────────────────────────
+  var ecomTotal   = Object.values(metasEcom).reduce(function(s, v) { return s + v; }, 0);
+  var ventaTotal  = Object.values(ventaMap).reduce(function(s, v) { return s + v; }, 0);
+  var proyecTotal = round2_(ventaTotal * factor);
+  var faltaHoyT   = round2_(ecomTotal - ventaTotal);
+  var faltaProyT  = round2_(ecomTotal - proyecTotal);
+
+  return {
+    sin_hoja_ecom:          sinHoja,
+    dias_habiles_restantes: diasRestantes,
+    factor_proyeccion:      factor,
+    resumen: {
+      meta_ecom_total:             round2_(ecomTotal),
+      venta_real_total:            round2_(ventaTotal),
+      cumplimiento_ecom_pct:       ecomTotal > 0 ? round2_(ventaTotal  / ecomTotal * 100) : 0,
+      proyeccion_total:            proyecTotal,
+      cumplimiento_proyectado_pct: ecomTotal > 0 ? round2_(proyecTotal / ecomTotal * 100) : 0,
+      falta_hoy:                   faltaHoyT,
+      falta_proyectada:            faltaProyT,
+      diario_requerido:            diasRestantes > 0 ? round2_(Math.max(0, faltaHoyT) / diasRestantes) : 0,
+    },
+    negocios: negocios,
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════

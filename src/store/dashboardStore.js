@@ -92,6 +92,7 @@ const useDashboardStore = create((set, get) => ({
   cartera:         { total_pendiente: 0, total_facturas: 0, por_vendedor: [], por_tramo: [], top_clientes: [], detalle: [] },
   necesidadCliente:{ total: 0, total_clasificados: 0, por_necesidad: [] },
   dnMarcas:        [],
+  miGerencia:      null,
   config:          null,
   // ── Productos clave ──────────────────────────────────────────────────────────
   productosClaveList:   { total_catalogo: 0, total_productos_clave: 0, productos: [] },
@@ -213,6 +214,7 @@ const useDashboardStore = create((set, get) => ({
       ['top_clientes',      1600, d => ({ topClientes: d })],
       ['dn_marcas',         1900, d => ({ dnMarcas: d }),           true],
       ['necesidad_cliente', 2200, d => ({ necesidadCliente: d }),   true],
+      ['mi_gerencia',       2500, d => ({ miGerencia: d }),         true],
       ['combos_resumen',    2500, d => ({ combosResumen: d })],
       ['combos_vendedor',   2800, d => ({ combosVendedor: d?.vendedores ?? [] })],
       // clientes_sin_pc movido a carga bajo demanda (loadClientesSinPC) — ~359 KB, no auto-cargar

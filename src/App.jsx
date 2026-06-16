@@ -17,6 +17,7 @@ const Clientes     = React.lazy(() => import('./components/views/Clientes'));
 const Cartera      = React.lazy(() => import('./components/views/Cartera'));
 const Nomina       = React.lazy(() => import('./components/views/Nomina'));
 const Inventario   = React.lazy(() => import('./components/views/Inventario'));
+const MiGerencia   = React.lazy(() => import('./components/views/MiGerencia'));
 
 function ViewFallback() {
   return (
@@ -66,6 +67,7 @@ export default function App() {
               <Route path="/cartera"       element={<Cartera />} />
               <Route path="/nomina"        element={<Nomina />} />
               <Route path="/inventario"   element={<Inventario />} />
+              <Route path="/mi-gerencia" element={<MiGerencia />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
