@@ -3,7 +3,7 @@ import { vendedorValido, esBodega, getCoberturaVendedor } from '../utils/formatt
 
 // Always route through /api/datos → Vite proxy in dev, Vercel serverless in prod
 const BASE       = '/api/datos';
-const APPS_DIRECT = 'https://script.google.com/macros/s/AKfycbxfZHGSDF69tdZNPK0tQefVymSFJE2CHNgn9tH85Kbl-_uDuSZVqaLn6-Cr28W3Zawx/exec';
+const APPS_DIRECT = 'https://script.google.com/macros/s/AKfycbwRPhHFwnBnTadtIuH3FHapuwVjzXJr5suo-KlWxr-ReoA44VtAt1pZsf_TF2a1KIfK/exec';
 
 function buildUrl(base, sheet, params = {}) {
   const sep = base.includes('?') ? '&' : '?';

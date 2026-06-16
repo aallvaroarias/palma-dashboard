@@ -2314,7 +2314,7 @@ function getVendedores() {
     const valor    = parseFloat(r[14]) || 0;
     const negocio  = String(r[8]  || '').trim();
 
-    if (!cod || !vendedor) return;
+    if (!cod) return;
     if (!esVendedorValido_(cod, vendedor)) return;
 
     if (!vendMap[cod]) {
@@ -2327,6 +2327,8 @@ function getVendedores() {
         clientes:              new Set(),
         negocios:              {}
       };
+    } else if (!vendMap[cod].nombre && vendedor) {
+      vendMap[cod].nombre = vendedor;
     }
 
     vendMap[cod].venta_neta_vmx += valor;
