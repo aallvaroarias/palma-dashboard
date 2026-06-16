@@ -118,7 +118,10 @@ const useDashboardStore = create((set, get) => ({
   clientesSinPCLoading: false,
   combosDetalleLoading: false,
   combosVendedorDetalleLoading: false,
-  lastUpdate:    null,
+  lastUpdate:         null,
+  lastSuccessfulLoad: null,   // última vez que resumen cargó OK
+  lastLoadError:      null,   // descripción del error cuando resumen falla
+  isStale:            false,  // true = resumen no pudo actualizarse, se muestra dato anterior
   error:         null,
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -156,8 +159,14 @@ const useDashboardStore = create((set, get) => ({
 
       console.log('✓ Fase 1 completada en', Date.now() - t0, 'ms');
 
+      const resumenOk = resumen !== null;
+      const now = new Date();
+      if (!resumenOk) {
+        console.warn('[Store] resumen falló — mostrando datos anteriores como stale');
+      }
+
       set({
-        resumen:              resumen              || get().resumen,
+        resumen:              resumenOk ? resumen : get().resumen,
         cobertura:            normalizeCobertura(cobertura),
         cobNegocio:           normalizeCobNegocio(cobNegocio),
         efectividad:          efectividad          || get().efectividad,
@@ -169,9 +178,13 @@ const useDashboardStore = create((set, get) => ({
         coberturaPC:          coberturaPC          || get().coberturaPC,
         coberturaVendedoresPC: coberturaVendedoresRaw?.vendedores ?? get().coberturaVendedoresPC,
         vendedores:           normalizeVendedores(vendedoresRaw),
-        config:               configData               || get().config,
-        loading:    false,
-        lastUpdate: new Date(),
+        config:               configData           || get().config,
+        loading:              false,
+        lastUpdate:           now,
+        isStale:              !resumenOk,
+        lastSuccessfulLoad:   resumenOk ? now : get().lastSuccessfulLoad,
+        lastLoadError:        resumenOk ? null
+          : `No se pudo actualizar · ${now.toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' })}`,
       });
     } catch (e) {
       console.error('[Store] Fase 1 error:', e);

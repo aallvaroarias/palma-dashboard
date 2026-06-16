@@ -1343,8 +1343,9 @@ function withCache_(cacheKey, ttlSec, computeFn) {
  *   clientes_sin_pc  — puede superar 100 KB; solo cuando el usuario lo pide
  *
  * ── Configurar trigger ──────────────────────────────────────────────────────
- *   Apps Script → Activadores → Basado en tiempo → Temporizador de minutos
- *   → Cada 5 minutos → función: warmCache_
+ *   Ejecutar instalarTriggerWarmCache_() desde el editor de Apps Script.
+ *   Eso instala el trigger automáticamente (everyMinutes(5) → warmCache_).
+ *   Ver también: limpiarTriggersWarmCache_(), verificarTriggersWarmCache_()
  *
  * ── LockService ─────────────────────────────────────────────────────────────
  *   Si un ciclo de calentamiento tarda más de 5 min, el siguiente trigger
@@ -1386,6 +1387,48 @@ function warmCache_() {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ── Gestión de trigger automático warmCache_ ─────────────────────────────────
+// Ejecutar instalarTriggerWarmCache_() UNA VEZ desde el editor de Apps Script.
+// Después corre automáticamente cada 5 minutos sin intervención manual.
+
+/**
+ * Instala el trigger que llama a warmCache_() cada 5 minutos.
+ * Elimina triggers duplicados antes de crear uno nuevo.
+ * Correr desde: Apps Script → Ejecutar → instalarTriggerWarmCache_
+ */
+function instalarTriggerWarmCache_() {
+  limpiarTriggersWarmCache_();
+  ScriptApp.newTrigger('warmCache_')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+  Logger.log('[Trigger] warmCache_ instalado — se ejecutará cada 5 minutos.');
+}
+
+/** Elimina todos los triggers que apunten a warmCache_. */
+function limpiarTriggersWarmCache_() {
+  var eliminados = 0;
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'warmCache_') {
+      ScriptApp.deleteTrigger(t);
+      eliminados++;
+    }
+  });
+  Logger.log('[Trigger] Eliminados ' + eliminados + ' trigger(s) warmCache_.');
+}
+
+/** Muestra en el Logger cuántos triggers warmCache_ están activos. */
+function verificarTriggersWarmCache_() {
+  var activos = ScriptApp.getProjectTriggers().filter(function(t) {
+    return t.getHandlerFunction() === 'warmCache_';
+  });
+  Logger.log('[Trigger] Triggers warmCache_ activos: ' + activos.length);
+  activos.forEach(function(t) {
+    Logger.log('  → id=' + t.getUniqueId() + '  tipo=' + t.getTriggerSource());
+  });
+  return activos.length;
 }
 
 /** Invalida todo el cache (correr tras actualizar datos en Sheets). */

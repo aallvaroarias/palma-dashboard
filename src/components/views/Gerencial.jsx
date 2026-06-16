@@ -89,6 +89,10 @@ export default function Gerencial() {
     combosDetalleLoading,
     loadingFase2,
     config,
+    isStale,
+    lastSuccessfulLoad,
+    lastLoadError,
+    loadAll,
   } = useDashboardStore();
 
   const [sedeFiltro, setSedeFiltro]       = useState('TODOS'); // 'TODOS' | 'CENTRALES' | 'CHIRIQUI'
@@ -865,6 +869,50 @@ export default function Gerencial() {
           </span>
         )}
       </div>
+
+      {/* ── Aviso datos desactualizados ── */}
+      {isStale && r && (
+        <div
+          className="flex items-center justify-between gap-3 mb-4 px-4 py-2.5 rounded-xl"
+          style={{
+            background: 'rgba(234,179,8,0.08)',
+            border: '1px solid rgba(234,179,8,0.35)',
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: '14px' }}>⚠</span>
+            <span style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: 600 }}>
+              Datos no actualizados
+            </span>
+            {lastSuccessfulLoad && (
+              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                · Última carga válida:{' '}
+                {lastSuccessfulLoad.toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {lastLoadError && (
+              <span style={{ fontSize: '10px', color: 'rgba(234,179,8,0.6)', marginLeft: 4 }}>
+                ({lastLoadError})
+              </span>
+            )}
+          </div>
+          <button
+            onClick={loadAll}
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--gold)',
+              background: 'rgba(234,179,8,0.12)',
+              border: '1px solid rgba(234,179,8,0.3)',
+              borderRadius: '6px',
+              padding: '3px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* ── 2. KPIs Ejecutivos ── */}
       <SectionTitle>KPIs Ejecutivos</SectionTitle>
