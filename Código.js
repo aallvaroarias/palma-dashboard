@@ -802,6 +802,12 @@ function doGet(e) {
         data = withCache_('audit_' + (e.parameter.modo || 'light'), 60,
           function() { return getAuditoriaResumen_(e.parameter.modo || 'light'); });
         break;
+      case 'auditoria_detalle':
+        data = getAuditoriaDetalleAsesores_();
+        break;
+      case 'clasif_debug':
+        data = getDiagnosticoClasifDevol_();
+        break;
       default:                  data = getResumen();           break;
     }
 
@@ -1015,8 +1021,8 @@ function esVendedorValido_(cod, nombre) {
 // r[3] = cod_asesor · r[4] = nom_vendedor
 function esFilaBaseValida_(r) {
   const cod = obtenerCodAsesor_(r[3]);
+  if (!cod) return false;
   const nom = String(r[4] || '').trim();
-  if (!cod || !nom) return false;
   return esVendedorValido_(cod, nom);
 }
 
@@ -1206,22 +1212,30 @@ function getDevolucionesPeriodoRaw_(periodoYYYYMM) {
     }
 
     filasValidas++;
+    var concepto_row    = colMap.concepto      >= 0 ? String(r[colMap.concepto]      || '').trim() : '';
+    var tipo_producto_row = colMap.tipo_producto >= 0 ? String(r[colMap.tipo_producto] || '').trim().toUpperCase() : '';
+    // Clasificación oficial del sistema: tipo_producto CAMBIO=avería, NORMAL=devolución.
+    // Fallback a lógica por concepto solo si la columna no tiene valor reconocido.
+    var es_averia_row = (tipo_producto_row === 'CAMBIO') ? true
+                      : (tipo_producto_row === 'NORMAL') ? false
+                      : esAveria_(concepto_row);
     resultado.push({
-      periodo_mes:   colMap.periodo_mes    >= 0 ? r[colMap.periodo_mes]    : '',
-      cod_asesor:    cod,
-      nom_vendedor:  vendedor,
-      cod_cliente:   colMap.cod_cliente    >= 0 ? r[colMap.cod_cliente]    : '',
-      nom_cliente:   colMap.nom_cliente    >= 0 ? r[colMap.nom_cliente]    : '',
-      factura:       colMap.factura        >= 0 ? r[colMap.factura]        : '',
-      cod_sku:       colMap.cod_sku        >= 0 ? r[colMap.cod_sku]        : '',
-      nom_producto:  colMap.nom_producto   >= 0 ? r[colMap.nom_producto]   : '',
-      cantidad:      colMap.cantidad       >= 0 ? (Number(r[colMap.cantidad]) || 0) : 0,
-      costo_unit:    colMap.costo_unit     >= 0 ? parseMoney_(r[colMap.costo_unit]) : 0,
-      vlr_devol:     monto,
-      concepto:      colMap.concepto       >= 0 ? String(r[colMap.concepto]      || '').trim() : '',
-      tipo_producto: colMap.tipo_producto  >= 0 ? String(r[colMap.tipo_producto] || '').trim() : '',
+      periodo_mes:    colMap.periodo_mes    >= 0 ? r[colMap.periodo_mes]    : '',
+      cod_asesor:     cod,
+      nom_vendedor:   vendedor,
+      cod_cliente:    colMap.cod_cliente    >= 0 ? r[colMap.cod_cliente]    : '',
+      nom_cliente:    colMap.nom_cliente    >= 0 ? r[colMap.nom_cliente]    : '',
+      factura:        colMap.factura        >= 0 ? r[colMap.factura]        : '',
+      cod_sku:        colMap.cod_sku        >= 0 ? r[colMap.cod_sku]        : '',
+      nom_producto:   colMap.nom_producto   >= 0 ? r[colMap.nom_producto]   : '',
+      cantidad:       colMap.cantidad       >= 0 ? (Number(r[colMap.cantidad]) || 0) : 0,
+      costo_unit:     colMap.costo_unit     >= 0 ? parseMoney_(r[colMap.costo_unit]) : 0,
+      vlr_devol:      monto,
+      concepto:       concepto_row,
+      tipo_producto:  tipo_producto_row,
+      es_averia:      es_averia_row,
       periodo_filtro: periodo,
-      _raw:          r,   // ← referencia original para diagnóstico
+      _raw:           r,
     });
   });
 
@@ -1234,11 +1248,10 @@ function getDevolucionesPeriodoRaw_(periodoYYYYMM) {
 function getTotalesDevolucionesPeriodo_(periodoYYYYMM) {
   const totales = { devoluciones: 0, averias: 0, total: 0 };
   getDevolucionesPeriodoRaw_(periodoYYYYMM).forEach(function(r) {
-    var monto   = r.vlr_devol;
-    var concepto = r.concepto;
+    var monto = r.vlr_devol;
     if (!monto) return;
-    if (esAveria_(concepto)) totales.averias      += monto;
-    else                     totales.devoluciones += monto;
+    if (r.es_averia) totales.averias      += monto;
+    else             totales.devoluciones += monto;
     totales.total += monto;
   });
   Logger.log('[DevTotales] periodo=' + periodoYYYYMM +
@@ -1258,13 +1271,12 @@ function getTotalDevolucionesPeriodo_(periodoYYYYMM) {
 function getDevolucionesPorCodAsesor_(periodoYYYYMM) {
   const devMap = {};
   getDevolucionesPeriodoRaw_(periodoYYYYMM).forEach(function(r) {
-    var cod      = r.cod_asesor;
-    var monto    = r.vlr_devol;
-    var concepto = r.concepto;
+    var cod   = r.cod_asesor;
+    var monto = r.vlr_devol;
     if (!cod || !monto) return;
     if (!devMap[cod]) devMap[cod] = { devoluciones:0, averias:0, total:0 };
-    if (esAveria_(concepto)) devMap[cod].averias      += monto;
-    else                     devMap[cod].devoluciones += monto;
+    if (r.es_averia) devMap[cod].averias      += monto;
+    else             devMap[cod].devoluciones += monto;
     devMap[cod].total += monto;
   });
   Object.keys(devMap).forEach(function(cod) {
@@ -1565,12 +1577,10 @@ function getResumen() {
   SEDES.forEach(function(s) { sedeDevTotales[s] = { devoluciones: 0, averias: 0 }; });
 
   getDevolucionesPeriodoRaw_(periodoActual).forEach(function(row) {
-    var monto    = row.vlr_devol;   // ya es Math.abs y parseMoney_
-    var concepto = row.concepto;
+    var monto = row.vlr_devol;
     if (!monto) return;
-    var esAv = esAveria_(concepto);
-    var d    = esAv ? 0 : monto;
-    var a    = esAv ? monto : 0;
+    var d = row.es_averia ? 0 : monto;
+    var a = row.es_averia ? monto : 0;
     // Siempre sumamos al total global (debe coincidir con totalDevol / totalAverias)
     sedeDevTotales['TODOS'].devoluciones += d;
     sedeDevTotales['TODOS'].averias      += a;
@@ -1832,8 +1842,9 @@ function getAuditoriaResumen_(modo) {
       var cod    = obtenerCodAsesor_(row[3]);
       var nombre = String(row[4] || '').trim();
       var valor  = parseFloat(row[14]) || 0;
-      if (!cod || !nombre || !esVendedorValido_(cod, nombre)) return;
+      if (!cod || !esVendedorValido_(cod, nombre)) return;
       if (!baseMap[cod]) baseMap[cod] = { cod: cod, nombre: nombre, vn: 0 };
+      else if (!baseMap[cod].nombre && nombre) baseMap[cod].nombre = nombre;
       baseMap[cod].vn += valor;
     });
     // dashboardTotal se construye abajo después de combinar con devol
@@ -1855,7 +1866,7 @@ function getAuditoriaResumen_(modo) {
     var cod   = r.cod_asesor;
     var monto = r.vlr_devol;
     var conc  = r.concepto || '(vacío)';
-    var esAv  = esAveria_(conc);
+    var esAv  = r.es_averia;
 
     if (cod && monto) {
       if (!devMap[cod]) devMap[cod] = { devoluciones: 0, averias: 0 };
@@ -2031,6 +2042,251 @@ function getAuditoriaResumen_(modo) {
       asesores_devol:  Object.keys(devMap).length,
       conceptos_unicos: Object.keys(conceptosMap).length,
     },
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUDITORÍA DETALLE POR ASESOR (conceptos + base asesor 207)
+// Llamar directo desde Apps Script URL — lee BASE (lento para Vercel).
+// ?sheet=auditoria_detalle
+// ════════════════════════════════════════════════════════════════════
+function getAuditoriaDetalleAsesores_() {
+  var t0 = Date.now();
+
+  var ASESORES_FOCO = ['202', '203', '204', '206', '207', '214'];
+
+  // Referencia del sistema para los asesores con diferencias conocidas
+  var SISTEMA = {
+    '202': { devoluciones: 2554.15, averias:  803.67, venta_neta: 10289.10 },
+    '203': { devoluciones: 2228.66, averias:  522.92, venta_neta: 11570.20 },
+    '204': { devoluciones: 1753.41, averias:  797.60, venta_neta: 10795.76 },
+    '206': { devoluciones:  929.21, averias:  507.18, venta_neta:  7072.47 },
+    '207': { devoluciones: 1528.34, averias:  330.97, venta_neta: 10007.65 },
+    '214': { devoluciones: 1417.46, averias:  285.38, venta_neta:  2870.38 },
+  };
+
+  // Período desde cache (evita leer BASE dos veces)
+  var resumenCache = withCache_('resumen', 300, getResumen);
+  var periodoActual = resumenCache ? (resumenCache.periodo || '') : getPeriodoActualDesdeBase_();
+  var tResumen = Date.now();
+
+  // DEVOLUCIONES — un solo pase para todos los asesores foco
+  var devRaw = getDevolucionesPeriodoRaw_(periodoActual);
+  var tDevol = Date.now();
+
+  // Acumuladores por asesor
+  var porAsesor = {};
+  ASESORES_FOCO.forEach(function(cod) {
+    porAsesor[cod] = { devoluciones: 0, averias: 0, conceptos: {} };
+  });
+
+  devRaw.forEach(function(r) {
+    var cod   = r.cod_asesor;
+    if (ASESORES_FOCO.indexOf(cod) < 0) return;
+    var conc  = r.concepto || '(vacío)';
+    var esAv  = r.es_averia;
+    var monto = r.vlr_devol || 0;
+    if (!porAsesor[cod].conceptos[conc]) {
+      porAsesor[cod].conceptos[conc] = { concepto: conc, tipo: esAv ? 'AVERIA' : 'DEVOLUCION', monto: 0, filas: 0 };
+    }
+    porAsesor[cod].conceptos[conc].monto += monto;
+    porAsesor[cod].conceptos[conc].filas++;
+    if (esAv) porAsesor[cod].averias      += monto;
+    else      porAsesor[cod].devoluciones += monto;
+  });
+
+  // Resultado por asesor con diferencias
+  var asesoresDetalle = ASESORES_FOCO.map(function(cod) {
+    var pa = porAsesor[cod];
+    var sm = SISTEMA[cod];
+    var d  = round2_(pa.devoluciones);
+    var a  = round2_(pa.averias);
+    var conceptos = Object.values(pa.conceptos)
+      .sort(function(x, y) { return y.monto - x.monto; })
+      .map(function(c) { return { concepto: c.concepto, tipo: c.tipo, monto: round2_(c.monto), filas: c.filas }; });
+
+    Logger.log('[DETALLE cod=' + cod + '] d=' + d + ' a=' + a +
+      ' dif_d=' + (sm ? round2_(d - sm.devoluciones) : '?') +
+      ' dif_a=' + (sm ? round2_(a - sm.averias) : '?') +
+      ' conceptos: ' + conceptos.map(function(c){ return c.concepto + '(' + c.tipo[0] + ')=' + c.monto; }).join(' | '));
+
+    return {
+      cod_asesor:             cod,
+      devoluciones_dashboard: d,
+      averias_dashboard:      a,
+      devoluciones_sistema:   sm ? sm.devoluciones : null,
+      averias_sistema:        sm ? sm.averias      : null,
+      dif_devoluciones:       sm ? round2_(d - sm.devoluciones)           : null,
+      dif_averias:            sm ? round2_(a - sm.averias)                : null,
+      dif_total:              sm ? round2_((d + a) - (sm.devoluciones + sm.averias)) : null,
+      conceptos:              conceptos,
+    };
+  });
+
+  // BASE_ACUMULADA — detalle filas asesor 207 (identifica fila faltante para brecha VN=-16.21)
+  // BASE cols: [0]=fecha [1]=cod_cli [2]=nom_cli [3]=cod_asesor_raw [4]=nom_vendedor
+  //            [5]=ciudad [6]=cod_sku [7]=nom_producto [8]=negocio
+  //            [13]=cant_neta [14]=valor [18]=periodo
+  var hB = getSheet_(HOJAS.BASE);
+  var base207 = [];
+  var vn207   = 0;
+  var filas207 = 0;
+
+  if (hB && hB.getLastRow() > 1) {
+    var allBase = hB.getDataRange().getValues();
+    for (var i = 1; i < allBase.length; i++) {
+      var row   = allBase[i];
+      var pRow  = periodoYYYYMM_(row[18]);
+      if (pRow !== periodoActual) continue;
+      var cod   = obtenerCodAsesor_(row[3]);
+      if (cod !== '207') continue;
+      var nom   = String(row[4] || '').trim();
+      if (!esVendedorValido_(cod, nom)) continue;
+      var valor = parseFloat(row[14]) || 0;
+      vn207  += valor;
+      filas207++;
+      base207.push({
+        fecha:        row[0] instanceof Date ? Utilities.formatDate(row[0], TZ, 'yyyy-MM-dd') : String(row[0] || ''),
+        cod_cliente:  String(row[1] || '').trim(),
+        nom_cliente:  String(row[2] || '').trim(),
+        cod_sku:      String(row[6] || '').trim(),
+        nom_producto: String(row[7] || '').trim(),
+        negocio:      String(row[8] || '').trim(),
+        cant_neta:    parseFloat(row[13]) || 0,
+        valor:        valor,
+      });
+    }
+  }
+  base207.sort(function(a, b) { return a.fecha > b.fecha ? 1 : a.fecha < b.fecha ? -1 : 0; });
+
+  var tBase = Date.now();
+  var ms = tBase - t0;
+
+  Logger.log('[AUDITORIA_DETALLE] periodo=' + periodoActual + ' ms=' + ms +
+    ' (resumen=' + (tResumen-t0) + ' devol=' + (tDevol-tResumen) + ' base=' + (tBase-tDevol) + ')');
+  Logger.log('[AUDITORIA_DETALLE] vn207_dashboard=' + round2_(vn207) +
+    ' vn207_sistema=10007.65 dif=' + round2_(vn207 - 10007.65) + ' filas207=' + filas207);
+
+  return {
+    ok:      true,
+    periodo: periodoActual,
+    nota:    'Lee BASE completa (~14s). Llamar desde URL directa de Apps Script, no desde Vercel.',
+    asesores_detalle: asesoresDetalle,
+    asesor207_venta_neta: {
+      venta_neta_dashboard: round2_(vn207),
+      venta_neta_sistema:   10007.65,
+      diferencia:           round2_(vn207 - 10007.65),
+      filas_base:           filas207,
+      detalle:              base207,
+    },
+    debug_ms:     ms,
+    debug_counts: { filas_devol: devRaw.length, filas_base207: filas207 },
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// DIAGNÓSTICO CLASIFICACIÓN DEV vs AVERIA
+// ?sheet=clasif_debug
+// Muestra headers reales de DEVOLUCIONES y DEVOLUCIONES_RAW,
+// filas de PRODUCTO VENCIDO asesor 214, y distribución de tipo_producto por concepto.
+// ════════════════════════════════════════════════════════════════════
+function getDiagnosticoClasifDevol_() {
+  var t0 = Date.now();
+
+  // Headers reales de ambas hojas
+  var hDev    = getSheet_(HOJAS.DEVOLUCIONES);
+  var hDevRaw = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DEVOLUCIONES_RAW');
+
+  var devHeaders = [];
+  var rawHeaders = [];
+  var rawSampleRow214 = [];   // fila raw completa para asesor 214 PRODUCTO VENCIDO
+
+  if (hDev && hDev.getLastRow() >= 1) {
+    devHeaders = hDev.getRange(1, 1, 1, hDev.getLastColumn()).getValues()[0].map(String);
+  }
+  if (hDevRaw && hDevRaw.getLastRow() >= 1) {
+    rawHeaders = hDevRaw.getRange(1, 1, 1, hDevRaw.getLastColumn()).getValues()[0].map(String);
+    // Buscar primeras filas de asesor 214 con PRODUCTO VENCIDO en el raw
+    if (hDevRaw.getLastRow() > 1) {
+      var rawAll = hDevRaw.getDataRange().getValues();
+      for (var ri = 1; ri < rawAll.length && rawSampleRow214.length < 5; ri++) {
+        var rr = rawAll[ri];
+        // cod_asesor suele estar en col 8 del raw (0-indexed)
+        var codRaw = String(rr[8] || '').trim();
+        var concRaw = String(rr[4] || '').toUpperCase();
+        if (obtenerCodAsesor_(codRaw) === '214' && concRaw.indexOf('VENCIDO') >= 0) {
+          rawSampleRow214.push(rr.map(function(v) { return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v || ''); }));
+        }
+      }
+    }
+  }
+
+  // Período desde cache
+  var resumenCache = withCache_('resumen', 300, getResumen);
+  var periodoActual = resumenCache ? (resumenCache.periodo || '') : getPeriodoActualDesdeBase_();
+
+  // Leer DEVOLUCIONES procesada (una pasada) para agrupar tipo_producto por concepto
+  var devRaw = getDevolucionesPeriodoRaw_(periodoActual);
+
+  // 1) Agrupación: concepto → tipo_producto → { monto, filas }
+  var tipoPorConcepto = {};
+  devRaw.forEach(function(r) {
+    var conc = r.concepto  || '(vacío)';
+    var tipo = r.tipo_producto || '(vacío)';
+    if (!tipoPorConcepto[conc]) tipoPorConcepto[conc] = {};
+    if (!tipoPorConcepto[conc][tipo]) tipoPorConcepto[conc][tipo] = { monto: 0, filas: 0 };
+    tipoPorConcepto[conc][tipo].monto += r.vlr_devol || 0;
+    tipoPorConcepto[conc][tipo].filas++;
+  });
+
+  var tipoPorConceptoList = Object.keys(tipoPorConcepto).map(function(conc) {
+    return {
+      concepto: conc,
+      tipos: Object.keys(tipoPorConcepto[conc]).map(function(t) {
+        return { tipo_producto: t, monto: round2_(tipoPorConcepto[conc][t].monto), filas: tipoPorConcepto[conc][t].filas };
+      }).sort(function(a, b) { return b.monto - a.monto; }),
+    };
+  }).sort(function(a, b) {
+    var ta = Object.values(tipoPorConcepto[a.concepto]).reduce(function(s, v){ return s + v.monto; }, 0);
+    var tb = Object.values(tipoPorConcepto[b.concepto]).reduce(function(s, v){ return s + v.monto; }, 0);
+    return tb - ta;
+  });
+
+  // 2) Detalle completo de asesor 214 PRODUCTO VENCIDO (procesado, no raw)
+  var pv214 = devRaw.filter(function(r) {
+    return r.cod_asesor === '214' && (r.concepto || '').toUpperCase().indexOf('VENCIDO') >= 0;
+  }).map(function(r) {
+    return {
+      concepto:      r.concepto,
+      tipo_producto: r.tipo_producto,
+      vlr_devol:     r.vlr_devol,
+      cod_cliente:   r.cod_cliente,
+      nom_cliente:   r.nom_cliente,
+      cod_sku:       r.cod_sku,
+      nom_producto:  r.nom_producto,
+      factura:       r.factura,
+    };
+  });
+
+  // 3) Unique tipo_producto values across all rows
+  var uniqueTipos = {};
+  devRaw.forEach(function(r) { uniqueTipos[r.tipo_producto || '(vacío)'] = (uniqueTipos[r.tipo_producto || '(vacío)'] || 0) + 1; });
+
+  Logger.log('[CLASIF_DEBUG] headers_devol=' + JSON.stringify(devHeaders));
+  Logger.log('[CLASIF_DEBUG] headers_raw=' + JSON.stringify(rawHeaders));
+  Logger.log('[CLASIF_DEBUG] unique_tipos=' + JSON.stringify(uniqueTipos));
+  Logger.log('[CLASIF_DEBUG] pv214 filas=' + pv214.length);
+
+  return {
+    ok: true,
+    periodo: periodoActual,
+    devoluciones_headers: devHeaders,
+    devoluciones_raw_headers: rawHeaders,
+    devoluciones_raw_sample_214_pvencido: rawSampleRow214,
+    unique_tipo_producto_values: uniqueTipos,
+    tipo_producto_por_concepto: tipoPorConceptoList,
+    asesor214_pvencido_detalle: pv214,
+    debug_ms: Date.now() - t0,
   };
 }
 
@@ -2332,9 +2588,9 @@ function getDevoluciones() {
     if (!vendedor && !cod) return;
     if (!monto) return;
 
-    // Separar averías de devoluciones puras
-    if (esAveria_(concepto)) totalAverias      += monto;
-    else                     totalDevoluciones += monto;
+    // Separar averías de devoluciones puras (usa clasificación oficial del sistema)
+    if (r.es_averia) totalAverias      += monto;
+    else             totalDevoluciones += monto;
 
     // Si cod está vacío, usar solo el nombre del vendedor como clave de agrupación
     var nombreFinal = cod ? (cod + ' - ' + vendedor) : vendedor;
