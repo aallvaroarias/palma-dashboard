@@ -15,7 +15,7 @@ function buildUrl(base, sheet, params = {}) {
 
 function parseJson(json) {
   if (!json) return null;
-  if (json.error === 'timeout') return null;          // proxy timeout → sin datos
+  if (json.error) return null;                        // cualquier error de proxy → sin datos
   if (json.ok !== undefined) return json.ok ? json.data : null;  // wrapper Apps Script
   return json;                                         // proxy Vercel directo
 }
@@ -211,8 +211,8 @@ const useDashboardStore = create((set, get) => ({
       ['marcas',            1000, d => ({ marcas: d })],
       ['skus',              1300, d => ({ skus: d })],
       ['top_clientes',      1600, d => ({ topClientes: d })],
-      ['dn_marcas',         1900, d => ({ dnMarcas: d })],
-      ['necesidad_cliente', 2200, d => ({ necesidadCliente: d })],
+      ['dn_marcas',         1900, d => ({ dnMarcas: d }),           true],
+      ['necesidad_cliente', 2200, d => ({ necesidadCliente: d }),   true],
       ['combos_resumen',    2500, d => ({ combosResumen: d })],
       ['combos_vendedor',   2800, d => ({ combosVendedor: d?.vendedores ?? [] })],
       // clientes_sin_pc movido a carga bajo demanda (loadClientesSinPC) — ~359 KB, no auto-cargar

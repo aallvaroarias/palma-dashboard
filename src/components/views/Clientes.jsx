@@ -14,7 +14,7 @@ const NEG_COLORS_LIST = [
 ];
 
 export default function Clientes() {
-  const { clientesNuevos, clientesCero, resumen, necesidadCliente, refetchClientes } = useDashboardStore();
+  const { clientesNuevos, clientesCero, resumen, necesidadCliente, loadingFase2, refetchClientes } = useDashboardStore();
   const [expandedNec, setExpandedNec] = useState(null);
   const [filterNegocio, setFilterNegocio] = useState('');
 
@@ -295,10 +295,22 @@ export default function Clientes() {
                 className="flex flex-col items-center justify-center gap-3 rounded-xl border mb-4 py-12"
                 style={{ borderColor: 'var(--border-2)', background: 'rgba(13,30,43,0.5)' }}
               >
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--muted)', opacity: 0.5 }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-palumar-muted text-sm">Sin datos — actualiza el Apps Script para habilitar esta sección</p>
+                {loadingFase2 ? (
+                  <>
+                    <svg className="w-7 h-7 animate-spin" viewBox="0 0 24 24" fill="none" style={{ color: '#2AAED9', opacity: 0.7 }}>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <p className="text-palumar-muted text-sm">Cargando datos de necesidad de cliente…</p>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--muted)', opacity: 0.5 }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-palumar-muted text-sm">Datos de necesidad de cliente no disponibles</p>
+                  </>
+                )}
               </div>
             ) : (
               <>

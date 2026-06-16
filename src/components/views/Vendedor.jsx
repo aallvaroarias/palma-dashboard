@@ -15,7 +15,7 @@ export default function Vendedor() {
 
   const { vendedores, loading, loadVendedores,
           cobertura, cobNegocio, efectividad, skus, clientesNuevos,
-          clientesCero, topClientes, cuotas, devoluciones, dnMarcas, refetchClientes,
+          clientesCero, topClientes, cuotas, devoluciones, dnMarcas, loadingFase2, refetchClientes,
           coberturaVendedoresPC, clientesSinPC,
           loadClientesSinPC, config,
           combosVendedor,
@@ -591,6 +591,15 @@ export default function Vendedor() {
       )}
 
       {/* ── DN por Marca ── */}
+      {(dnMarcas.length === 0 && loadingFase2) && (
+        <div className="table-card mb-4 flex items-center justify-center gap-3 py-8">
+          <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" style={{ color: '#2AAED9', opacity: 0.7, flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-palumar-muted text-sm">Cargando cobertura por marcas…</span>
+        </div>
+      )}
       {dnMarcas.length > 0 && (() => {
         const myCod  = String(v.cod).trim();
         const maestro = v.maestro || 0;
