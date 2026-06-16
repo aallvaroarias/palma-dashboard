@@ -802,12 +802,6 @@ function doGet(e) {
         data = withCache_('audit_' + (e.parameter.modo || 'light'), 60,
           function() { return getAuditoriaResumen_(e.parameter.modo || 'light'); });
         break;
-      case 'auditoria_detalle':
-        data = getAuditoriaDetalleAsesores_();
-        break;
-      case 'clasif_debug':
-        data = getDiagnosticoClasifDevol_();
-        break;
       default:                  data = getResumen();           break;
     }
 
