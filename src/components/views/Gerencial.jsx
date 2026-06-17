@@ -114,6 +114,7 @@ export default function Gerencial() {
   const [openNuevos,      setOpenNuevos]      = useState(false);
   const [openAnalisis,    setOpenAnalisis]    = useState(false);
   const [openMarcas,      setOpenMarcas]      = useState(false);
+  const [openAvanceVend,  setOpenAvanceVend]  = useState(false);
   const [showAllPCTable,      setShowAllPCTable]      = useState(false);
   const [showCombosDetalle,   setShowCombosDetalle]   = useState(false);
   const [showAllCombosTable,  setShowAllCombosTable]  = useState(false); // ver todos los vendedores combos
@@ -677,6 +678,38 @@ export default function Gerencial() {
 
   const navigate = useNavigate();
 
+  // ── Avance completo por vendedor (para tabla expandible) ─────────────────────
+  const avanceVendedores = useMemo(() => {
+    const factor = proyeccionCierre && proyeccionCierre.habilesTransc > 0
+      ? proyeccionCierre.habilesTotal / proyeccionCierre.habilesTransc
+      : 1;
+    return [...vendedoresFiltrados]
+      .filter(v => !esRutaCentral(v.nombre))
+      .map(v => {
+        const cod      = String(v.cod).trim();
+        const meta     = cuotaMap[cod] ?? (v.cuota || 0);
+        const venta    = v.venta_neta || 0;
+        const cumplPct = meta > 0 ? Math.round(venta / meta * 1000) / 10 : null;
+        const proyecc  = Math.round(venta * factor);
+        const faltaRaw = meta > 0 ? meta - venta : null;
+        const diario   = (faltaRaw != null && faltaRaw > 0 && diasHabilesRestantes > 0)
+          ? Math.round(faltaRaw / diasHabilesRestantes) : (faltaRaw != null ? 0 : null);
+        return {
+          cod, nombre: v.nombre,
+          sede:      asesorSedeMap[cod] || '—',
+          venta, meta, cumplPct, proyecc, faltaRaw, diario,
+          cobertura: +v.cobertura || 0,
+        };
+      })
+      .sort((a, b) => {
+        // sin meta al final; resto: menor cumplimiento primero
+        if (a.cumplPct === null && b.cumplPct !== null) return 1;
+        if (a.cumplPct !== null && b.cumplPct === null) return -1;
+        if (a.cumplPct === null && b.cumplPct === null) return 0;
+        return a.cumplPct - b.cumplPct;
+      });
+  }, [vendedoresFiltrados, cuotaMap, asesorSedeMap, proyeccionCierre, diasHabilesRestantes]);
+
   // ── Ranking completo enriquecido (venta + cumplimiento + cobertura + PC) ─────
   const rankingVendedores = useMemo(() => {
     return vs.map(v => {
@@ -936,9 +969,9 @@ export default function Gerencial() {
         )}
         {rf.cuota_total > 0 ? (
           <KpiCard
-            label="Cumpl. Cuota"
+            label="Cumpl. vs Meta"
             value={pct(rf.pct_cumplimiento_equipo || 0)}
-            sub={`Meta ${fmt(rf.cuota_total)}`}
+            sub={`<span style="font-size:14px;font-weight:700;color:#EDF4FB;font-family:'DM Mono',monospace;letter-spacing:-0.5px;display:block;margin-bottom:2px">${fmt(rf.cuota_total)}</span><span style="font-size:10px">meta · venta ${fmt(rf.venta_neta||0)}</span>`}
             color={(rf.pct_cumplimiento_equipo || 0) >= 100 ? 'green' : (rf.pct_cumplimiento_equipo || 0) >= 75 ? 'amber' : 'red'}
             barValue={rf.pct_cumplimiento_equipo || 0}
           />
@@ -1197,7 +1230,7 @@ export default function Gerencial() {
               </div>
             </div>
           </div>
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-end mb-3">
             <button
               onClick={() => navigate('/panel')}
               style={{ fontSize: '12px', color: 'var(--cyan)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}
@@ -1205,6 +1238,93 @@ export default function Gerencial() {
               Ver ranking completo en Mi Panel →
             </button>
           </div>
+
+          {/* ── Avance total vendedores (colapsable) ── */}
+          {avanceVendedores.length > 0 && (() => {
+            const colCumpl = (v) => v.cumplPct == null ? 'var(--muted)'
+              : v.cumplPct >= 90 ? 'var(--green)'
+              : v.cumplPct >= 70 ? 'var(--amber)'
+              : 'var(--red)';
+            const colCob = (c) => c >= 90 ? 'var(--green)' : c >= 70 ? 'var(--amber)' : 'var(--red)';
+            const totalVenta = avanceVendedores.reduce((s, v) => s + v.venta, 0);
+            const totalMeta  = avanceVendedores.filter(v => v.meta > 0).reduce((s, v) => s + v.meta, 0);
+            const totalPct   = totalMeta > 0 ? Math.round(totalVenta / totalMeta * 1000) / 10 : null;
+            return (
+              <>
+                <CollapseTitle
+                  open={openAvanceVend}
+                  onToggle={() => setOpenAvanceVend(o => !o)}
+                  badge={avanceVendedores.length}
+                >
+                  Avance total vendedores
+                </CollapseTitle>
+                {openAvanceVend && (
+                  <div className="table-card mb-4 overflow-x-auto">
+                    <table className="palma-table" style={{ minWidth: 760 }}>
+                      <thead>
+                        <tr>
+                          <th>Vendedor</th>
+                          <th>Sede</th>
+                          <th style={{ textAlign: 'right' }}>Venta real</th>
+                          <th style={{ textAlign: 'right' }}>Meta</th>
+                          <th style={{ textAlign: 'right' }}>Cumpl.</th>
+                          <th style={{ textAlign: 'right' }}>Proyección</th>
+                          <th style={{ textAlign: 'right' }}>Falta</th>
+                          <th style={{ textAlign: 'right' }}>Diario req.</th>
+                          <th style={{ textAlign: 'right' }}>Cobertura</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {avanceVendedores.map(v => {
+                          const excedente = v.faltaRaw != null && v.faltaRaw < 0;
+                          const proyOk    = v.meta > 0 && v.proyecc >= v.meta;
+                          return (
+                            <tr key={v.cod}>
+                              <td style={{ fontSize: '12px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nombre}</td>
+                              <td style={{ fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{v.sede}</td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: 'var(--cyan)' }}>{fmt(v.venta)}</td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: 'var(--muted)' }}>
+                                {v.meta > 0 ? fmt(v.meta) : '—'}
+                              </td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: colCumpl(v), fontWeight: 700 }}>
+                                {v.cumplPct != null ? `${v.cumplPct.toFixed(1)}%` : '—'}
+                              </td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: proyOk ? 'var(--green)' : 'var(--amber)' }}>
+                                {fmt(v.proyecc)}
+                              </td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: excedente ? 'var(--green)' : v.faltaRaw == null ? 'var(--muted)' : 'var(--red)', fontWeight: 600 }}>
+                                {v.faltaRaw == null ? '—' : excedente ? `+${fmt(Math.abs(v.faltaRaw))}` : fmt(v.faltaRaw)}
+                              </td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: v.diario === 0 ? 'var(--green)' : 'var(--muted)' }}>
+                                {v.diario == null ? '—' : v.diario === 0 ? '✓' : fmt(v.diario)}
+                              </td>
+                              <td className="font-mono-num" style={{ textAlign: 'right', color: colCob(v.cobertura), fontWeight: 700 }}>
+                                {v.cobertura > 0 ? `${v.cobertura.toFixed(0)}%` : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      {/* Totales */}
+                      <tfoot>
+                        <tr style={{ borderTop: '2px solid var(--border-2)' }}>
+                          <td colSpan={2} style={{ fontWeight: 700, fontSize: '11px', color: 'var(--white-2)', paddingTop: 6, paddingBottom: 6 }}>
+                            TOTAL ({avanceVendedores.length} vendedores)
+                          </td>
+                          <td className="font-mono-num" style={{ textAlign: 'right', color: 'var(--cyan)', fontWeight: 700 }}>{fmt(totalVenta)}</td>
+                          <td className="font-mono-num" style={{ textAlign: 'right', color: 'var(--muted)', fontWeight: 700 }}>{totalMeta > 0 ? fmt(totalMeta) : '—'}</td>
+                          <td className="font-mono-num" style={{ textAlign: 'right', fontWeight: 700, color: totalPct == null ? 'var(--muted)' : totalPct >= 90 ? 'var(--green)' : totalPct >= 70 ? 'var(--amber)' : 'var(--red)' }}>
+                            {totalPct != null ? `${totalPct.toFixed(1)}%` : '—'}
+                          </td>
+                          <td colSpan={4} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
 
