@@ -969,9 +969,9 @@ export default function Gerencial() {
         )}
         {rf.cuota_total > 0 ? (
           <KpiCard
-            label="Cumpl. vs Meta"
-            value={pct(rf.pct_cumplimiento_equipo || 0)}
-            sub={`<span style="font-size:14px;font-weight:700;color:#EDF4FB;font-family:'DM Mono',monospace;letter-spacing:-0.5px;display:block;margin-bottom:2px">${fmt(rf.cuota_total)}</span><span style="font-size:10px">meta · venta ${fmt(rf.venta_neta||0)}</span>`}
+            label="Meta del equipo"
+            value={fmt(rf.cuota_total)}
+            sub={`<span style="font-size:20px;font-weight:700;color:${(rf.pct_cumplimiento_equipo||0)>=100?'#34D399':(rf.pct_cumplimiento_equipo||0)>=75?'#DDB84A':'#F87171'};font-family:'DM Mono',monospace;letter-spacing:-0.5px;line-height:1">${pct(rf.pct_cumplimiento_equipo||0)}</span><span style="font-size:11px;color:#7A9BB8;margin-left:6px">cumplido · ${fmt(rf.venta_neta||0)}</span>`}
             color={(rf.pct_cumplimiento_equipo || 0) >= 100 ? 'green' : (rf.pct_cumplimiento_equipo || 0) >= 75 ? 'amber' : 'red'}
             barValue={rf.pct_cumplimiento_equipo || 0}
           />
