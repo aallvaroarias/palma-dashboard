@@ -160,10 +160,12 @@ function MiGerenciaContent() {
   const avTotal    = r?.averia_total     ?? r?.averias      ?? r?.averiados  ?? 0;
 
   // ── Metas ECOM: desde endpoint mi_gerencia (hoja METAS_ECOM o defaults) ──
-  const metaEcomTotal = mg?.resumen?.meta_ecom_total || 0;
-  const diasRestantes = mg?.dias_habiles_restantes   || 0;
-  const factorProy    = mg?.factor_proyeccion        || 1;
-  const sinHojaEcom   = mg?.sin_hoja_ecom            ?? true;
+  const metaEcomTotal  = mg?.resumen?.meta_ecom_total || 0;
+  const diasRestantes  = mg?.dias_habiles_restantes   || 0;
+  const factorProy     = mg?.factor_proyeccion        || 1;
+  // sin_hoja_ecom solo es true cuando el servidor lo dice explícitamente
+  const sinHojaEcom    = mg?.sin_hoja_ecom === true;
+  const hojaEncontrada = mg?.hoja_encontrada === true;
 
   // ── Cálculos ECOM usando Venta Neta oficial ───────────────────────────────
   const cumplEcomPct     = metaEcomTotal > 0 ? (ventaNeta / metaEcomTotal) * 100 : 0;
@@ -285,6 +287,7 @@ function MiGerenciaContent() {
   const brechasSorted = [...tablaNeg].sort((a, b) => b.faltaNeg - a.faltaNeg);
 
   // ── Estados de carga ──────────────────────────────────────────────────────
+  // Caso 4: datos aún no llegan (Fase 2 en progreso) → nunca mostrar $0 ni banner
   if (!mg && loadingFase2) {
     return (
       <div className="flex items-center justify-center gap-3 py-16">
@@ -292,35 +295,57 @@ function MiGerenciaContent() {
           <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
           <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        <span className="text-palumar-muted text-sm">Cargando datos de gerencia…</span>
+        <span className="text-palumar-muted text-sm">Esperando datos de Mi Gerencia…</span>
       </div>
     );
   }
 
+  // Caso 2: endpoint no respondió o falló
   if (!mg) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20">
-        <p className="text-palumar-muted text-sm">Datos de gerencia no disponibles</p>
+        <p className="text-palumar-muted text-sm">No se pudo cargar Mi Gerencia. Reintenta actualizar.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="text-xs px-3 py-1.5 rounded-lg border"
+          style={{ color: '#2AAED9', borderColor: 'rgba(45,174,217,0.3)', background: 'rgba(45,174,217,0.07)' }}
+        >
+          Actualizar
+        </button>
       </div>
     );
   }
 
   return (
     <div>
-      {/* Banner: hoja METAS_ECOM no encontrada */}
-      {sinHojaEcom && (
-        <div
-          className="flex items-start gap-3 rounded-xl border mb-5 px-4 py-3"
-          style={{ background: 'rgba(200,164,62,0.08)', borderColor: 'rgba(200,164,62,0.3)' }}
-        >
+      {/* Caso 1 — Hoja no existe realmente */}
+      {sinHojaEcom && !hojaEncontrada && (
+        <div className="flex items-start gap-3 rounded-xl border mb-5 px-4 py-3"
+          style={{ background: 'rgba(200,164,62,0.08)', borderColor: 'rgba(200,164,62,0.3)' }}>
           <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#C8A43E' }}>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
           <p className="text-sm" style={{ color: '#DDB84A', lineHeight: 1.5 }}>
-            <strong>Usando metas ECOM por defecto</strong> — no se encontró la hoja{' '}
-            <code style={{ background: 'rgba(200,164,62,0.15)', padding: '1px 5px', borderRadius: 3 }}>METAS_ECOM</code>.
-            Crea la hoja con columnas <em>NEGOCIO</em> y <em>META_ECOM</em> para usar tus metas reales.
+            <strong>No se encontró la hoja METAS_ECOM</strong> — usando metas por defecto.{' '}
+            Crea la hoja con columnas <code style={{ background: 'rgba(200,164,62,0.15)', padding: '1px 5px', borderRadius: 3 }}>NEGOCIO</code>{' '}
+            y <code style={{ background: 'rgba(200,164,62,0.15)', padding: '1px 5px', borderRadius: 3 }}>META_ECOM</code> para activar tus metas reales.
+          </p>
+        </div>
+      )}
+
+      {/* Caso 3 — Hoja existe pero metas suman 0 */}
+      {sinHojaEcom && hojaEncontrada && (
+        <div className="flex items-start gap-3 rounded-xl border mb-5 px-4 py-3"
+          style={{ background: 'rgba(224,82,82,0.08)', borderColor: 'rgba(224,82,82,0.3)' }}>
+          <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#E05252' }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p className="text-sm" style={{ color: '#F87171', lineHeight: 1.5 }}>
+            <strong>La hoja METAS_ECOM existe, pero no tiene metas válidas.</strong>{' '}
+            Verifica que la columna <code style={{ background: 'rgba(224,82,82,0.12)', padding: '1px 5px', borderRadius: 3 }}>META_ECOM</code>{' '}
+            tenga valores numéricos mayores que 0. Por ahora se usan metas por defecto.
           </p>
         </div>
       )}
