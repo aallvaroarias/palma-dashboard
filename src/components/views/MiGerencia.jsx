@@ -3,7 +3,7 @@ import useDashboardStore from '../../store/dashboardStore';
 import KpiCard from '../ui/KpiCard';
 import SectionTitle from '../ui/SectionTitle';
 import HBarChart from '../charts/HBarChart';
-import { fmt, pct } from '../../utils/formatters';
+import { fmt, pct, getCoberturaVendedor } from '../../utils/formatters';
 
 // ── Clave de acceso ───────────────────────────────────────────────────────────
 // Cambiar solo esta constante para actualizar la clave.
@@ -151,7 +151,7 @@ function AccessGate({ children }) {
 
 // ── Panel principal ───────────────────────────────────────────────────────────
 function MiGerenciaContent() {
-  const { miGerencia: mg, resumen: r, loadingFase2 } = useDashboardStore();
+  const { miGerencia: mg, resumen: r, cobNegocio, loadingFase2 } = useDashboardStore();
 
   // ── Ventas OFICIALES: siempre desde resumen (misma fuente que panel Gerencial) ─
   const ventaBruta = r?.venta_bruta || 0;
@@ -181,6 +181,42 @@ function MiGerenciaContent() {
     });
     return map;
   }, [r]);
+
+  // ── Cobertura por negocio (misma fuente que panel Cobertura) ────────────
+  const NEGOCIOS_ECOM_SET = new Set(['Chocolates', 'Cárnico', 'Galletas', 'Café', 'Bebidas TMLUC', 'Snacks TMLUC', 'Otros TMLUC']);
+
+  const cobNegocioTotal = useMemo(() => {
+    if (!cobNegocio?.length) return [];
+    // Maestro único por vendedor (evita duplicar el universo)
+    const maestroPorVend = {};
+    cobNegocio.forEach(row => {
+      const vCod = getCoberturaVendedor(row).split('-')[0].trim();
+      if (vCod && !maestroPorVend[vCod]) maestroPorVend[vCod] = Number(row.clientes_maestro || 0);
+    });
+    const totalMaestro = Object.values(maestroPorVend).reduce((s, n) => s + n, 0);
+    // Impactados por negocio normalizado (solo los 7 ECOM)
+    const negMap = {};
+    cobNegocio.forEach(row => {
+      const neg = normNeg(String(row.negocio || '').trim());
+      if (!neg || !NEGOCIOS_ECOM_SET.has(neg)) return;
+      negMap[neg] = (negMap[neg] || 0) + Number(row.impactados || 0);
+    });
+    // Venta por negocio desde resumen
+    const ventaNeg = {};
+    (r?.venta_por_negocio || []).forEach(n => {
+      const neg = normNeg(n.negocio);
+      ventaNeg[neg] = (ventaNeg[neg] || 0) + (n.venta || 0);
+    });
+    return Object.entries(negMap)
+      .map(([negocio, impactados]) => ({
+        negocio,
+        maestro:   totalMaestro,
+        impactados,
+        cobertura: totalMaestro > 0 ? Math.round(impactados / totalMaestro * 1000) / 10 : 0,
+        venta:     ventaNeg[negocio] || 0,
+      }))
+      .sort((a, b) => b.cobertura - a.cobertura);
+  }, [cobNegocio, r]);
 
   // ── Meta ECOM y PALMA por negocio (desde mg.negocios) ────────────────────
   const metaEcomMapNeg = useMemo(() => {
@@ -338,7 +374,7 @@ function MiGerenciaContent() {
         <KpiCard
           label="Proyección cierre"
           value={fmt(proyeccion)}
-          sub={`×${factorProy.toFixed(2)} · ${pct(cumplProyEcomPct)} proy.`}
+          sub={`Ritmo ×${factorProy.toFixed(2)} · <strong style="color:${colorPct(cumplProyEcomPct)}">${pct(cumplProyEcomPct)}</strong> vs meta · ${diasRestantes} días`}
           color="teal"
           barValue={cumplProyEcomPct}
           barColor={`linear-gradient(90deg,${colorPct(cumplProyEcomPct)},${colorPct(cumplProyEcomPct)}88)`}
@@ -409,9 +445,58 @@ function MiGerenciaContent() {
         </table>
       </div>
 
+      {/* ── Cobertura por Negocio ──────────────────────────────────────────── */}
+      {cobNegocioTotal.length > 0 && (
+        <>
+          <SectionTitle>Cobertura por Negocio</SectionTitle>
+          {cobNegocioTotal[0]?.maestro > 0 && (
+            <p className="text-palumar-muted mb-3" style={{ fontSize: '11px', lineHeight: 1.5 }}>
+              Universo: <strong style={{ color: 'var(--text-2)' }}>{cobNegocioTotal[0].maestro.toLocaleString('es')}</strong> clientes activos · cada barra = impactados / universo
+            </p>
+          )}
+          <div className="chart-card mb-3">
+            <HBarChart
+              labels={cobNegocioTotal.map(n => n.negocio)}
+              data={cobNegocioTotal.map(n => n.cobertura)}
+              barColors={cobNegocioTotal.map(n => colorPct(n.cobertura))}
+              isPct
+              rowH={38}
+              minH={180}
+              secondaryData={cobNegocioTotal.map(n => n.impactados)}
+              secondaryFmt={(n) => `${n.toLocaleString('es')} clientes`}
+            />
+          </div>
+          <div className="table-card mb-4 overflow-x-auto">
+            <table className="w-full text-xs" style={{ borderCollapse: 'collapse', minWidth: 360 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-2)' }}>
+                  {['Negocio', 'Impactados', 'Universo', 'Cobertura', 'Venta'].map(h => (
+                    <th key={h} className="font-semibold uppercase tracking-wider text-palumar-muted text-right first:text-left py-2 px-2"
+                      style={{ fontSize: '9.5px', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cobNegocioTotal.map((n, i) => (
+                  <tr key={n.negocio} style={{ borderBottom: '1px solid var(--border-2)', background: i % 2 === 0 ? 'transparent' : 'rgba(90,145,185,0.03)' }}>
+                    <td className="py-2 px-2 font-semibold text-palumar-white" style={{ whiteSpace: 'nowrap' }}>{n.negocio}</td>
+                    <td className="py-2 px-2 text-right font-mono-num text-palumar-white">{n.impactados.toLocaleString('es')}</td>
+                    <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{n.maestro.toLocaleString('es')}</td>
+                    <td className="py-2 px-2 text-right font-mono-num font-semibold" style={{ color: colorPct(n.cobertura) }}>{pct(n.cobertura)}</td>
+                    <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{fmt(n.venta)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       {/* ── Gráficas ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <div className="table-card">
+        <div className="chart-card">
           <p className="text-palumar-muted font-bold uppercase tracking-widest mb-3" style={{ fontSize: '10px', letterSpacing: '0.9px' }}>
             Cumplimiento ECOM % por Negocio
           </p>
@@ -424,7 +509,7 @@ function MiGerenciaContent() {
             minH={160}
           />
         </div>
-        <div className="table-card">
+        <div className="chart-card">
           <p className="text-palumar-muted font-bold uppercase tracking-widest mb-3" style={{ fontSize: '10px', letterSpacing: '0.9px' }}>
             Brecha vs Meta ECOM por Negocio
           </p>
