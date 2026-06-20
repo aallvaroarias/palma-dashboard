@@ -21,7 +21,7 @@ export const barDataLabelsPlugin = {
     const { ctx, chartArea } = chart;
     if (!opts || !chartArea) return;
 
-    const { formatValue, isPct, secondaryData, secondaryFmt } = opts;
+    const { formatValue, isPct, secondaryData, secondaryFmt, secondaryColor } = opts;
 
     chart.data.datasets.forEach((dataset, di) => {
       const meta = chart.getDatasetMeta(di);
@@ -61,9 +61,9 @@ export const barDataLabelsPlugin = {
             ctx.fillStyle = 'rgba(237,244,251,0.95)';
             ctx.fillText(label1, xPos, bar.y - 5);
 
-            // line 2: venta $ — cyan tint to contrast with the bar
-            ctx.font      = '500 9px "DM Mono", monospace';
-            ctx.fillStyle = 'rgba(45,200,216,0.88)';
+            // line 2: secondary value
+            ctx.font      = '600 9px "DM Mono", monospace';
+            ctx.fillStyle = secondaryColor || 'rgba(45,200,216,0.88)';
             ctx.fillText(label2, xPos, bar.y + 6);
           } else {
             ctx.font      = '500 10px "DM Mono", monospace';
@@ -82,8 +82,8 @@ export const barDataLabelsPlugin = {
             ctx.fillStyle = '#7A9BB8';
             ctx.fillText(label1, xPos, bar.y - 5);
 
-            ctx.font      = '500 9px "DM Mono", monospace';
-            ctx.fillStyle = 'rgba(45,200,216,0.70)';
+            ctx.font      = '600 9px "DM Mono", monospace';
+            ctx.fillStyle = secondaryColor || 'rgba(45,200,216,0.70)';
             ctx.fillText(label2, xPos, bar.y + 6);
           } else {
             ctx.font      = '500 10px "DM Mono", monospace';

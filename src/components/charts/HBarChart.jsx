@@ -47,6 +47,7 @@ export default function HBarChart({
   rowH = 36,
   secondaryData,    // optional: array of secondary values (one per bar)
   secondaryFmt,     // optional: formatter for secondary value
+  secondaryColor,   // optional: override color for secondary label
 }) {
   const effectiveRowH = secondaryData ? Math.max(rowH, 44) : rowH;
   const height = Math.max(minH, labels.length * effectiveRowH + 48);
@@ -104,6 +105,7 @@ export default function HBarChart({
         isPct,
         secondaryData,
         secondaryFmt,
+        secondaryColor,
       },
     },
     scales: {

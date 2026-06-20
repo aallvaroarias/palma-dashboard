@@ -374,7 +374,7 @@ function MiGerenciaContent() {
         <KpiCard
           label="Proyección cierre"
           value={fmt(proyeccion)}
-          sub={`Ritmo ×${factorProy.toFixed(2)} · <strong style="color:${colorPct(cumplProyEcomPct)}">${pct(cumplProyEcomPct)}</strong> vs meta · ${diasRestantes} días`}
+          sub={`<strong style="color:${colorPct(cumplProyEcomPct)};font-size:14px">${pct(cumplProyEcomPct)}</strong> de Meta ECOM`}
           color="teal"
           barValue={cumplProyEcomPct}
           barColor={`linear-gradient(90deg,${colorPct(cumplProyEcomPct)},${colorPct(cumplProyEcomPct)}88)`}
@@ -464,6 +464,7 @@ function MiGerenciaContent() {
               minH={180}
               secondaryData={cobNegocioTotal.map(n => n.impactados)}
               secondaryFmt={(n) => `${n.toLocaleString('es')} clientes`}
+              secondaryColor="rgba(237,244,251,0.88)"
             />
           </div>
           <div className="table-card mb-4 overflow-x-auto">
