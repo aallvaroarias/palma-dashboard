@@ -3492,7 +3492,12 @@ function normNegMiG_(nombre) {
     'TAJADOS': 'Tajados', 'TAJADO': 'Tajados',
   };
   if (!nombre) return '';
-  var s = String(nombre).trim().replace(/^\d+\s*[-_]\s*/, '');
+  var s = String(nombre).trim();
+  // Repara mojibake típico de doble-encoding UTF-8→Latin1 (ej. "Nutrici√≥n Experta")
+  s = s.replace(/√©/g, 'e').replace(/√≥/g, 'o').replace(/√∫/g, 'u')
+       .replace(/√°/g, 'a').replace(/√±/g, 'n').replace(/√≠/g, 'i');
+  s = s.replace(/Û/g, 'u').replace(/û/g, 'u');
+  s = s.replace(/^\d+\s*[-_]\s*/, '');
   var limpio = s.trim();
   var key = s.toUpperCase()
     .replace(/[ÁÀÂÄ]/g, 'A').replace(/[ÉÈÊË]/g, 'E')
@@ -3510,28 +3515,43 @@ function normNegMiG_(nombre) {
 function getMiGerencia_() {
   // ── Metas por defecto (si la hoja METAS_ECOM no existe aún) ──────────────
   var DEFAULTS = {
-    'Chocolates':    170589,
-    'Cárnico':       137796,
-    'Galletas':      85681,
-    'Bebidas TMLUC': 34247,
-    'Café':          31562,
-    'Snacks TMLUC':  2037,
-    'Otros TMLUC':   50,
+    'Chocolates':        170589,
+    'Cárnico':           137796,
+    'Galletas':          85681,
+    'Bebidas TMLUC':     34247,
+    'Café':              31562,
+    'Snacks TMLUC':      2037,
+    'Otros TMLUC':       50,
+    'Nutrición Experta': 1000,
   };
 
   // ── 1. Leer hoja METAS_ECOM ───────────────────────────────────────────────
   var hME = getSheet_('METAS_ECOM');
   var metasEcom = {};
-  var sinHoja = !hME || hME.getLastRow() < 2;
+  var hojaEncontrada = !!(hME && hME.getLastRow() >= 2);
+  var sinHoja = !hojaEncontrada;
+  var totalFilas = 0;
+  var negCol = 0, metaCol = 1;           // fallback: columna A = negocio, B = meta
 
-  if (!sinHoja) {
-    hME.getDataRange().getValues().slice(1).forEach(function(r) {
-      var neg  = normNegMiG_(String(r[0] || '').trim());
-      var meta = parseFloat(r[1]) || 0;
-      if (neg && meta > 0) metasEcom[neg] = meta;
+  if (hojaEncontrada) {
+    var allRows = hME.getDataRange().getValues();
+    totalFilas = allRows.length - 1;     // excluye encabezado
+    // Detección flexible de columnas (acepta NEGOCIO / Negocio / META_ECOM / Meta ECOM / meta_ecom …)
+    var headers = allRows[0].map(function(h) {
+      return String(h || '').trim().toUpperCase().replace(/[\s_]+/g, '');
+    });
+    headers.forEach(function(h, i) {
+      if (h === 'NEGOCIO' || h === 'NEG') negCol = i;
+      if (h === 'METAECOM' || h === 'METAECO' || h === 'META_ECOM' || h === 'METAECOMECOM') metaCol = i;
+    });
+    allRows.slice(1).forEach(function(r) {
+      var neg  = normNegMiG_(String(r[negCol] || '').trim());
+      var meta = parseFloat(r[metaCol]) || 0;
+      if (neg && meta > 0) metasEcom[neg] = (metasEcom[neg] || 0) + meta;
     });
     if (Object.keys(metasEcom).length === 0) sinHoja = true;
   }
+  var usandoDefaults = sinHoja;
   if (sinHoja) {
     Object.keys(DEFAULTS).forEach(function(k) { metasEcom[k] = DEFAULTS[k]; });
   }
@@ -3615,8 +3635,16 @@ function getMiGerencia_() {
 
   return {
     sin_hoja_ecom:          sinHoja,
+    hoja_encontrada:        hojaEncontrada,
     dias_habiles_restantes: diasRestantes,
     factor_proyeccion:      factor,
+    debug: {
+      fuente_metas:               usandoDefaults ? 'defaults' : 'METAS_ECOM',
+      hoja_metas_ecom_encontrada: hojaEncontrada,
+      total_filas_metas_ecom:     totalFilas,
+      col_negocio:                negCol,
+      col_meta_ecom:              metaCol,
+    },
     resumen: {
       meta_ecom_total:             round2_(ecomTotal),
       venta_real_total:            round2_(ventaTotal),

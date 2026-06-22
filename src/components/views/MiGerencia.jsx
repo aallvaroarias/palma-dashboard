@@ -184,9 +184,8 @@ function MiGerenciaContent() {
     return map;
   }, [r]);
 
-  // ── Cobertura por negocio (misma fuente que panel Cobertura) ────────────
-  const NEGOCIOS_ECOM_SET = new Set(['Chocolates', 'Cárnico', 'Galletas', 'Café', 'Bebidas TMLUC', 'Snacks TMLUC', 'Otros TMLUC']);
-
+  // ── Cobertura por negocio (misma fuente que panel Cobertura) ─────────────
+  // Sin lista fija: se incluye todo negocio real con clientes impactados.
   const cobNegocioTotal = useMemo(() => {
     if (!cobNegocio?.length) return [];
     // Maestro único por vendedor (evita duplicar el universo)
@@ -196,11 +195,11 @@ function MiGerenciaContent() {
       if (vCod && !maestroPorVend[vCod]) maestroPorVend[vCod] = Number(row.clientes_maestro || 0);
     });
     const totalMaestro = Object.values(maestroPorVend).reduce((s, n) => s + n, 0);
-    // Impactados por negocio normalizado (solo los 7 ECOM)
+    // Impactados por negocio normalizado — todos los negocios reales con clientes impactados
     const negMap = {};
     cobNegocio.forEach(row => {
       const neg = normNeg(String(row.negocio || '').trim());
-      if (!neg || !NEGOCIOS_ECOM_SET.has(neg)) return;
+      if (!neg) return;
       negMap[neg] = (negMap[neg] || 0) + Number(row.impactados || 0);
     });
     // Venta por negocio desde resumen
@@ -210,6 +209,7 @@ function MiGerenciaContent() {
       ventaNeg[neg] = (ventaNeg[neg] || 0) + (n.venta || 0);
     });
     return Object.entries(negMap)
+      .filter(([, impactados]) => impactados > 0)
       .map(([negocio, impactados]) => ({
         negocio,
         maestro:   totalMaestro,
@@ -220,11 +220,12 @@ function MiGerenciaContent() {
       .sort((a, b) => b.cobertura - a.cobertura);
   }, [cobNegocio, r]);
 
-  // ── Meta ECOM y PALMA por negocio (desde mg.negocios) ────────────────────
+  // ── Meta ECOM y PALMA por negocio (desde mg.negocios) — incluye TODOS, ──
+  // incluso los que no tienen meta ECOM definida (se marcan "sin meta ECOM")
   const metaEcomMapNeg = useMemo(() => {
     const map = {};
     (mg?.negocios || []).forEach(n => {
-      if (n.negocio && (n.meta_ecom || 0) > 0) map[n.negocio] = n.meta_ecom;
+      if (n.negocio) map[n.negocio] = n.meta_ecom || 0;
     });
     return map;
   }, [mg]);
@@ -237,21 +238,30 @@ function MiGerenciaContent() {
     return map;
   }, [mg]);
 
-  // ── Tabla por negocio: solo negocios con meta ECOM, cruzado con venta real ─
+  // ── Tabla por negocio: TODOS los negocios con venta y/o meta ECOM real ──
+  // Regla: no se oculta un negocio solo por no tener meta ECOM. Solo se
+  // oculta si no tiene venta NI meta ECOM (sin actividad real).
   const tablaNeg = useMemo(() => {
-    return Object.entries(metaEcomMapNeg)
-      .map(([neg, metaEcom]) => {
-        const ventaReal    = ventaMapNeg[neg] || 0;
-        const metaPalma    = metaPalmaMapNeg[neg] || 0;
-        const cumplPct     = metaEcom > 0 ? (ventaReal / metaEcom) * 100 : 0;
-        const proy         = ventaReal * factorProy;
-        const cumplProyPct = metaEcom > 0 ? (proy / metaEcom) * 100 : 0;
-        const faltaNeg     = metaEcom - ventaReal;
-        const diarioNeg    = diasRestantes > 0 ? faltaNeg / diasRestantes : 0;
-        return { neg, metaEcom, ventaReal, metaPalma, cumplPct, proy, cumplProyPct, faltaNeg, diarioNeg };
+    const todos = new Set([...Object.keys(metaEcomMapNeg), ...Object.keys(ventaMapNeg)]);
+    return Array.from(todos)
+      .map(neg => {
+        const metaEcom  = metaEcomMapNeg[neg] || 0;
+        const ventaReal = ventaMapNeg[neg] || 0;
+        const metaPalma = metaPalmaMapNeg[neg] || 0;
+        const tieneMeta = metaEcom > 0;
+        const proy          = ventaReal * factorProy;
+        const cumplPct      = tieneMeta ? (ventaReal / metaEcom) * 100 : null;
+        const cumplProyPct  = tieneMeta ? (proy / metaEcom) * 100 : null;
+        const faltaNeg       = tieneMeta ? metaEcom - ventaReal : null;
+        const diarioNeg      = tieneMeta && diasRestantes > 0 ? faltaNeg / diasRestantes : null;
+        return { neg, metaEcom, ventaReal, metaPalma, tieneMeta, cumplPct, proy, cumplProyPct, faltaNeg, diarioNeg };
       })
+      .filter(n => n.ventaReal !== 0 || n.metaEcom !== 0)
       .sort((a, b) => b.ventaReal - a.ventaReal);
   }, [metaEcomMapNeg, ventaMapNeg, metaPalmaMapNeg, factorProy, diasRestantes]);
+
+  // Subconjunto con meta ECOM real — único caso donde cumplimiento/brecha vs meta tiene sentido
+  const tablaNegConMeta = useMemo(() => tablaNeg.filter(n => n.tieneMeta), [tablaNeg]);
 
   // ── Lectura rápida ────────────────────────────────────────────────────────
   const lectura = useMemo(() => {
@@ -281,10 +291,11 @@ function MiGerenciaContent() {
   }, [mg, r, ventaBruta, ventaNeta, devTotal, avTotal, metaEcomTotal,
       cumplEcomPct, falta, diasRestantes, factorProy, proyeccion, cumplProyEcomPct, diarioReq]);
 
-  // ── Datos para gráficas ───────────────────────────────────────────────────
-  const chartCumpl  = tablaNeg.map(n => +n.cumplPct.toFixed(1));
+  // ── Datos para gráficas (solo negocios con meta ECOM real) ────────────────
+  const chartLabels = tablaNegConMeta.map(n => n.neg);
+  const chartCumpl  = tablaNegConMeta.map(n => +n.cumplPct.toFixed(1));
   const chartColors = chartCumpl.map(colorPct);
-  const brechasSorted = [...tablaNeg].sort((a, b) => b.faltaNeg - a.faltaNeg);
+  const brechasSorted = [...tablaNegConMeta].sort((a, b) => b.faltaNeg - a.faltaNeg);
 
   // ── Estados de carga ──────────────────────────────────────────────────────
   // Caso 4: datos aún no llegan (Fase 2 en progreso) → nunca mostrar $0 ni banner
@@ -445,13 +456,21 @@ function MiGerenciaContent() {
                 }}
               >
                 <td className="py-2 px-2 font-semibold text-palumar-white" style={{ whiteSpace: 'nowrap' }}>{n.neg}</td>
-                <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{fmt(n.metaEcom)}</td>
+                <td className="py-2 px-2 text-right font-mono-num" style={{ color: n.tieneMeta ? 'var(--text-2)' : '#7A9BB8' }}>
+                  {n.tieneMeta ? fmt(n.metaEcom) : <em style={{ fontStyle: 'italic' }}>sin meta ECOM</em>}
+                </td>
                 <td className="py-2 px-2 text-right font-mono-num text-palumar-white">{fmt(n.ventaReal)}</td>
-                <td className="py-2 px-2 text-right font-mono-num font-semibold" style={{ color: colorPct(n.cumplPct) }}>{pct(n.cumplPct)}</td>
-                <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{fmt(n.proy)}</td>
-                <td className="py-2 px-2 text-right font-mono-num" style={{ color: colorPct(n.cumplProyPct) }}>{pct(n.cumplProyPct)}</td>
-                <td className="py-2 px-2 text-right font-mono-num" style={{ color: '#E05252' }}>{fmt(n.faltaNeg)}</td>
-                <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{fmt(n.diarioNeg)}</td>
+                <td className="py-2 px-2 text-right font-mono-num font-semibold" style={{ color: n.tieneMeta ? colorPct(n.cumplPct) : '#7A9BB8' }}>
+                  {n.tieneMeta ? pct(n.cumplPct) : '—'}
+                </td>
+                <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{n.tieneMeta ? fmt(n.proy) : '—'}</td>
+                <td className="py-2 px-2 text-right font-mono-num" style={{ color: n.tieneMeta ? colorPct(n.cumplProyPct) : '#7A9BB8' }}>
+                  {n.tieneMeta ? pct(n.cumplProyPct) : '—'}
+                </td>
+                <td className="py-2 px-2 text-right font-mono-num" style={{ color: n.tieneMeta ? '#E05252' : '#7A9BB8' }}>
+                  {n.tieneMeta ? fmt(n.faltaNeg) : '—'}
+                </td>
+                <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{n.tieneMeta ? fmt(n.diarioNeg) : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -527,7 +546,7 @@ function MiGerenciaContent() {
             Cumplimiento ECOM % por Negocio
           </p>
           <HBarChart
-            labels={tablaNeg.map(n => n.neg)}
+            labels={chartLabels}
             data={chartCumpl}
             barColors={chartColors}
             isPct
@@ -569,8 +588,8 @@ function MiGerenciaContent() {
           </thead>
           <tbody>
             {tablaNeg.map((n, i) => {
-              const diff       = n.metaEcom - n.metaPalma;
-              const infladoPct = n.metaPalma > 0 ? (diff / n.metaPalma) * 100 : 0;
+              const diff       = n.tieneMeta ? n.metaEcom - n.metaPalma : null;
+              const infladoPct = n.tieneMeta && n.metaPalma > 0 ? (diff / n.metaPalma) * 100 : null;
               return (
                 <tr
                   key={n.neg}
@@ -581,12 +600,14 @@ function MiGerenciaContent() {
                 >
                   <td className="py-2 px-2 font-semibold text-palumar-white" style={{ whiteSpace: 'nowrap' }}>{n.neg}</td>
                   <td className="py-2 px-2 text-right font-mono-num text-palumar-muted">{fmt(n.metaPalma)}</td>
-                  <td className="py-2 px-2 text-right font-mono-num text-palumar-white">{fmt(n.metaEcom)}</td>
-                  <td className="py-2 px-2 text-right font-mono-num" style={{ color: diff > 0 ? '#C8A43E' : '#0FA97A' }}>
-                    {diff >= 0 ? '+' : ''}{fmt(diff)}
+                  <td className="py-2 px-2 text-right font-mono-num" style={{ color: n.tieneMeta ? 'var(--text-1)' : '#7A9BB8' }}>
+                    {n.tieneMeta ? fmt(n.metaEcom) : <em style={{ fontStyle: 'italic' }}>sin meta ECOM</em>}
                   </td>
-                  <td className="py-2 px-2 text-right font-mono-num" style={{ color: infladoPct > 0 ? '#C8A43E' : '#0FA97A' }}>
-                    {infladoPct >= 0 ? '+' : ''}{pct(infladoPct)}
+                  <td className="py-2 px-2 text-right font-mono-num" style={{ color: diff == null ? '#7A9BB8' : diff > 0 ? '#C8A43E' : '#0FA97A' }}>
+                    {diff == null ? '—' : `${diff >= 0 ? '+' : ''}${fmt(diff)}`}
+                  </td>
+                  <td className="py-2 px-2 text-right font-mono-num" style={{ color: infladoPct == null ? '#7A9BB8' : infladoPct > 0 ? '#C8A43E' : '#0FA97A' }}>
+                    {infladoPct == null ? '—' : `${infladoPct >= 0 ? '+' : ''}${pct(infladoPct)}`}
                   </td>
                 </tr>
               );
