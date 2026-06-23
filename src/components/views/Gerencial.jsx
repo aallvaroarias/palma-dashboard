@@ -570,9 +570,10 @@ export default function Gerencial() {
       const meta  = metaMap[key] || 0;
       const venta = ventaMap[key] || 0;
       const proyec = venta * factor;
-      const pctC   = meta > 0 ? Math.round(venta / meta * 1000) / 10 : 0;
+      const pctC     = meta > 0 ? Math.round(venta  / meta * 1000) / 10 : 0;
+      const pctProy  = meta > 0 ? Math.round(proyec / meta * 1000) / 10 : 0;
       const falta  = meta - venta;
-      return { negocio: key, meta, venta, proyec, pctC, falta, conMeta: meta > 0 };
+      return { negocio: key, meta, venta, proyec, pctC, pctProy, falta, conMeta: meta > 0 };
     }).sort((a, b) => b.meta - a.meta || b.venta - a.venta);
 
     // Fila "Sin negocio identificado" si diferencia > $0.50
@@ -581,7 +582,7 @@ export default function Gerencial() {
         negocio: 'Sin negocio identificado',
         meta: 0, venta: ventaSinNegocio,
         proyec: ventaSinNegocio * factor,
-        pctC: 0, falta: 0, conMeta: false, sinIdentificar: true,
+        pctC: 0, pctProy: 0, falta: 0, conMeta: false, sinIdentificar: true,
       });
     }
 
@@ -1158,7 +1159,8 @@ export default function Gerencial() {
                     <th style={{ textAlign: 'right' }}>Meta</th>
                     <th style={{ textAlign: 'right' }}>Venta Real</th>
                     <th style={{ textAlign: 'right' }}>Proyección</th>
-                    <th style={{ minWidth: '140px' }}>Cumplimiento</th>
+                    <th style={{ minWidth: '140px' }}>Cumpl. Actual</th>
+                    <th style={{ minWidth: '110px' }}>Cumpl. Proy.</th>
                     <th style={{ textAlign: 'right' }}>Falta / Exceso</th>
                   </tr>
                 </thead>
@@ -1167,6 +1169,10 @@ export default function Gerencial() {
                     const col = !row.conMeta ? 'var(--cyan)'
                       : row.pctC >= 100 ? 'var(--green)'
                       : row.pctC >= 75  ? 'var(--amber)'
+                      : 'var(--red)';
+                    const colProy = !row.conMeta ? 'var(--cyan)'
+                      : row.pctProy >= 90 ? 'var(--green)'
+                      : row.pctProy >= 70 ? 'var(--amber)'
                       : 'var(--red)';
                     const barW = row.conMeta ? Math.min(row.pctC, 100) : 0;
                     const exceso = row.falta < 0;
@@ -1191,6 +1197,11 @@ export default function Gerencial() {
                             </div>
                           ) : <span className="text-palumar-muted">—</span>}
                         </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {row.conMeta
+                            ? <span style={{ color: colProy, fontWeight: 700, fontSize: '12px' }}>{row.pctProy.toFixed(1)}%</span>
+                            : <span className="text-palumar-muted">—</span>}
+                        </td>
                         <td style={{ textAlign: 'right', fontWeight: 600, color: !row.conMeta ? 'var(--muted)' : exceso ? 'var(--green)' : 'var(--red)' }} className="font-mono-num">
                           {!row.conMeta ? '—' : exceso ? `+${fmt(Math.abs(row.falta))}` : fmt(row.falta)}
                         </td>
@@ -1202,9 +1213,11 @@ export default function Gerencial() {
                     const totalMeta  = metasPorNegocio.filter(r2 => r2.conMeta).reduce((s, r2) => s + r2.meta, 0);
                     const totalVenta = metasPorNegocio.reduce((s, r2) => s + r2.venta, 0);
                     const totalProyec= metasPorNegocio.reduce((s, r2) => s + r2.proyec, 0);
-                    const totalPct   = totalMeta > 0 ? Math.round(totalVenta / totalMeta * 1000) / 10 : 0;
+                    const totalPct   = totalMeta > 0 ? Math.round(totalVenta  / totalMeta * 1000) / 10 : 0;
+                    const totalPctProy = totalMeta > 0 ? Math.round(totalProyec / totalMeta * 1000) / 10 : 0;
                     const totalFalta = totalMeta - totalVenta;
                     const col2 = totalPct >= 100 ? 'var(--green)' : totalPct >= 75 ? 'var(--amber)' : 'var(--red)';
+                    const col2Proy = totalPctProy >= 90 ? 'var(--green)' : totalPctProy >= 70 ? 'var(--amber)' : 'var(--red)';
                     return (
                       <tr style={{ borderTop: '2px solid var(--border-2)', fontWeight: 700 }}>
                         <td>TOTAL</td>
@@ -1218,6 +1231,9 @@ export default function Gerencial() {
                             </div>
                             <span style={{ color: col2, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{totalPct.toFixed(1)}%</span>
                           </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span style={{ color: col2Proy, fontWeight: 700, fontSize: '12px' }}>{totalPctProy.toFixed(1)}%</span>
                         </td>
                         <td style={{ textAlign: 'right', color: totalFalta <= 0 ? 'var(--green)' : 'var(--red)' }} className="font-mono-num">
                           {totalFalta <= 0 ? `+${fmt(Math.abs(totalFalta))}` : fmt(totalFalta)}
