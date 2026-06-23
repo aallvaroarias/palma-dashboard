@@ -15,11 +15,13 @@ export default function Vendedor() {
 
   const { vendedores, loading, loadVendedores,
           cobertura, cobNegocio, efectividad, skus, clientesNuevos,
-          clientesCero, topClientes, cuotas, devoluciones, dnMarcas, loadingFase2, refetchClientes,
+          clientesCero, topClientes, cuotas, devoluciones, dnMarcas, coberturaMarcas, loadingFase2, refetchClientes,
           coberturaVendedoresPC, clientesSinPC,
           loadClientesSinPC, config,
           combosVendedor,
           combosVendedorDetalle, loadCombosVendedorDetalle, combosVendedorDetalleLoading } = useDashboardStore();
+
+  const [misMarcasVerTodas, setMisMarcasVerTodas] = useState(false);
 
   // Cargar clientes sin producto clave en cuanto hay un vendedor seleccionado
   useEffect(() => { if (cod) loadClientesSinPC?.(); }, [cod]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -287,6 +289,22 @@ export default function Vendedor() {
     const myCod = String(v.cod).trim();
     return combosVendedorDetalle.vendedores.find(x => String(x.cod_asesor).trim() === myCod) || null;
   }, [combosVendedorDetalle, v]);
+
+  // ── Mi cobertura por marcas — TODAS las marcas del vendedor (misma fuente
+  // backend que Gerencial, vía store.coberturaMarcas, para que ambos paneles
+  // nunca difieran) ──────────────────────────────────────────────────────────
+  const misMarcasEntry = useMemo(() => {
+    if (!v || !coberturaMarcas?.vendedores) return null;
+    const myCod = String(v.cod).trim();
+    return coberturaMarcas.vendedores.find(x => String(x.cod_asesor).trim() === myCod) || null;
+  }, [coberturaMarcas, v]);
+
+  const misMarcasOrdenadas = useMemo(() => {
+    if (!misMarcasEntry?.marcas?.length) return [];
+    return [...misMarcasEntry.marcas].sort((a, b) => b.cobertura_pct - a.cobertura_pct);
+  }, [misMarcasEntry]);
+
+  const misMarcasShown = misMarcasVerTodas ? misMarcasOrdenadas : misMarcasOrdenadas.slice(0, 10);
 
   if (!cod) {
     // ── Debug ──────────────────────────────────────────────────────────────
@@ -665,6 +683,76 @@ export default function Vendedor() {
           </>
         );
       })()}
+
+      {/* ── Mi Cobertura por Marcas ── */}
+      <SectionTitle>Mi cobertura por marcas</SectionTitle>
+      {!coberturaMarcas && loadingFase2 && (
+        <div className="table-card mb-4 flex items-center justify-center gap-3 py-8">
+          <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" style={{ color: '#2AAED9', opacity: 0.7, flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-palumar-muted text-sm">Cargando cobertura por marcas…</span>
+        </div>
+      )}
+      {!coberturaMarcas && !loadingFase2 && (
+        <div className="table-card mb-4 text-center py-8 text-palumar-muted text-sm">
+          No se pudo cargar cobertura por marcas.
+        </div>
+      )}
+      {coberturaMarcas && misMarcasOrdenadas.length === 0 && (
+        <div className="table-card mb-4 text-center py-8 text-palumar-muted text-sm">
+          Sin datos de cobertura por marcas para este filtro.
+        </div>
+      )}
+      {coberturaMarcas && misMarcasOrdenadas.length > 0 && (
+        <>
+          <p className="text-palumar-muted mb-3" style={{ fontSize: '11px' }}>
+            Universo: <strong style={{ color: 'var(--white-2)' }}>{(misMarcasEntry.universo_vendedor || 0).toLocaleString('es')}</strong> clientes activos asignados · cobertura = clientes impactados ÷ universo del vendedor
+          </p>
+          <div className="table-card mb-3 overflow-x-auto">
+            <table className="palma-table">
+              <thead>
+                <tr>
+                  <th>Marca</th>
+                  <th style={{ textAlign: 'right' }}>Clientes impactados</th>
+                  <th style={{ textAlign: 'right' }}>Universo vendedor</th>
+                  <th style={{ textAlign: 'right' }}>Cobertura %</th>
+                  <th style={{ textAlign: 'right' }}>Venta</th>
+                  <th style={{ textAlign: 'right' }}>Oportunidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {misMarcasShown.map(m => {
+                  const col = m.cobertura_pct >= 70 ? 'var(--green)' : m.cobertura_pct >= 40 ? 'var(--amber)' : 'var(--red)';
+                  return (
+                    <tr key={m.marca}>
+                      <td style={{ fontWeight: 600 }}>{m.marca}</td>
+                      <td style={{ textAlign: 'right' }}>{m.clientes_impactados.toLocaleString('es')}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{m.universo.toLocaleString('es')}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span style={{ color: col, fontWeight: 700 }}>{m.cobertura_pct.toFixed(1)}%</span>
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(m.venta)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--red)' }}>{m.oportunidad_clientes.toLocaleString('es')} clientes</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {misMarcasOrdenadas.length > 10 && (
+            <div className="flex justify-end mb-6">
+              <button
+                onClick={() => setMisMarcasVerTodas(s => !s)}
+                style={{ padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)' }}
+              >
+                {misMarcasVerTodas ? '▲ Ver top 10' : `▼ Ver todas mis marcas (${misMarcasOrdenadas.length})`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">

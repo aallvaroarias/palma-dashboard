@@ -763,6 +763,8 @@ function doGet(e) {
         data = withCache_('necesidad',    300, getNecesidadCliente); break;
       case 'dn_marcas':
         data = withCache_('dn_marcas',    300, getDNMarcas);     break;
+      case 'cobertura_marcas':
+        data = withCache_('cobertura_marcas', 300, getCoberturaMarcas_); break;
       case 'mi_gerencia':
         data = withCache_('mi_gerencia',  300, getMiGerencia_);  break;
 
@@ -1443,7 +1445,7 @@ function limpiarTriggersWarmCache()   { return limpiarTriggersWarmCache_();   }
 function invalidarCache_() {
   CacheService.getScriptCache().removeAll([
     'resumen', 'vendedores', 'devoluciones', 'tendencia',
-    'dn_marcas', 'marcas', 'skus', 'top_clientes',
+    'dn_marcas', 'cobertura_marcas', 'marcas', 'skus', 'top_clientes',
     'necesidad', 'cob_pc', 'cob_pc_vend', 'clientes_sin_pc', 'pc_detalle',
     'audit_light', 'audit_full'
   ]);
@@ -3467,6 +3469,184 @@ function getDNMarcas() {
       por_vendedor
     };
   }).sort(function(a, b) { return b.venta - a.venta; });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COBERTURA POR MARCAS — todas las marcas + seguimiento de concursos
+// ════════════════════════════════════════════════════════════════════
+
+// Marcas priorizadas para "Seguimiento de concursos" (match por keyword,
+// igual lógica que MARCAS_META en getDNMarcas — no quedan hardcodeadas
+// en el frontend, ambos paneles consumen este mismo arreglo vía el endpoint).
+var MARCAS_CONCURSO = [
+  { kw: 'TIKYS',      label: 'Tikys' },
+  { kw: 'CHOCOLISTO', label: 'Chocolisto' },
+  { kw: 'GRANUTS',    label: 'Granuts' },
+];
+var UMBRAL_VERDE_CONCURSO    = 70;
+var UMBRAL_AMARILLO_CONCURSO = 40;
+
+/**
+ * Cobertura por marca — TODAS las marcas con venta (sin límite top-10),
+ * tanto a nivel global (Gerencial) como por vendedor (Mi Panel).
+ * Reutiliza la misma fuente y el mismo conteo de clientes únicos por Set
+ * que getDNMarcas(), para que Gerencial y Mi Panel nunca difieran.
+ * Además calcula el resumen de "Seguimiento de concursos" para las marcas
+ * priorizadas (Tikys, Chocolisto, Granuts).
+ */
+function getCoberturaMarcas_() {
+  const mesData = getBasePeriodoActual_();
+
+  // ── Maestro total: clientes ACTIVOS en MAESTRO_CLIENTES ──────────────────
+  const hMC = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  let maestroTotal = 0;
+  if (hMC && hMC.getLastRow() > 1) {
+    hMC.getDataRange().getValues().slice(1).forEach(function(r) {
+      if (String(r[19] || '').trim().toUpperCase() === 'A') maestroTotal++;
+    });
+  }
+
+  // ── Maestro por vendedor (RESUMEN_COBERTURA) + sede (CUOTAS) ────────────
+  const hRC = getSheet_('RESUMEN_COBERTURA');
+  const maestroVend = {};
+  if (hRC && hRC.getLastRow() > 1) {
+    hRC.getDataRange().getValues().slice(1).forEach(function(r) {
+      const cod  = obtenerCodAsesor_(String(r[0] || '').trim());
+      const mstr = parseInt(r[1]) || 0;
+      if (cod && mstr) maestroVend[cod] = mstr;
+    });
+  }
+  const sedeMap = cargarSedeMap_();
+
+  // ── Acumular clientes únicos y venta por marca (global y por vendedor) ──
+  const marcaVenta     = {};
+  const marcaCli       = {};
+  const vendMarcaCli   = {};
+  const vendMarcaVenta = {};
+  const vendNombre     = {};
+
+  mesData.forEach(function(r) {
+    const marca   = String(r[10] || '').trim();
+    const codCli  = String(r[1]  || '').trim();
+    const rawVend = String(r[3]  || '').trim();
+    const codVend = obtenerCodAsesor_(rawVend) || rawVend;
+    const nomVend = String(r[4]  || '').trim();
+    const valor   = parseFloat(r[14]) || 0;
+    if (!marca || valor <= 0 || !codCli || !codVend) return;
+
+    if (nomVend && !vendNombre[codVend]) vendNombre[codVend] = nomVend;
+
+    marcaVenta[marca] = (marcaVenta[marca] || 0) + valor;
+    if (!marcaCli[marca]) marcaCli[marca] = new Set();
+    marcaCli[marca].add(codCli);
+
+    if (!vendMarcaCli[codVend])        vendMarcaCli[codVend]        = {};
+    if (!vendMarcaCli[codVend][marca]) vendMarcaCli[codVend][marca] = new Set();
+    vendMarcaCli[codVend][marca].add(codCli);
+
+    if (!vendMarcaVenta[codVend]) vendMarcaVenta[codVend] = {};
+    vendMarcaVenta[codVend][marca] = (vendMarcaVenta[codVend][marca] || 0) + valor;
+  });
+
+  // ── Cobertura general por marca — TODAS, sin límite top-10 ───────────────
+  const marcas = Object.keys(marcaVenta).map(function(marca) {
+    const clientes  = marcaCli[marca] ? marcaCli[marca].size : 0;
+    const cobertura = maestroTotal > 0 ? round2_(clientes / maestroTotal * 100) : 0;
+    return {
+      marca:                marca,
+      clientes_impactados:  clientes,
+      universo:             maestroTotal,
+      cobertura_pct:        cobertura,
+      venta:                round2_(marcaVenta[marca] || 0),
+      oportunidad_clientes: Math.max(0, maestroTotal - clientes),
+    };
+  }).sort(function(a, b) { return b.cobertura_pct - a.cobertura_pct; });
+
+  // ── Cobertura por vendedor — todas sus marcas ────────────────────────────
+  const codsValidos = Object.keys(vendMarcaCli).filter(function(c) { return /^\d+$/.test(c); });
+  const vendedores = codsValidos.map(function(cod) {
+    const universoV = maestroVend[cod] || 0;
+    const marcasV = Object.keys(vendMarcaCli[cod]).map(function(marca) {
+      const clientes  = vendMarcaCli[cod][marca].size;
+      const cobertura = universoV > 0 ? round2_(clientes / universoV * 100) : 0;
+      return {
+        marca:                marca,
+        clientes_impactados:  clientes,
+        universo:             universoV,
+        cobertura_pct:        cobertura,
+        venta:                round2_((vendMarcaVenta[cod] || {})[marca] || 0),
+        oportunidad_clientes: Math.max(0, universoV - clientes),
+      };
+    }).sort(function(a, b) { return b.cobertura_pct - a.cobertura_pct; });
+
+    return {
+      cod_asesor:        cod,
+      vendedor:          vendNombre[cod] || cod,
+      sede:              sedeMap[cod] || '',
+      universo_vendedor: universoV,
+      marcas:            marcasV,
+    };
+  }).filter(function(v) { return esVendedorValido_(v.cod_asesor, v.vendedor); });
+
+  // ── Seguimiento de concursos (marcas priorizadas) ────────────────────────
+  // Resuelve, para cada keyword de concurso, el nombre real de marca que matchea
+  // (ej. 'CHOCOLISTO' → 'Chocolisto Fortificado'), igual que MARCAS_META.
+  const marcaPorKeyword = {};
+  MARCAS_CONCURSO.forEach(function(m) {
+    const found = Object.keys(marcaVenta).find(function(marca) {
+      return marca.toUpperCase().includes(m.kw);
+    });
+    if (found) marcaPorKeyword[m.kw] = found;
+  });
+
+  const concursoResumen = MARCAS_CONCURSO.map(function(m) {
+    const marcaReal = marcaPorKeyword[m.kw];
+    const clientes  = marcaReal && marcaCli[marcaReal] ? marcaCli[marcaReal].size : 0;
+    const cobertura = maestroTotal > 0 ? round2_(clientes / maestroTotal * 100) : 0;
+    return {
+      marca:               m.label,
+      clientes_impactados: clientes,
+      universo:            maestroTotal,
+      cobertura_pct:       cobertura,
+    };
+  });
+
+  const concursoVendedores = vendedores.map(function(v) {
+    const marcasObj = {};
+    let sumaCobertura = 0;
+    MARCAS_CONCURSO.forEach(function(m) {
+      const marcaReal = marcaPorKeyword[m.kw];
+      const entry     = marcaReal ? v.marcas.find(function(x) { return x.marca === marcaReal; }) : null;
+      const clientes  = entry ? entry.clientes_impactados : 0;
+      const cobertura = v.universo_vendedor > 0 ? round2_(clientes / v.universo_vendedor * 100) : 0;
+      marcasObj[m.label] = { clientes_impactados: clientes, cobertura_pct: cobertura };
+      sumaCobertura += cobertura;
+    });
+    const promedio = round2_(sumaCobertura / MARCAS_CONCURSO.length);
+    const estado   = promedio >= UMBRAL_VERDE_CONCURSO ? 'verde'
+                    : promedio >= UMBRAL_AMARILLO_CONCURSO ? 'amarillo'
+                    : 'rojo';
+    return {
+      cod_asesor:             v.cod_asesor,
+      vendedor:               v.vendedor,
+      sede:                   v.sede,
+      universo:               v.universo_vendedor,
+      marcas:                 marcasObj,
+      promedio_cobertura_pct: promedio,
+      estado:                 estado,
+    };
+  }).sort(function(a, b) { return a.promedio_cobertura_pct - b.promedio_cobertura_pct; });
+
+  return {
+    universo_total: maestroTotal,
+    marcas:         marcas,
+    vendedores:     vendedores,
+    concursos: {
+      marcas:     MARCAS_CONCURSO.map(function(m) { return m.label; }),
+      resumen:    concursoResumen,
+      vendedores: concursoVendedores,
+    },
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════

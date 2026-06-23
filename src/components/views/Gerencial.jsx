@@ -59,6 +59,11 @@ const normalizarSede = (sede) => {
   return s;
 };
 
+// Umbrales de semáforo para Seguimiento de Concursos — mismo corte que usa
+// el backend (Código.js) para calcular el campo `estado` de cada vendedor.
+const UMBRAL_VERDE_CONCURSO    = 70;
+const UMBRAL_AMARILLO_CONCURSO = 40;
+
 export default function Gerencial() {
   const {
     resumen: r,
@@ -73,6 +78,7 @@ export default function Gerencial() {
     skus,
     topClientes,
     cuotas,
+    coberturaMarcas,
     refetchClientes,
     coberturaPC,
     coberturaVendedoresPC,
@@ -120,6 +126,8 @@ export default function Gerencial() {
   const [showAllCombosTable,  setShowAllCombosTable]  = useState(false); // ver todos los vendedores combos
   const [negocioAnalisisFiltro, setNegocioAnalisisFiltro] = useState(''); // filtro análisis SKUs/marcas
   const [skusLimit,           setSkusLimit]           = useState(15); // paginación "Ver más" SKUs
+  const [marcasVerTodas, setMarcasVerTodas] = useState(false); // Cobertura por marcas: top10 vs todas
+  const [marcasOrden,    setMarcasOrden]    = useState('cobertura'); // 'cobertura' | 'oportunidad' | 'venta'
 
   const applyNuevosG = useCallback(async (desde, hasta, label) => {
     setLoadingNuevosG(true);
@@ -279,6 +287,91 @@ export default function Gerencial() {
     const pctTotal = totalMae > 0 ? totalImp / totalMae * 100 : 0;
     return { totalImp, totalMae, pctTotal };
   }, [cobNegFiltrada]);
+
+  // ── Cobertura por marcas: TODAS las marcas, recalculado por sede ────────────
+  // TODOS → usa coberturaMarcas.marcas (ya agregado global en backend).
+  // Sede  → re-agrega desde coberturaMarcas.vendedores filtrados por sede,
+  // mismo patrón que metasPorNegocio/cobNegResumen, para que Gerencial nunca
+  // difiera de Mi Panel (misma fuente backend, el frontend solo filtra).
+  const marcasGeneral = useMemo(() => {
+    if (!coberturaMarcas) return [];
+    if (sedeFiltro === 'TODOS') return coberturaMarcas.marcas || [];
+
+    const vendsFiltrados = (coberturaMarcas.vendedores || []).filter(v =>
+      normalizarSede(v.sede) === sedeFiltro
+    );
+    if (!vendsFiltrados.length) return [];
+
+    const universoTotal = vendsFiltrados.reduce((s, v) => s + (v.universo_vendedor || 0), 0);
+    const acc = {}; // marca → { clientes, venta }
+    vendsFiltrados.forEach(v => {
+      (v.marcas || []).forEach(m => {
+        if (!acc[m.marca]) acc[m.marca] = { clientes: 0, venta: 0 };
+        acc[m.marca].clientes += m.clientes_impactados || 0;
+        acc[m.marca].venta    += m.venta || 0;
+      });
+    });
+
+    return Object.entries(acc).map(([marca, d]) => ({
+      marca,
+      clientes_impactados: d.clientes,
+      universo: universoTotal,
+      cobertura_pct: universoTotal > 0 ? Math.round(d.clientes / universoTotal * 1000) / 10 : 0,
+      venta: Math.round(d.venta * 100) / 100,
+      oportunidad_clientes: Math.max(0, universoTotal - d.clientes),
+    })).sort((a, b) => b.cobertura_pct - a.cobertura_pct);
+  }, [coberturaMarcas, sedeFiltro]);
+
+  const marcasMiniKPIs = useMemo(() => {
+    if (!marcasGeneral.length) return null;
+    const conVenta = marcasGeneral.filter(m => (m.venta || 0) > 0);
+    const lider = [...marcasGeneral].sort((a, b) => b.cobertura_pct - a.cobertura_pct)[0];
+    const mayorOportunidad = [...marcasGeneral].sort((a, b) => b.oportunidad_clientes - a.oportunidad_clientes)[0];
+    return { lider, mayorOportunidad, totalConVenta: conVenta.length };
+  }, [marcasGeneral]);
+
+  const marcasOrdenadas = useMemo(() => {
+    const sorters = {
+      cobertura:   (a, b) => b.cobertura_pct - a.cobertura_pct,
+      oportunidad: (a, b) => b.oportunidad_clientes - a.oportunidad_clientes,
+      venta:       (a, b) => b.venta - a.venta,
+    };
+    return [...marcasGeneral].sort(sorters[marcasOrden] || sorters.cobertura);
+  }, [marcasGeneral, marcasOrden]);
+
+  const marcasTablaShown = marcasVerTodas ? marcasOrdenadas : marcasOrdenadas.slice(0, 10);
+
+  // ── Seguimiento de concursos: filtrado por sede + excluye RUTA CENTRALES ────
+  // (RUTA CENTRALES es una ruta virtual, no un vendedor gestionable — mismo
+  // criterio que avanceVendedores/efData más abajo.)
+  const concursoVendedoresFiltrados = useMemo(() => {
+    if (!coberturaMarcas?.concursos) return [];
+    const base = (coberturaMarcas.concursos.vendedores || []).filter(v => !esRutaCentral(v.vendedor));
+    const filtrados = sedeFiltro === 'TODOS'
+      ? base
+      : base.filter(v => normalizarSede(v.sede) === sedeFiltro);
+    return [...filtrados].sort((a, b) => a.promedio_cobertura_pct - b.promedio_cobertura_pct);
+  }, [coberturaMarcas, sedeFiltro]);
+
+  const concursoResumenFiltrado = useMemo(() => {
+    if (!coberturaMarcas?.concursos) return [];
+    const marcasNombres = coberturaMarcas.concursos.marcas || [];
+    if (sedeFiltro === 'TODOS') return coberturaMarcas.concursos.resumen || [];
+    if (!concursoVendedoresFiltrados.length) return [];
+
+    const universoTotal = concursoVendedoresFiltrados.reduce((s, v) => s + (v.universo || 0), 0);
+    return marcasNombres.map(marca => {
+      const clientes = concursoVendedoresFiltrados.reduce(
+        (s, v) => s + (v.marcas?.[marca]?.clientes_impactados || 0), 0
+      );
+      return {
+        marca,
+        clientes_impactados: clientes,
+        universo: universoTotal,
+        cobertura_pct: universoTotal > 0 ? Math.round(clientes / universoTotal * 1000) / 10 : 0,
+      };
+    });
+  }, [coberturaMarcas, sedeFiltro, concursoVendedoresFiltrados]);
 
   // Mapa cod→cuota desde la hoja CUOTAS (fuente directa, independiente del join en backend)
   const cuotaMap = useMemo(() => {
@@ -2081,6 +2174,128 @@ export default function Gerencial() {
         </>
       )}
 
+      {/* ── Cobertura por Marcas ── */}
+      <SectionTitle>Cobertura por marcas</SectionTitle>
+      {!coberturaMarcas && loadingFase2 && (
+        <div className="table-card mb-4 flex items-center justify-center gap-3 py-8">
+          <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" style={{ color: '#2AAED9', opacity: 0.7, flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-palumar-muted text-sm">Cargando cobertura por marcas…</span>
+        </div>
+      )}
+      {!coberturaMarcas && !loadingFase2 && (
+        <div className="table-card mb-4 text-center py-8 text-palumar-muted text-sm">
+          No se pudo cargar cobertura por marcas.
+        </div>
+      )}
+      {coberturaMarcas && marcasGeneral.length === 0 && (
+        <div className="table-card mb-4 text-center py-8 text-palumar-muted text-sm">
+          Sin datos de cobertura por marcas para este filtro.
+        </div>
+      )}
+      {coberturaMarcas && marcasGeneral.length > 0 && marcasMiniKPIs && (
+        <>
+          {/* 3 mini KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <KpiCard
+              label="Marca líder por cobertura"
+              value={marcasMiniKPIs.lider.marca}
+              sub={`${pct(marcasMiniKPIs.lider.cobertura_pct)} · ${marcasMiniKPIs.lider.clientes_impactados.toLocaleString('es')} clientes`}
+              color="green"
+            />
+            <KpiCard
+              label="Marca con mayor oportunidad"
+              value={marcasMiniKPIs.mayorOportunidad.marca}
+              sub={`${marcasMiniKPIs.mayorOportunidad.oportunidad_clientes.toLocaleString('es')} clientes sin impactar`}
+              color="amber"
+            />
+            <KpiCard
+              label="Marcas con venta"
+              value={String(marcasMiniKPIs.totalConVenta)}
+              sub={`de ${marcasGeneral.length} marcas medidas`}
+              color="cyan"
+            />
+          </div>
+
+          {/* Selector de orden */}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-palumar-muted" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
+              Ordenar por:
+            </span>
+            <select
+              className="palma-select"
+              value={marcasOrden}
+              onChange={e => setMarcasOrden(e.target.value)}
+              style={{ maxWidth: 200 }}
+            >
+              <option value="cobertura">Mayor cobertura</option>
+              <option value="oportunidad">Mayor oportunidad</option>
+              <option value="venta">Mayor venta</option>
+            </select>
+          </div>
+
+          {/* Gráfica horizontal — marcas mostradas (top10 o todas) */}
+          <div className="chart-card mb-3">
+            <HBarChart
+              labels={marcasTablaShown.map(m => m.marca)}
+              data={marcasTablaShown.map(m => m.cobertura_pct)}
+              barColors={marcasTablaShown.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+              isPct
+              rowH={32}
+              minH={160}
+              secondaryData={marcasTablaShown.map(m => m.clientes_impactados)}
+              secondaryFmt={(n) => `${n.toLocaleString('es')} clientes`}
+            />
+          </div>
+
+          {/* Tabla compacta */}
+          <div className="table-card mb-3 overflow-x-auto">
+            <table className="palma-table">
+              <thead>
+                <tr>
+                  <th>Marca</th>
+                  <th style={{ textAlign: 'right' }}>Clientes impactados</th>
+                  <th style={{ textAlign: 'right' }}>Universo</th>
+                  <th style={{ textAlign: 'right' }}>Cobertura %</th>
+                  <th style={{ textAlign: 'right' }}>Venta</th>
+                  <th style={{ textAlign: 'right' }}>Oportunidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {marcasTablaShown.map(m => {
+                  const col = m.cobertura_pct >= 70 ? 'var(--green)' : m.cobertura_pct >= 40 ? 'var(--amber)' : 'var(--red)';
+                  return (
+                    <tr key={m.marca}>
+                      <td style={{ fontWeight: 600 }}>{m.marca}</td>
+                      <td style={{ textAlign: 'right' }}>{m.clientes_impactados.toLocaleString('es')}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{m.universo.toLocaleString('es')}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span style={{ color: col, fontWeight: 700 }}>{m.cobertura_pct.toFixed(1)}%</span>
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="font-mono-num">{fmt(m.venta)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--red)' }}>{m.oportunidad_clientes.toLocaleString('es')} clientes</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {marcasOrdenadas.length > 10 && (
+            <div className="flex justify-end mb-6">
+              <button
+                onClick={() => setMarcasVerTodas(v => !v)}
+                style={{ padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border-2)', background: 'rgba(255,255,255,0.04)', color: 'var(--muted)' }}
+              >
+                {marcasVerTodas ? '▲ Ver top 10' : `▼ Ver todas las marcas (${marcasOrdenadas.length})`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
       {/* ── Efectividad ── */}
       <SectionTitle>Efectividad por Vendedor</SectionTitle>
       <div className="chart-card mb-4">
@@ -2590,6 +2805,115 @@ export default function Gerencial() {
           </table>
         </div>
       </div>
+
+      {/* ── Seguimiento de Concursos ── */}
+      <SectionTitle>Seguimiento de concursos</SectionTitle>
+      <p className="text-palumar-muted mb-4" style={{ fontSize: '11px' }}>
+        Cobertura por vendedor en marcas en medición
+      </p>
+      {!coberturaMarcas && loadingFase2 && (
+        <div className="table-card mb-8 flex items-center justify-center gap-3 py-8">
+          <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" style={{ color: '#2AAED9', opacity: 0.7, flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-palumar-muted text-sm">Cargando seguimiento de concursos…</span>
+        </div>
+      )}
+      {!coberturaMarcas && !loadingFase2 && (
+        <div className="table-card mb-8 text-center py-8 text-palumar-muted text-sm">
+          No se pudo cargar el seguimiento de concursos.
+        </div>
+      )}
+      {coberturaMarcas && concursoVendedoresFiltrados.length === 0 && (
+        <div className="table-card mb-8 text-center py-8 text-palumar-muted text-sm">
+          Sin datos de seguimiento de concursos para este filtro.
+        </div>
+      )}
+      {coberturaMarcas && concursoVendedoresFiltrados.length > 0 && (
+        <>
+          {/* 3 mini KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            {concursoResumenFiltrado.map(c => (
+              <KpiCard
+                key={c.marca}
+                label={`Cobertura promedio ${c.marca}`}
+                value={pct(c.cobertura_pct)}
+                sub={`${c.clientes_impactados.toLocaleString('es')} / ${c.universo.toLocaleString('es')} clientes`}
+                color={c.cobertura_pct >= UMBRAL_VERDE_CONCURSO ? 'green' : c.cobertura_pct >= UMBRAL_AMARILLO_CONCURSO ? 'amber' : 'red'}
+                barValue={c.cobertura_pct}
+              />
+            ))}
+          </div>
+
+          {/* Tabla por vendedor */}
+          <div className="table-card mb-8 overflow-x-auto">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-2)' }}>
+              <h3 className="font-display font-bold text-palumar-white" style={{ fontSize: '13px' }}>
+                Cobertura por vendedor — marcas en medición
+              </h3>
+              <span className="text-palumar-muted" style={{ fontSize: '11px' }}>
+                Ordenado por menor cobertura primero · {concursoVendedoresFiltrados.length} vendedores
+              </span>
+            </div>
+            <table className="palma-table" style={{ minWidth: 720 }}>
+              <thead>
+                <tr>
+                  <th>Vendedor</th>
+                  <th>Sede</th>
+                  <th style={{ textAlign: 'right' }}>Universo</th>
+                  {(coberturaMarcas.concursos.marcas || []).map(marca => (
+                    <th key={marca} style={{ textAlign: 'right' }}>{marca}</th>
+                  ))}
+                  <th style={{ textAlign: 'right' }}>Prom. cobertura</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {concursoVendedoresFiltrados.map(v => {
+                  const estadoColor = v.estado === 'verde' ? 'var(--green)' : v.estado === 'amarillo' ? 'var(--amber)' : 'var(--red)';
+                  const estadoLabel = v.estado === 'verde' ? 'Bien' : v.estado === 'amarillo' ? 'En avance' : 'Gestionar';
+                  return (
+                    <tr key={v.cod_asesor}>
+                      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{v.vendedor}</td>
+                      <td style={{ color: 'var(--muted)', fontSize: '11px' }}>{normalizarSede(v.sede) || '—'}</td>
+                      <td style={{ textAlign: 'right' }} className="font-mono-num">{v.universo.toLocaleString('es')}</td>
+                      {(coberturaMarcas.concursos.marcas || []).map(marca => {
+                        const m = v.marcas?.[marca];
+                        return (
+                          <td key={marca} style={{ textAlign: 'right' }}>
+                            {m ? (
+                              <>
+                                <span style={{
+                                  color: m.cobertura_pct >= UMBRAL_VERDE_CONCURSO ? 'var(--green)' : m.cobertura_pct >= UMBRAL_AMARILLO_CONCURSO ? 'var(--amber)' : 'var(--red)',
+                                  fontWeight: 700,
+                                }}>
+                                  {m.cobertura_pct.toFixed(1)}%
+                                </span>
+                                <div style={{ color: 'var(--muted)', fontSize: '10px' }}>
+                                  {m.clientes_impactados}/{v.universo}
+                                </div>
+                              </>
+                            ) : <span style={{ color: 'var(--muted)' }}>—</span>}
+                          </td>
+                        );
+                      })}
+                      <td style={{ textAlign: 'right' }}>
+                        <span style={{ color: estadoColor, fontWeight: 700 }}>{v.promedio_cobertura_pct.toFixed(1)}%</span>
+                      </td>
+                      <td>
+                        <span className="badge" style={{ background: `${estadoColor}22`, color: estadoColor, border: `1px solid ${estadoColor}55` }}>
+                          {estadoLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
