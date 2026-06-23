@@ -57,12 +57,10 @@ export default function Inventario() {
 
       {/* Header info */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {fecha && (
-          <span className="font-mono-num text-palumar-muted rounded-md px-2.5 py-1 border"
-            style={{ fontSize: '11px', background: 'var(--navy-3)', borderColor: 'var(--border-2)' }}>
-            Corte: {fecha}
-          </span>
-        )}
+        <span className="font-mono-num text-palumar-muted rounded-md px-2.5 py-1 border"
+          style={{ fontSize: '11px', background: 'var(--navy-3)', borderColor: 'var(--border-2)' }}>
+          Actualizado: {fecha || 'sin fecha disponible'}
+        </span>
         <div className="flex gap-2 flex-wrap">
           {[
             { label: '🟢 OK', desc: '> 30 uds' },
