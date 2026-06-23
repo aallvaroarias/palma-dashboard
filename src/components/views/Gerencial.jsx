@@ -103,6 +103,7 @@ export default function Gerencial() {
 
   const [sedeFiltro, setSedeFiltro]       = useState('TODOS'); // 'TODOS' | 'CENTRALES' | 'CHIRIQUI'
   const [negocioFiltro, setNegocioFiltro] = useState('');
+  const [cobNegOrden, setCobNegOrden]     = useState('oportunidad'); // orden de "Cobertura por Negocio"
   const [vendedorTop10, setVendedorTop10] = useState('');
   const [negocioTop10, setNegocioTop10]   = useState('');
   const [ceroVendSel, setCeroVendSel] = useState('');
@@ -287,6 +288,37 @@ export default function Gerencial() {
     const pctTotal = totalMae > 0 ? totalImp / totalMae * 100 : 0;
     return { totalImp, totalMae, pctTotal };
   }, [cobNegFiltrada]);
+
+  // ── Detalle por vendedor para el negocio seleccionado ───────────────────────
+  // clientes_maestro en COBERTURA_NEGOCIO ya es el universo TOTAL del vendedor
+  // (mismo valor en todas sus filas de negocio) — viene de RESUMEN_COBERTURA,
+  // la misma fuente que usa el resto de PALMA para universos. No se inventa.
+  const cobNegDetalle = useMemo(() => {
+    return cobNegFiltrada.map(r2 => {
+      const lbl       = getCoberturaVendedor(r2);
+      const maestro    = Number(r2.clientes_maestro) || 0;
+      const impactados = Number(r2.impactados) || 0;
+      const venta      = cobNegVentaMap[norm(lbl)] ?? cobNegVentaMap[lbl.split('-')[0].trim()] ?? 0;
+      return {
+        vendedor:   lbl,
+        cobertura:  getCoberturaValue(r2),
+        impactados,
+        maestro,
+        pendientes: Math.max(0, maestro - impactados),
+        venta,
+      };
+    });
+  }, [cobNegFiltrada, cobNegVentaMap]);
+
+  const cobNegOrdenado = useMemo(() => {
+    const sorters = {
+      oportunidad:    (a, b) => b.pendientes - a.pendientes,
+      menorCobertura: (a, b) => a.cobertura  - b.cobertura,
+      mayorCobertura: (a, b) => b.cobertura  - a.cobertura,
+      mayorVenta:     (a, b) => b.venta      - a.venta,
+    };
+    return [...cobNegDetalle].sort(sorters[cobNegOrden] || sorters.oportunidad);
+  }, [cobNegDetalle, cobNegOrden]);
 
   // ── Cobertura por marcas: TODAS las marcas, recalculado por sede ────────────
   // TODOS → usa coberturaMarcas.marcas (ya agregado global en backend).
@@ -2132,7 +2164,7 @@ export default function Gerencial() {
         <>
           <SectionTitle>Cobertura por Negocio</SectionTitle>
           <div className="chart-card mb-4">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
               <select
                 className="palma-select"
                 value={negocioFiltro}
@@ -2143,58 +2175,107 @@ export default function Gerencial() {
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
+              {negocioFiltro && cobNegOrdenado.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-palumar-muted" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Ordenar por:
+                  </span>
+                  <select
+                    className="palma-select"
+                    value={cobNegOrden}
+                    onChange={e => setCobNegOrden(e.target.value)}
+                    style={{ maxWidth: 200 }}
+                  >
+                    <option value="oportunidad">Mayor oportunidad</option>
+                    <option value="menorCobertura">Menor cobertura</option>
+                    <option value="mayorCobertura">Mayor cobertura</option>
+                    <option value="mayorVenta">Mayor venta</option>
+                  </select>
+                </div>
+              )}
             </div>
+
             {/* Resumen total del negocio seleccionado */}
             {negocioFiltro && cobNegResumen && (
-              <div
-                className="flex flex-wrap items-center gap-5 mb-4 px-4 py-3 rounded-lg"
-                style={{ background: 'rgba(45,174,217,0.07)', border: '1px solid rgba(45,174,217,0.18)' }}
-              >
-                <div>
-                  <div className="text-palumar-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cobertura total en {negocioFiltro}</div>
-                  <div
-                    className="font-mono-num font-bold"
-                    style={{
-                      fontSize: '22px',
-                      color: cobNegResumen.pctTotal >= 90 ? 'var(--green)'
-                           : cobNegResumen.pctTotal >= 70 ? 'var(--amber)'
-                           : 'var(--red)',
-                    }}
-                  >
-                    {pct(cobNegResumen.pctTotal)}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                {[
+                  { label: `Cobertura total en ${negocioFiltro}`, value: pct(cobNegResumen.pctTotal),
+                    color: cobNegResumen.pctTotal >= 90 ? 'var(--green)' : cobNegResumen.pctTotal >= 70 ? 'var(--amber)' : 'var(--red)' },
+                  { label: 'Clientes impactados', value: cobNegResumen.totalImp.toLocaleString('es'), color: 'var(--white-2)' },
+                  { label: 'Sin impacto', value: (cobNegResumen.totalMae - cobNegResumen.totalImp).toLocaleString('es'), color: 'var(--red)' },
+                  { label: 'Universo', value: `${cobNegResumen.totalMae.toLocaleString('es')} clientes`, color: 'var(--cyan)' },
+                ].map(stat => (
+                  <div key={stat.label} className="px-4 py-3 rounded-lg" style={{ background: 'rgba(45,174,217,0.07)', border: '1px solid rgba(45,174,217,0.18)' }}>
+                    <div className="text-palumar-muted mb-1" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {stat.label}
+                    </div>
+                    <div className="font-mono-num font-bold" style={{ fontSize: '20px', color: stat.color }}>
+                      {stat.value}
+                    </div>
                   </div>
-                </div>
-                <div className="w-px h-8 flex-shrink-0" style={{ background: 'rgba(45,174,217,0.25)' }} />
-                <div>
-                  <div className="text-palumar-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Clientes impactados</div>
-                  <div className="font-mono-num font-bold text-palumar-white" style={{ fontSize: '18px' }}>
-                    {cobNegResumen.totalImp}
-                    <span className="text-palumar-muted font-normal" style={{ fontSize: '13px' }}> / {cobNegResumen.totalMae}</span>
-                  </div>
-                </div>
-                <div className="w-px h-8 flex-shrink-0" style={{ background: 'rgba(45,174,217,0.25)' }} />
-                <div>
-                  <div className="text-palumar-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sin impacto</div>
-                  <div className="font-mono-num font-bold" style={{ fontSize: '18px', color: 'var(--red)' }}>
-                    {cobNegResumen.totalMae - cobNegResumen.totalImp}
-                  </div>
-                </div>
+                ))}
               </div>
             )}
 
-            {negocioFiltro && cobNegFiltrada.length > 0 ? (
-              <HBarChart
-                labels={cobNegFiltrada.map(r2 => getCoberturaVendedor(r2))}
-                data={cobNegFiltrada.map(r2 => getCoberturaValue(r2))}
-                barColors={cobNegFiltrada.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
-                isPct
-                metaValue={95}
-                secondaryData={cobNegFiltrada.map(r2 => {
-                  const lbl = getCoberturaVendedor(r2);
-                  return cobNegVentaMap[norm(lbl)] ?? cobNegVentaMap[lbl.split('-')[0].trim()] ?? 0;
-                })}
-                secondaryFmt={fmtK}
-              />
+            {negocioFiltro && cobNegOrdenado.length > 0 ? (
+              <>
+                <HBarChart
+                  labels={cobNegOrdenado.map(d => d.vendedor)}
+                  data={cobNegOrdenado.map(d => d.cobertura)}
+                  barColors={cobNegOrdenado.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+                  isPct
+                  metaValue={95}
+                  metaLabel="Meta 95%"
+                  rowH={40}
+                  minH={180}
+                  secondaryData={cobNegOrdenado.map(d => d.impactados)}
+                  secondaryFmt={(n) => `${n.toLocaleString('es')} clientes`}
+                  secondaryColor="rgba(237,244,251,0.88)"
+                />
+
+                {/* Detalle por vendedor */}
+                <p className="text-palumar-muted mt-4 mb-2" style={{ fontSize: '11px' }}>
+                  Detalle por vendedor
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="palma-table">
+                    <thead>
+                      <tr>
+                        <th>Vendedor</th>
+                        <th style={{ textAlign: 'right' }}>Total clientes</th>
+                        <th style={{ textAlign: 'right' }}>Impactados</th>
+                        <th style={{ textAlign: 'right' }}>Pendientes</th>
+                        <th style={{ minWidth: '120px' }}>Cobertura %</th>
+                        <th style={{ textAlign: 'right' }}>Venta negocio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cobNegOrdenado.map((d, i) => {
+                        const col = d.cobertura >= 90 ? 'var(--green)' : d.cobertura >= 70 ? 'var(--amber)' : 'var(--red)';
+                        return (
+                          <tr key={d.vendedor + i}>
+                            <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{d.vendedor}</td>
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">{d.maestro.toLocaleString('es')}</td>
+                            <td style={{ textAlign: 'right' }} className="font-mono-num">{d.impactados.toLocaleString('es')}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--red)', fontWeight: 600 }} className="font-mono-num">
+                              {d.pendientes.toLocaleString('es')}
+                            </td>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
+                                  <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(d.cobertura, 100)}%`, background: col }} />
+                                </div>
+                                <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{d.cobertura.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', color: 'var(--cyan)' }} className="font-mono-num">{fmt(d.venta)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <div className="text-palumar-muted text-sm text-center py-6">
                 {negocioFiltro ? 'Sin datos para este negocio' : 'Selecciona un negocio para ver el detalle'}
