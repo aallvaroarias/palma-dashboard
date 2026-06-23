@@ -1043,16 +1043,26 @@ export default function Gerencial() {
 
       {/* ── 2. KPIs Ejecutivos ── */}
       <SectionTitle>KPIs Ejecutivos</SectionTitle>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
-        <KpiCard label="Venta Bruta" value={fmt(rf.venta_bruta || 0)} color="cyan" />
-        <KpiCard label="Venta Neta" value={fmt(rf.venta_neta || 0)} color="green" />
+
+      {/* Fila 1 — lectura comercial principal */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <KpiCard
+          label="Venta Bruta"
+          value={fmt(rf.venta_bruta || 0)}
+          sub={rf.cuota_total > 0 ? `${pct((rf.venta_bruta || 0) / rf.cuota_total * 100)} de meta` : undefined}
+          color="cyan"
+        />
+        <KpiCard
+          label="Venta Neta"
+          value={fmt(rf.venta_neta || 0)}
+          sub={rf.cuota_total > 0 ? `${pct((rf.venta_neta || 0) / rf.cuota_total * 100)} de meta` : undefined}
+          color="green"
+        />
         {proyeccionCierre ? (
           <KpiCard
             label="Proyección"
             value={fmt(proyeccionCierre.proyeccion)}
-            sub={proyeccionCierre.pctVsCuota != null
-              ? `${proyeccionCierre.pctVsCuota}% de meta · día ${proyeccionCierre.habilesTransc}/${proyeccionCierre.habilesTotal}`
-              : `Día ${proyeccionCierre.habilesTransc}/${proyeccionCierre.habilesTotal}`}
+            sub={proyeccionCierre.pctVsCuota != null ? `${proyeccionCierre.pctVsCuota}% proyectado` : undefined}
             color={proyeccionCierre.pctVsCuota == null ? 'cyan'
               : proyeccionCierre.pctVsCuota >= 100 ? 'green'
               : proyeccionCierre.pctVsCuota >= 75  ? 'amber'
@@ -1077,10 +1087,14 @@ export default function Gerencial() {
             barValue={rf.efectividad_pct || 0}
           />
         )}
+      </div>
+
+      {/* Fila 2 — cobertura, calidad y ejecución */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <KpiCard
           label="Cobertura"
           value={pct(rf.cobertura_pct || 0)}
-          sub={`${rf.clientes_impactados ?? 0} / ${rf.clientes_maestro ?? 0}`}
+          sub={`${rf.clientes_impactados ?? 0} / ${rf.clientes_maestro ?? 0} clientes`}
           color={(rf.cobertura_pct || 0) >= 90 ? 'green' : (rf.cobertura_pct || 0) >= 70 ? 'amber' : 'red'}
           barValue={rf.cobertura_pct || 0}
         />
