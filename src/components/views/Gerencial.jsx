@@ -59,6 +59,14 @@ const normalizarSede = (sede) => {
   return s;
 };
 
+// Las marcas vienen del backend como "023-Chocolisto" → mostramos solo el
+// nombre legible, conservando el valor completo como key de búsqueda/match.
+const marcaLabel = (marca) => {
+  const s = String(marca || '');
+  const i = s.indexOf('-');
+  return i >= 0 ? s.slice(i + 1).trim() : s;
+};
+
 // Umbrales de semáforo para Seguimiento de Concursos — mismo corte que usa
 // el backend (Código.js) para calcular el campo `estado` de cada vendedor.
 const UMBRAL_VERDE_CONCURSO    = 70;
@@ -129,6 +137,8 @@ export default function Gerencial() {
   const [skusLimit,           setSkusLimit]           = useState(15); // paginación "Ver más" SKUs
   const [marcasVerTodas, setMarcasVerTodas] = useState(false); // Cobertura por marcas: top10 vs todas
   const [marcasOrden,    setMarcasOrden]    = useState('cobertura'); // 'cobertura' | 'oportunidad' | 'venta'
+  const [marcaSeleccionada, setMarcaSeleccionada] = useState(''); // Cobertura por marca y vendedor
+  const [marcaVendOrden,    setMarcaVendOrden]    = useState('oportunidad'); // orden de "Cobertura por marca y vendedor"
 
   const applyNuevosG = useCallback(async (desde, hasta, label) => {
     setLoadingNuevosG(true);
@@ -372,6 +382,64 @@ export default function Gerencial() {
   }, [marcasGeneral, marcasOrden]);
 
   const marcasTablaShown = marcasVerTodas ? marcasOrdenadas : marcasOrdenadas.slice(0, 10);
+
+  // ── Cobertura por marca y vendedor ───────────────────────────────────────
+  // Reutiliza la misma fuente (coberturaMarcas.vendedores) que "Mi cobertura
+  // por marcas" en Vendedor.jsx — así Gerencial nunca puede diferir de Mi
+  // Panel para el mismo vendedor y la misma marca (misma data, distinto recorte).
+  const marcaVendedorOpciones = useMemo(() => {
+    if (!coberturaMarcas?.marcas) return [];
+    return [...coberturaMarcas.marcas]
+      .map(m => m.marca)
+      .sort((a, b) => marcaLabel(a).localeCompare(marcaLabel(b), 'es'));
+  }, [coberturaMarcas]);
+
+  const marcaVendedorDetalle = useMemo(() => {
+    if (!coberturaMarcas || !marcaSeleccionada) return [];
+    const vends = sedeFiltro === 'TODOS'
+      ? (coberturaMarcas.vendedores || [])
+      : (coberturaMarcas.vendedores || []).filter(v => normalizarSede(v.sede) === sedeFiltro);
+
+    return vends.map(v => {
+      const m = (v.marcas || []).find(x => x.marca === marcaSeleccionada);
+      const total = v.universo_vendedor || 0;
+      const impactados = m?.clientes_impactados || 0;
+      return {
+        cod_asesor: v.cod_asesor,
+        vendedor: v.vendedor,
+        sede: normalizarSede(v.sede) || v.sede || '—',
+        total,
+        impactados,
+        pendientes: Math.max(0, total - impactados),
+        cobertura_pct: m?.cobertura_pct ?? (total > 0 ? Math.round(impactados / total * 1000) / 10 : 0),
+        venta: m?.venta || 0,
+      };
+    });
+  }, [coberturaMarcas, marcaSeleccionada, sedeFiltro]);
+
+  const marcaVendedorOrdenado = useMemo(() => {
+    const sorters = {
+      oportunidad:    (a, b) => b.pendientes     - a.pendientes,
+      menorCobertura: (a, b) => a.cobertura_pct  - b.cobertura_pct,
+      mayorCobertura: (a, b) => b.cobertura_pct  - a.cobertura_pct,
+      mayorVenta:     (a, b) => b.venta          - a.venta,
+    };
+    return [...marcaVendedorDetalle].sort(sorters[marcaVendOrden] || sorters.oportunidad);
+  }, [marcaVendedorDetalle, marcaVendOrden]);
+
+  const marcaVendedorResumen = useMemo(() => {
+    if (!marcaVendedorDetalle.length) return null;
+    const universo    = marcaVendedorDetalle.reduce((s, d) => s + d.total, 0);
+    const impactados  = marcaVendedorDetalle.reduce((s, d) => s + d.impactados, 0);
+    const venta       = marcaVendedorDetalle.reduce((s, d) => s + d.venta, 0);
+    return {
+      universo,
+      impactados,
+      pendientes: Math.max(0, universo - impactados),
+      cobertura_pct: universo > 0 ? Math.round(impactados / universo * 1000) / 10 : 0,
+      venta,
+    };
+  }, [marcaVendedorDetalle]);
 
   // ── Seguimiento de concursos: filtrado por sede + excluye RUTA CENTRALES ────
   // (RUTA CENTRALES es una ruta virtual, no un vendedor gestionable — mismo
@@ -2405,6 +2473,163 @@ export default function Gerencial() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Cobertura por Marca y Vendedor ── */}
+      <SectionTitle>Cobertura por marca y vendedor</SectionTitle>
+      {!coberturaMarcas && loadingFase2 && (
+        <div className="table-card mb-4 flex items-center justify-center gap-3 py-8">
+          <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" style={{ color: '#2AAED9', opacity: 0.7, flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-palumar-muted text-sm">Cargando cobertura por marca…</span>
+        </div>
+      )}
+      {!coberturaMarcas && !loadingFase2 && (
+        <div className="table-card mb-8 text-center py-8 text-palumar-muted text-sm">
+          No se pudo cargar cobertura por marca.
+        </div>
+      )}
+      {coberturaMarcas && (
+        <div className="chart-card mb-8">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <select
+              className="palma-select"
+              value={marcaSeleccionada}
+              onChange={e => setMarcaSeleccionada(e.target.value)}
+            >
+              <option value="">Selecciona una marca</option>
+              {marcaVendedorOpciones.map(m => (
+                <option key={m} value={m}>{marcaLabel(m)}</option>
+              ))}
+            </select>
+            {marcaSeleccionada && marcaVendedorOrdenado.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-palumar-muted" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
+                  Ordenar por:
+                </span>
+                <select
+                  className="palma-select"
+                  value={marcaVendOrden}
+                  onChange={e => setMarcaVendOrden(e.target.value)}
+                  style={{ maxWidth: 200 }}
+                >
+                  <option value="oportunidad">Mayor oportunidad</option>
+                  <option value="menorCobertura">Menor cobertura</option>
+                  <option value="mayorCobertura">Mayor cobertura</option>
+                  <option value="mayorVenta">Mayor venta</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {!marcaSeleccionada && (
+            <div className="text-palumar-muted text-sm text-center py-6">
+              Selecciona una marca para ver el detalle por vendedor
+            </div>
+          )}
+
+          {marcaSeleccionada && marcaVendedorResumen && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                {[
+                  { label: 'Marca seleccionada', value: marcaLabel(marcaSeleccionada), color: 'var(--white-2)' },
+                  { label: 'Cobertura total', value: pct(marcaVendedorResumen.cobertura_pct),
+                    color: marcaVendedorResumen.cobertura_pct >= UMBRAL_VERDE_CONCURSO ? 'var(--green)'
+                      : marcaVendedorResumen.cobertura_pct >= UMBRAL_AMARILLO_CONCURSO ? 'var(--amber)' : 'var(--red)' },
+                  { label: 'Clientes impactados', value: marcaVendedorResumen.impactados.toLocaleString('es'), color: 'var(--white-2)' },
+                  { label: 'Universo total', value: marcaVendedorResumen.universo.toLocaleString('es'), color: 'var(--cyan)' },
+                  { label: 'Clientes pendientes', value: marcaVendedorResumen.pendientes.toLocaleString('es'), color: 'var(--red)' },
+                ].map(stat => (
+                  <div key={stat.label} className="px-4 py-3 rounded-lg" style={{ background: 'rgba(45,174,217,0.07)', border: '1px solid rgba(45,174,217,0.18)' }}>
+                    <div className="text-palumar-muted mb-1" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {stat.label}
+                    </div>
+                    <div className="font-mono-num font-bold" style={{ fontSize: '18px', color: stat.color }}>
+                      {stat.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-3 rounded-lg mb-4" style={{ background: 'rgba(45,174,217,0.04)', border: '1px solid rgba(45,174,217,0.12)' }}>
+                <div className="text-palumar-muted mb-1" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Venta marca
+                </div>
+                <div className="font-mono-num font-bold" style={{ fontSize: '18px', color: 'var(--cyan)' }}>
+                  {fmt(marcaVendedorResumen.venta)}
+                </div>
+              </div>
+            </>
+          )}
+
+          {marcaSeleccionada && marcaVendedorOrdenado.length === 0 && (
+            <div className="text-palumar-muted text-sm text-center py-6">
+              Sin datos para esta marca.
+            </div>
+          )}
+
+          {marcaSeleccionada && marcaVendedorOrdenado.length > 0 && (
+            <>
+              <HBarChart
+                labels={marcaVendedorOrdenado.map(d => d.vendedor)}
+                data={marcaVendedorOrdenado.map(d => d.cobertura_pct)}
+                barColors={marcaVendedorOrdenado.map((_, i) => VEND_COLORS[i % VEND_COLORS.length])}
+                isPct
+                rowH={40}
+                minH={180}
+                secondaryData={marcaVendedorOrdenado.map(d => d.impactados)}
+                secondaryFmt={(n) => `${n.toLocaleString('es')} clientes`}
+                secondaryColor="rgba(237,244,251,0.88)"
+              />
+
+              <p className="text-palumar-muted mt-4 mb-2" style={{ fontSize: '11px' }}>
+                Detalle por vendedor
+              </p>
+              <div className="overflow-x-auto">
+                <table className="palma-table">
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th>Sede</th>
+                      <th style={{ textAlign: 'right' }}>Total clientes</th>
+                      <th style={{ textAlign: 'right' }}>Impactados</th>
+                      <th style={{ textAlign: 'right' }}>Pendientes</th>
+                      <th style={{ minWidth: '120px' }}>Cobertura %</th>
+                      <th style={{ textAlign: 'right' }}>Venta marca</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marcaVendedorOrdenado.map((d, i) => {
+                      const col = d.cobertura_pct >= UMBRAL_VERDE_CONCURSO ? 'var(--green)'
+                        : d.cobertura_pct >= UMBRAL_AMARILLO_CONCURSO ? 'var(--amber)' : 'var(--red)';
+                      return (
+                        <tr key={d.cod_asesor + i}>
+                          <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{d.vendedor}</td>
+                          <td style={{ color: 'var(--muted)', fontSize: '11px' }}>{d.sede || '—'}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">{d.total.toLocaleString('es')}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono-num">{d.impactados.toLocaleString('es')}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--red)', fontWeight: 600 }} className="font-mono-num">
+                            {d.pendientes.toLocaleString('es')}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>
+                                <div style={{ height: '100%', borderRadius: '99px', width: `${Math.min(d.cobertura_pct, 100)}%`, background: col }} />
+                              </div>
+                              <span style={{ color: col, fontWeight: 700, fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{d.cobertura_pct.toFixed(1)}%</span>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--cyan)' }} className="font-mono-num">{fmt(d.venta)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* ── Efectividad ── */}
