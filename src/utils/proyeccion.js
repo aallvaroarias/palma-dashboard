@@ -1,10 +1,10 @@
-// Fuente única de la "proyección de cierre" — usada por Gerencial.jsx (Proyección
-// vs Meta PALMA) y MiGerencia.jsx (Proyección vs Meta ECOM). Antes cada panel
-// calculaba su propio factor de días hábiles por una vía distinta (Gerencial:
-// días transcurridos reales hasta hoy; Mi Gerencia: factor pre-calculado en
-// Código.js a partir de DIAS_HABILES_RESTANTES) y terminaban en valores
-// absolutos distintos para la misma venta neta. Con este util ambos paneles
-// reciben el mismo $ de proyección; solo cambia la meta contra la que se compara.
+// Fuente única de la "proyección de cierre" para Gerencial.jsx y MiGerencia.jsx.
+// Regla:
+//   - La proyección absoluta debe ser igual en ambos paneles.
+//   - Gerencial compara esa proyección contra Meta PALMA.
+//   - Mi Gerencia compara esa misma proyección contra Meta ECOM.
+//   - Ningún componente debe recalcular la proyección por separado: ambos
+//     deben llamar a calcularProyeccionCierre() de aquí.
 
 /** Cuenta días hábiles (lunes a sábado, excluye domingo) entre dos fechas, inclusive. */
 export function diasHabilesEnRango(desde, hasta) {
