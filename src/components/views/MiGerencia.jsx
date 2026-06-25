@@ -4,6 +4,7 @@ import KpiCard from '../ui/KpiCard';
 import SectionTitle from '../ui/SectionTitle';
 import HBarChart from '../charts/HBarChart';
 import { fmt, pct, getCoberturaVendedor } from '../../utils/formatters';
+import { calcularProyeccionCierre } from '../../utils/proyeccion';
 
 // ── Clave de acceso ───────────────────────────────────────────────────────────
 // Cambiar solo esta constante para actualizar la clave.
@@ -151,7 +152,7 @@ function AccessGate({ children }) {
 
 // ── Panel principal ───────────────────────────────────────────────────────────
 function MiGerenciaContent() {
-  const { miGerencia: mg, resumen: r, cobNegocio, loadingFase2 } = useDashboardStore();
+  const { miGerencia: mg, resumen: r, cobNegocio, loadingFase2, config } = useDashboardStore();
 
   // ── Ventas OFICIALES: siempre desde resumen (misma fuente que panel Gerencial) ─
   const ventaBruta = r?.venta_bruta || 0;
@@ -162,14 +163,19 @@ function MiGerenciaContent() {
   // ── Metas ECOM: desde endpoint mi_gerencia (hoja METAS_ECOM o defaults) ──
   const metaEcomTotal  = mg?.resumen?.meta_ecom_total || 0;
   const diasRestantes  = mg?.dias_habiles_restantes   || 0;
-  const factorProy     = mg?.factor_proyeccion        || 1;
   // sin_hoja_ecom solo es true cuando el servidor lo dice explícitamente
   const sinHojaEcom    = mg?.sin_hoja_ecom === true;
   const hojaEncontrada = mg?.hoja_encontrada === true;
 
+  // ── Proyección OFICIAL: misma fuente/fórmula que el panel Gerencial ───────
+  // (src/utils/proyeccion.js) — Mi Gerencia NUNCA recalcula su propia
+  // proyección; solo la compara contra la meta ECOM en vez de la meta PALMA.
+  const proyResult       = calcularProyeccionCierre(ventaNeta, config?.dias_habiles_restantes || 0);
+  const proyeccion       = proyResult?.proyeccion ?? ventaNeta;
+  const factorProy       = proyResult ? proyResult.habilesTotal / proyResult.habilesTransc : 1;
+
   // ── Cálculos ECOM usando Venta Neta oficial ───────────────────────────────
   const cumplEcomPct     = metaEcomTotal > 0 ? (ventaNeta / metaEcomTotal) * 100 : 0;
-  const proyeccion       = ventaNeta * factorProy;
   const cumplProyEcomPct = metaEcomTotal > 0 ? (proyeccion / metaEcomTotal) * 100 : 0;
   const falta            = metaEcomTotal - ventaNeta;
   const diarioReq        = diasRestantes > 0 ? falta / diasRestantes : 0;

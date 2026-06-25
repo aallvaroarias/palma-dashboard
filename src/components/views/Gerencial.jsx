@@ -10,6 +10,7 @@ import {
   getCoberturaVendedor, getCoberturaValue, esRutaCentral,
 } from '../../utils/formatters';
 import { VEND_COLORS } from '../../utils/colors';
+import { calcularProyeccionCierre } from '../../utils/proyeccion';
 
 function AlertItem({ type, children }) {
   return (
@@ -733,39 +734,15 @@ export default function Gerencial() {
     return list.slice(0, 6);
   }, [vendedoresFiltrados, rf]);
 
-  // Proyección de cierre de mes basada en días hábiles (lun–sáb)
-  // Usa DIAS_HABILES_RESTANTES desde CONFIG cuando está disponible
+  // Proyección de cierre de mes — fuente única compartida con Mi Gerencia
+  // (src/utils/proyeccion.js), para que el $ de proyección nunca difiera
+  // entre paneles. Solo cambia la meta contra la que se compara cada uno.
   const proyeccionCierre = useMemo(() => {
-    if (!rf?.venta_neta) return null;
-    const hoy   = new Date();
-    const anio  = hoy.getFullYear();
-    const mes   = hoy.getMonth();
-    const inicio = new Date(anio, mes, 1);
-    const fin    = new Date(anio, mes + 1, 0);
-
-    function diasHabiles(desde, hasta) {
-      let c = 0;
-      const d = new Date(desde);
-      while (d <= hasta) {
-        if (d.getDay() !== 0) c++;   // excluye domingos
-        d.setDate(d.getDate() + 1);
-      }
-      return c;
-    }
-
-    const habilesTransc = diasHabiles(inicio, hoy);
-    if (habilesTransc === 0) return null;
-
-    const configDias   = config?.dias_habiles_restantes || 0;
-    const habilesTotal = configDias > 0
-      ? habilesTransc + configDias
-      : diasHabiles(inicio, fin);
-
-    const proyeccion  = Math.round(rf.venta_neta / habilesTransc * habilesTotal);
-    const pctAvance   = Math.round(habilesTransc / habilesTotal * 100);
-    const cuota       = rf.cuota_total || 0;
-    const pctVsCuota  = cuota > 0 ? Math.round(proyeccion / cuota * 100) : null;
-    return { proyeccion, pctAvance, habilesTransc, habilesTotal, pctVsCuota };
+    const base = calcularProyeccionCierre(rf?.venta_neta, config?.dias_habiles_restantes || 0);
+    if (!base) return null;
+    const cuota      = rf?.cuota_total || 0;
+    const pctVsCuota = cuota > 0 ? Math.round(base.proyeccion / cuota * 100) : null;
+    return { ...base, pctVsCuota };
   }, [rf, config]);
 
   const diasHabilesRestantes = useMemo(() => {
