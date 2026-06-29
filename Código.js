@@ -806,11 +806,16 @@ function doGet(e) {
         data = withCache_('audit_' + (e.parameter.modo || 'light'), 60,
           function() { return getAuditoriaResumen_(e.parameter.modo || 'light'); });
         break;
-      case 'auditoria_vendedor':
-        // Sin cache a propósito: es un diagnóstico bajo demanda, debe
-        // reflejar siempre el estado actual de BASE_ACUMULADA/RESUMEN_COBERTURA.
-        data = getAuditoriaVendedor_(e.parameter.cod_asesor);
+      case 'auditoria_vendedor': {
+        // Escanea BASE_ACUMULADA completa (sin cache tarda >9s, supera el
+        // timeout del proxy de Vercel) — cache corto de 60s por vendedor,
+        // suficiente para que siga siendo "casi en vivo" para auditorías
+        // puntuales sin romper el proxy. invalidar_cache también lo limpia.
+        const codAud = e.parameter.cod_asesor;
+        data = withCache_('audit_vend_' + codAud, 60,
+          function() { return getAuditoriaVendedor_(codAud); });
         break;
+      }
       default:                  data = getResumen();           break;
     }
 
@@ -2596,13 +2601,16 @@ function getAuditoriaVendedor_(codAsesorParam) {
   const maestro = cargarMaestroActivos_();
   const clientesAsignadosReal = maestro.byAsesor[cod] ? maestro.byAsesor[cod].size : 0;
 
-  // ── Lo que el panel "vendedores" (Mi Panel) muestra hoy, mismo doGet que usa el frontend ──
-  const vActual = getVendedores().find(v => v.cod === cod);
+  // ── Lo que el panel "vendedores" (Mi Panel) muestra hoy ──────────────────
+  // getVendedores() expone cobertura/impactados/maestro tal cual cobMap[cod]
+  // (ver arriba) — son el MISMO valor, así que lo reutilizamos en vez de
+  // volver a escanear toda BASE_ACUMULADA (eso duplicaba el costo y hacía
+  // que el endpoint superara el timeout de 9.2s del proxy de Vercel).
 
   return {
     ok: true,
     cod_asesor: cod,
-    vendedor: nombreVendedor || (vActual ? vActual.nombre : ''),
+    vendedor: nombreVendedor,
     base_acumulada: {
       filas:                               filasVendedor.length,
       venta_neta:                          round2_(ventaNeta),
@@ -2624,9 +2632,9 @@ function getAuditoriaVendedor_(codAsesorParam) {
       clientes_asignados_real: clientesAsignadosReal,
     },
     panel_actual: {
-      cobertura_mostrada:            vActual ? vActual.cobertura  : 0,
-      clientes_impactados_mostrados: vActual ? vActual.impactados : 0,
-      maestro_mostrado:              vActual ? vActual.maestro    : 0,
+      cobertura_mostrada:            cobInfo ? cobInfo.cobertura_pct : 0,
+      clientes_impactados_mostrados: cobInfo ? cobInfo.impactados    : 0,
+      maestro_mostrado:              cobInfo ? cobInfo.maestro       : 0,
     },
   };
 }
