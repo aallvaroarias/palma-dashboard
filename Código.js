@@ -376,7 +376,7 @@ function calcularCoberturaNegocio() {
     if (parseFloat(r[13]) <= 0) return;
     if (!esFilaBaseValida_(r)) return;
     const cod  = obtenerCodAsesor_(r[3]);
-    const codC = String(r[1] || '').trim();
+    const codC = normalizarCodigoCliente_(r[1]);
     const neg  = String(r[8] || '').trim();
     if (!cod || !codsValidos.has(cod)) return;
     negocios.add(neg);
@@ -643,7 +643,7 @@ function validarMaestra() {
   const baseClis = new Set(
     hB.getDataRange().getValues().slice(1)
       .filter(r => esFilaBaseValida_(r))
-      .map(r => String(r[1]).trim())
+      .map(r => normalizarCodigoCliente_(r[1]))
       .filter(Boolean)
   );
   const sinMaestra = [...baseClis].filter(c => !maestroClis.has(c));
@@ -805,6 +805,11 @@ function doGet(e) {
       case 'auditoria_resumen':
         data = withCache_('audit_' + (e.parameter.modo || 'light'), 60,
           function() { return getAuditoriaResumen_(e.parameter.modo || 'light'); });
+        break;
+      case 'auditoria_vendedor':
+        // Sin cache a propósito: es un diagnóstico bajo demanda, debe
+        // reflejar siempre el estado actual de BASE_ACUMULADA/RESUMEN_COBERTURA.
+        data = getAuditoriaVendedor_(e.parameter.cod_asesor);
         break;
       default:                  data = getResumen();           break;
     }
@@ -974,6 +979,28 @@ function getDevolucionesColMap_(headers) {
 
 function obtenerCodAsesor_(valor) {
   return String(valor || '').split('-')[0].trim();
+}
+
+// Defensivo: si Excel/Sheets convirtió un código de cliente numérico largo a
+// notación científica ("9E+12") o a float con ".0" al exportar/reimportar,
+// lo reconstruye. No asume que "9E+12" sea un cliente genérico — solo
+// reconstruye el número completo cuando la precisión sigue disponible.
+function normalizarCodigoCliente_(valor) {
+  if (valor === null || valor === undefined) return '';
+
+  const raw = String(valor).trim();
+  if (!raw) return '';
+
+  if (/^\d+(\.0+)?$/.test(raw)) {
+    return raw.replace(/\.0+$/, '');
+  }
+
+  if (/^\d+(\.\d+)?E\+\d+$/i.test(raw)) {
+    const num = Number(raw);
+    if (Number.isFinite(num)) return String(Math.trunc(num));
+  }
+
+  return raw;
 }
 
 function periodoYYYYMM_(valor) {
@@ -2387,7 +2414,7 @@ function getVendedores() {
 
     if (valor > 0) {
       vendMap[cod].venta_positiva_vmx += valor;
-      vendMap[cod].clientes.add(String(r[1]));
+      vendMap[cod].clientes.add(normalizarCodigoCliente_(r[1]));
     }
     if (valor < 0) {
       vendMap[cod].venta_negativa_vmx_abs += Math.abs(valor);
@@ -2470,9 +2497,14 @@ function getVendedores() {
         pct_averia:        ventaBruta > 0 ? round2_(averias        / ventaBruta * 100) : 0,
         pct_descuento_total: ventaBruta > 0 ? round2_(descuentoTotal/ ventaBruta * 100) : 0,
 
-        // Cobertura
+        // Cobertura — OJO: clientes_imp viene de BASE_ACUMULADA (este período,
+        // valor>0); impactados/maestro/cobertura vienen de RESUMEN_COBERTURA
+        // (otra fuente). Son cifras cercanas pero no idénticas — el frontend
+        // debe emparejar "impactados" con "maestro"/"cobertura" (misma fuente),
+        // nunca "clientes_imp" con "maestro" (fuentes distintas).
         clientes_imp: v.clientes.size,
         maestro:      cobMap[v.cod]?.maestro    || 0,
+        impactados:   cobMap[v.cod]?.impactados || 0,
         cobertura:    cobMap[v.cod]?.cobertura   || 0,
         sin_compra:   cobMap[v.cod]?.sin_compra  || 0,
 
@@ -2486,6 +2518,117 @@ function getVendedores() {
       };
     })
     .sort((a, b) => b.venta_bruta - a.venta_bruta);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUDITORÍA INDIVIDUAL DE VENDEDOR — diagnóstico bajo demanda, sin cache,
+// para validar caso a caso si BASE_ACUMULADA/RESUMEN_COBERTURA están al
+// día y de dónde sale exactamente lo que muestra el panel "vendedores".
+// Uso: /api/datos?sheet=auditoria_vendedor&cod_asesor=212
+// ════════════════════════════════════════════════════════════════════
+function getAuditoriaVendedor_(codAsesorParam) {
+  const cod = obtenerCodAsesor_(String(codAsesorParam || ''));
+  if (!cod) return { ok: false, error: 'Falta parámetro cod_asesor' };
+
+  const mesData        = getBasePeriodoActual_();
+  const filasVendedor  = mesData.filter(r => obtenerCodAsesor_(r[3]) === cod);
+
+  let ventaNeta = 0;
+  let nombreVendedor = '';
+  const porCodigo        = {};      // cod_cliente normalizado → { cod_cliente, nombre, venta }
+  const porNombre        = {};      // nombre normalizado      → { nombre, venta }
+  const porCodigoYNombre = new Set();
+  const ejemplosCodigos  = [];
+
+  filasVendedor.forEach(r => {
+    const valor = parseFloat(r[14]) || 0;
+    ventaNeta += valor;
+    if (!nombreVendedor) {
+      const nom = String(r[4] || '').trim();
+      if (nom) nombreVendedor = nom;
+    }
+    if (valor <= 0) return; // mismo criterio que getVendedores/getTopClientes: solo ventas positivas cuentan como "impacto"
+
+    const codCliRaw = r[1];
+    const codCli     = normalizarCodigoCliente_(codCliRaw);
+    const nomCli      = String(r[2] || '').trim();
+    if (!codCli) return;
+
+    if (ejemplosCodigos.length < 15) {
+      ejemplosCodigos.push({ raw: String(codCliRaw), normalizado: codCli, nombre: nomCli });
+    }
+
+    if (!porCodigo[codCli]) porCodigo[codCli] = { cod_cliente: codCli, nombre: nomCli, venta: 0 };
+    porCodigo[codCli].venta += valor;
+
+    const nomKey = normalizarTexto_(nomCli) || codCli;
+    if (!porNombre[nomKey]) porNombre[nomKey] = { nombre: nomCli || codCli, venta: 0 };
+    porNombre[nomKey].venta += valor;
+
+    porCodigoYNombre.add(codCli + '||' + nomKey);
+  });
+
+  const topPorCodigo = Object.values(porCodigo)
+    .sort((a, b) => b.venta - a.venta).slice(0, 10)
+    .map((c, i) => ({ ranking: i + 1, cod_cliente: c.cod_cliente, nombre: c.nombre, venta: round2_(c.venta) }));
+
+  const topPorNombre = Object.values(porNombre)
+    .sort((a, b) => b.venta - a.venta).slice(0, 10)
+    .map((c, i) => ({ ranking: i + 1, nombre: c.nombre, venta: round2_(c.venta) }));
+
+  // ── RESUMEN_COBERTURA: fuente externa (no calculada por Código.js) ──
+  const hRC = getSheet_(HOJAS.RESUMEN_COBERTURA);
+  let cobInfo = null;
+  if (hRC && hRC.getLastRow() > 1) {
+    const fila = hRC.getDataRange().getValues().slice(1)
+      .find(r => obtenerCodAsesor_(String(r[0] || '')) === cod);
+    if (fila) {
+      cobInfo = {
+        maestro:       parseInt(fila[1])   || 0,
+        impactados:    parseInt(fila[2])   || 0,
+        cobertura_pct: parseFloat(fila[3]) || 0,
+        fecha_o_corte: fila[5] !== undefined ? fechaISO_(fila[5]) : '',
+      };
+    }
+  }
+
+  // ── MAESTRO_CLIENTES real (universo asignado, independiente de RESUMEN_COBERTURA) ──
+  const maestro = cargarMaestroActivos_();
+  const clientesAsignadosReal = maestro.byAsesor[cod] ? maestro.byAsesor[cod].size : 0;
+
+  // ── Lo que el panel "vendedores" (Mi Panel) muestra hoy, mismo doGet que usa el frontend ──
+  const vActual = getVendedores().find(v => v.cod === cod);
+
+  return {
+    ok: true,
+    cod_asesor: cod,
+    vendedor: nombreVendedor || (vActual ? vActual.nombre : ''),
+    base_acumulada: {
+      filas:                               filasVendedor.length,
+      venta_neta:                          round2_(ventaNeta),
+      clientes_unicos_por_codigo:          Object.keys(porCodigo).length,
+      clientes_unicos_por_nombre:          Object.keys(porNombre).length,
+      clientes_unicos_por_codigo_y_nombre: porCodigoYNombre.size,
+      ejemplos_codigos:        ejemplosCodigos,
+      top_clientes_por_codigo: topPorCodigo,
+      top_clientes_por_nombre: topPorNombre,
+    },
+    resumen_cobertura: {
+      existe:        !!cobInfo,
+      maestro:       cobInfo ? cobInfo.maestro       : 0,
+      impactados:    cobInfo ? cobInfo.impactados    : 0,
+      cobertura_pct: cobInfo ? cobInfo.cobertura_pct : 0,
+      fecha_o_corte: cobInfo ? cobInfo.fecha_o_corte : '',
+    },
+    maestro_clientes: {
+      clientes_asignados_real: clientesAsignadosReal,
+    },
+    panel_actual: {
+      cobertura_mostrada:            vActual ? vActual.cobertura  : 0,
+      clientes_impactados_mostrados: vActual ? vActual.impactados : 0,
+      maestro_mostrado:              vActual ? vActual.maestro    : 0,
+    },
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -2752,7 +2895,7 @@ function getNecesidadCliente() {
   const sinNecesidad = { total: 0, clientes: new Set(), por_negocio: {} };
 
   base.forEach(function(r) {
-    const codCli  = String(r[1]  || '').trim();
+    const codCli  = normalizarCodigoCliente_(r[1]);
     const negocio = String(r[8]  || '').trim();
     const venta   = parseFloat(r[14]) || 0;
     if (venta <= 0 || !codCli) return;
@@ -3149,7 +3292,7 @@ function getTendencia() {
     if (!semMap[semana]) semMap[semana] = { semana, venta:0, clientes:new Set(), pedidos:0 };
     if (valor > 0) {
       semMap[semana].venta += valor;
-      semMap[semana].clientes.add(String(r[1]));
+      semMap[semana].clientes.add(normalizarCodigoCliente_(r[1]));
       semMap[semana].pedidos++;
     }
   });
@@ -3189,12 +3332,12 @@ function getTopSKUs() {
     if (!skuMap[sku]) skuMap[sku] = { sku, nombre:nom, negocio:neg, marca, venta:0, clientes:new Set(), unidades:0 };
     skuMap[sku].venta    += valor;
     skuMap[sku].unidades += cant;
-    skuMap[sku].clientes.add(String(r[1]));
+    skuMap[sku].clientes.add(normalizarCodigoCliente_(r[1]));
 
     if (!vendSkuMap[codAsesor])       vendSkuMap[codAsesor] = {};
     if (!vendSkuMap[codAsesor][sku])  vendSkuMap[codAsesor][sku] = { sku, nombre:nom, negocio:neg, venta:0, clientes:new Set() };
     vendSkuMap[codAsesor][sku].venta += valor;
-    vendSkuMap[codAsesor][sku].clientes.add(String(r[1]));
+    vendSkuMap[codAsesor][sku].clientes.add(normalizarCodigoCliente_(r[1]));
   });
 
   const global = Object.values(skuMap)
@@ -3231,7 +3374,7 @@ function getTopClientes() {
 
   mesData.forEach(function(r) {
     if (!esFilaBaseValida_(r)) return;
-    const codCli  = String(r[1]  || '').trim();
+    const codCli  = normalizarCodigoCliente_(r[1]);
     const nomCli  = String(r[2]  || '').trim();
     const codAs   = obtenerCodAsesor_(String(r[3] || ''));
     const nomVend = String(r[4]  || '').trim();
@@ -3357,7 +3500,7 @@ function getTopMarcas() {
     if (!marcaMap[marca]) marcaMap[marca] = { marca, negocio, venta:0, unidades:0, clientes:new Set() };
     marcaMap[marca].venta    += valor;
     marcaMap[marca].unidades += Math.max(cant, 0);
-    marcaMap[marca].clientes.add(String(r[1]));
+    marcaMap[marca].clientes.add(normalizarCodigoCliente_(r[1]));
   });
 
   const total = Object.values(marcaMap).reduce((s, m) => s + m.venta, 0);
@@ -3408,7 +3551,7 @@ function getDNMarcas() {
 
   mesData.forEach(function(r) {
     const marca   = String(r[10] || '').trim();
-    const codCli  = String(r[1]  || '').trim();
+    const codCli  = normalizarCodigoCliente_(r[1]);
     const rawVend = String(r[3]  || '').trim();
     const codVend = obtenerCodAsesor_(rawVend) || rawVend;  // extraer solo el código
     const valor   = parseFloat(r[14]) || 0;
@@ -3527,7 +3670,7 @@ function getCoberturaMarcas_() {
 
   mesData.forEach(function(r) {
     const marca   = String(r[10] || '').trim();
-    const codCli  = String(r[1]  || '').trim();
+    const codCli  = normalizarCodigoCliente_(r[1]);
     const rawVend = String(r[3]  || '').trim();
     const codVend = obtenerCodAsesor_(rawVend) || rawVend;
     const nomVend = String(r[4]  || '').trim();
@@ -4107,7 +4250,7 @@ function cargarMaestroActivos_() {
     hM.getDataRange().getValues().slice(1).forEach(function(r) {
       var estado = String(r[19] || '').trim().toUpperCase();
       if (estado !== 'A') return;
-      var codCli    = String(r[0]  || '').trim();
+      var codCli    = normalizarCodigoCliente_(r[0]);
       var nombre    = String(r[1]  || '').trim();
       var asesorRaw = String(r[20] || '').trim();
       var codAs     = obtenerCodAsesor_(asesorRaw);
@@ -4177,7 +4320,7 @@ function getCoberturaProductosClave_() {
   var sapNoEncontrado = 0;
 
   base.forEach(function(r) {
-    var codCli  = String(r[1]  || '').trim();
+    var codCli  = normalizarCodigoCliente_(r[1]);
     var sap     = limpiarSap_(r[6]);
     var negocio = String(r[8]  || '').trim() || 'Sin negocio';
     var cant    = parseFloat(r[13]) || 0;
@@ -4255,7 +4398,7 @@ function getCoberturaProductosClaveVendedor_() {
   var vendMap = {};  // cod_asesor → { nombre, clientes_imp:Set, venta, unidades, saps:Set }
 
   base.forEach(function(r) {
-    var codCli   = String(r[1]  || '').trim();
+    var codCli   = normalizarCodigoCliente_(r[1]);
     var codAs    = obtenerCodAsesor_(String(r[3] || '').trim());
     var nomVend  = String(r[4]  || '').trim();
     var sap      = limpiarSap_(r[6]);
@@ -4315,7 +4458,7 @@ function getClientesSinProductosClave_() {
   var clienteVenta     = {};  // cod_cli → { venta_total, ultima_compra, cod_asesor, vendedor }
 
   base.forEach(function(r) {
-    var codCli   = String(r[1]  || '').trim();
+    var codCli   = normalizarCodigoCliente_(r[1]);
     var codAs    = obtenerCodAsesor_(String(r[3] || '').trim());
     var nomVend  = String(r[4]  || '').trim();
     var sap      = limpiarSap_(r[6]);
@@ -4365,7 +4508,7 @@ function getProductosClaveDetalle_() {
   var sapDataMap  = {};  // sap → { clientes:Set, venta, unidades, vendedores:Set }
 
   base.forEach(function(r) {
-    var codCli  = String(r[1]  || '').trim();
+    var codCli  = normalizarCodigoCliente_(r[1]);
     var codAs   = obtenerCodAsesor_(String(r[3] || '').trim());
     var nomVend = String(r[4]  || '').trim();
     var sap     = limpiarSap_(r[6]);
@@ -4476,7 +4619,7 @@ function calcularCombosBase_() {
   var sapNoCombo     = 0;
 
   base.forEach(function(r) {
-    var codCli  = String(r[1]  || '').trim();
+    var codCli  = normalizarCodigoCliente_(r[1]);
     var codAs   = obtenerCodAsesor_(String(r[3] || '').trim());
     var nomVend = String(r[4]  || '').trim();
     var sap     = limpiarSap_(r[6]);
@@ -4668,7 +4811,7 @@ function getCombosVendedorDetalle_() {
   var vendMap = {};
 
   base.forEach(function(r) {
-    var codCli  = String(r[1]  || '').trim();
+    var codCli  = normalizarCodigoCliente_(r[1]);
     var codAs   = obtenerCodAsesor_(String(r[3] || '').trim());
     var nomVend = String(r[4]  || '').trim();
     var sap     = limpiarSap_(r[6]);

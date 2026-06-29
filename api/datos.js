@@ -22,24 +22,27 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { sheet, desde, hasta } = req.query;
+  const { sheet, desde, hasta, cod_asesor, modo } = req.query;
 
   if (!sheet) {
     return res.status(400).json({ error: 'Missing sheet param' });
   }
 
-  // Clientes_nuevos con rango de fechas = no cachear (resultado variable)
+  // Clientes_nuevos con rango de fechas, y auditoria_vendedor (diagnóstico
+  // bajo demanda) = no cachear en el proxy (resultado variable / debe ser fresco)
   const esClientesFiltrado = sheet === 'clientes_nuevos' && (desde || hasta);
-  if (esClientesFiltrado) {
+  const esAuditoriaVendedor = sheet === 'auditoria_vendedor';
+  const noCachear = esClientesFiltrado || esAuditoriaVendedor;
+  if (noCachear) {
     res.setHeader('Cache-Control', 'no-store');
   }
 
-  const key = `${sheet}|${desde || ''}|${hasta || ''}`;
+  const key = `${sheet}|${desde || ''}|${hasta || ''}|${cod_asesor || ''}|${modo || ''}`;
   const now = Date.now();
   const ttl = CACHE_TTL[sheet] ?? CACHE_DEFAULT_TTL;
 
   // Servir caché fresco
-  if (!esClientesFiltrado && cache[key] && now - cache[key].ts < ttl) {
+  if (!noCachear && cache[key] && now - cache[key].ts < ttl) {
     res.setHeader('X-Cache', 'HIT');
     res.setHeader('X-Cache-Age', String(Math.round((now - cache[key].ts) / 1000)) + 's');
     return res.json(cache[key].data);
@@ -47,8 +50,10 @@ export default async function handler(req, res) {
 
   try {
     let url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`;
-    if (desde) url += `&desde=${encodeURIComponent(desde)}`;
-    if (hasta) url += `&hasta=${encodeURIComponent(hasta)}`;
+    if (desde)      url += `&desde=${encodeURIComponent(desde)}`;
+    if (hasta)      url += `&hasta=${encodeURIComponent(hasta)}`;
+    if (cod_asesor) url += `&cod_asesor=${encodeURIComponent(cod_asesor)}`;
+    if (modo)       url += `&modo=${encodeURIComponent(modo)}`;
 
     // 9.2 s — Apps Script con cache caliente responde en <1 s;
     // deja ~0.8 s de margen antes del límite de 10 s de Vercel Hobby.
@@ -61,7 +66,7 @@ export default async function handler(req, res) {
     if (!r.ok) throw new Error(`Apps Script HTTP ${r.status}`);
 
     const data = await r.json();
-    if (!esClientesFiltrado) cache[key] = { data, ts: now };
+    if (!noCachear) cache[key] = { data, ts: now };
 
     res.setHeader('X-Cache', 'MISS');
     return res.json(data);
@@ -77,9 +82,12 @@ export default async function handler(req, res) {
     }
     // Sin ningún cache: 504 con fallback_url para que el cliente reintente directo
     console.error(`[datos.js] Error sin cache para "${sheet}":`, err.message);
+    let fallbackUrl = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`;
+    if (cod_asesor) fallbackUrl += `&cod_asesor=${encodeURIComponent(cod_asesor)}`;
+    if (modo)       fallbackUrl += `&modo=${encodeURIComponent(modo)}`;
     return res.status(504).json({
       error: 'timeout',
-      fallback_url: `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`,
+      fallback_url: fallbackUrl,
     });
   }
 }

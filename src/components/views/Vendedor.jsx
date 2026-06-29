@@ -434,7 +434,7 @@ export default function Vendedor() {
         <KpiCard
           label="Cobertura"
           value={pct(v.cobertura)}
-          sub={`${v.clientes_imp || 0} de ${v.maestro || 0}`}
+          sub={`${v.impactados || 0} de ${v.maestro || 0}`}
           color="cyan"
           barValue={v.cobertura || 0}
         />
