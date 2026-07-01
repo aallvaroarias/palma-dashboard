@@ -592,6 +592,18 @@ export default function Gerencial() {
     return MAPA_NEGOCIOS[s] ? MAPA_NEGOCIOS[s] : limpio;
   }
 
+  // Proyección de cierre de mes — fuente única compartida con Mi Gerencia
+  // (src/utils/proyeccion.js), para que el $ de proyección nunca difiera
+  // entre paneles. Solo cambia la meta contra la que se compara cada uno.
+  // Declarado antes de metasPorNegocio para que ambos usen el mismo factor.
+  const proyeccionCierre = useMemo(() => {
+    const base = calcularProyeccionCierre(rf?.venta_neta, config?.dias_habiles_restantes || 0, config?.dias_habiles_mes || 0);
+    if (!base) return null;
+    const cuota      = rf?.cuota_total || 0;
+    const pctVsCuota = cuota > 0 ? Math.round(base.proyeccion / cuota * 100) : null;
+    return { ...base, pctVsCuota };
+  }, [rf, config]);
+
   // Metas por negocio: suma cuotas × sede cruzada con venta real por negocio
   const metasPorNegocio = useMemo(() => {
     // ── Meta: filtrar cuotas por sede ─────────────────────────────────────────
@@ -632,17 +644,9 @@ export default function Gerencial() {
     // ── KPI de referencia (para calcular "sin negocio") ──────────────────────
     const ventaKPI = rf?.venta_neta ?? 0;
 
-    // Factor de proyección (días hábiles lun-sáb)
-    const hoy2 = new Date();
-    const inicio = new Date(hoy2.getFullYear(), hoy2.getMonth(), 1);
-    const fin    = new Date(hoy2.getFullYear(), hoy2.getMonth() + 1, 0);
-    function diasHab(a, b) {
-      let n = 0, d = new Date(a);
-      while (d <= b) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
-      return n;
-    }
-    const hTotal  = diasHab(inicio, fin);
-    const hTransc = diasHab(inicio, hoy2);
+    // Factor de proyección: fuente única compartida con calcularProyeccionCierre
+    const hTotal  = proyeccionCierre?.habilesTotal  || 1;
+    const hTransc = proyeccionCierre?.habilesTransc || 1;
     const factor  = hTransc > 0 ? hTotal / hTransc : 1;
 
     const ventaTotalRaw   = Object.values(ventaMap).reduce((s, v) => s + v, 0);
@@ -688,7 +692,7 @@ export default function Gerencial() {
     }
 
     return rows;
-  }, [cuotas, rf, vendedoresFiltrados, sedeFiltro]);
+  }, [cuotas, rf, vendedoresFiltrados, sedeFiltro, config, proyeccionCierre]);
 
   // Venta NETA por negocio — normalizada con normNeg, agrupada, sin códigos ni chars dañados
   // Fuente principal: rf.venta_por_negocio (pre-agregado en backend por sede).
@@ -734,16 +738,6 @@ export default function Gerencial() {
     return list.slice(0, 6);
   }, [vendedoresFiltrados, rf]);
 
-  // Proyección de cierre de mes — fuente única compartida con Mi Gerencia
-  // (src/utils/proyeccion.js), para que el $ de proyección nunca difiera
-  // entre paneles. Solo cambia la meta contra la que se compara cada uno.
-  const proyeccionCierre = useMemo(() => {
-    const base = calcularProyeccionCierre(rf?.venta_neta, config?.dias_habiles_restantes || 0);
-    if (!base) return null;
-    const cuota      = rf?.cuota_total || 0;
-    const pctVsCuota = cuota > 0 ? Math.round(base.proyeccion / cuota * 100) : null;
-    return { ...base, pctVsCuota };
-  }, [rf, config]);
 
   const diasHabilesRestantes = useMemo(() => {
     const configDias = config?.dias_habiles_restantes || 0;

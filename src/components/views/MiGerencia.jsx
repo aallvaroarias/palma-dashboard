@@ -170,7 +170,7 @@ function MiGerenciaContent() {
   // ── Proyección OFICIAL: misma fuente/fórmula que el panel Gerencial ───────
   // (src/utils/proyeccion.js) — Mi Gerencia NUNCA recalcula su propia
   // proyección; solo la compara contra la meta ECOM en vez de la meta PALMA.
-  const proyResult       = calcularProyeccionCierre(ventaNeta, config?.dias_habiles_restantes || 0);
+  const proyResult       = calcularProyeccionCierre(ventaNeta, config?.dias_habiles_restantes || 0, config?.dias_habiles_mes || 0);
   const proyeccion       = proyResult?.proyeccion ?? ventaNeta;
   const factorProy       = proyResult ? proyResult.habilesTotal / proyResult.habilesTransc : 1;
 

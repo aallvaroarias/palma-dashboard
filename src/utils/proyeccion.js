@@ -18,25 +18,58 @@ export function diasHabilesEnRango(desde, hasta) {
 }
 
 /**
- * Proyección de cierre de mes a partir de venta neta + días hábiles transcurridos/totales.
+ * Proyección de cierre de mes a partir de venta neta + días hábiles.
+ *
+ * Fuente primaria: CONFIG.DIAS_HABILES_MES + CONFIG.DIAS_HABILES_RESTANTES.
+ *   diasTranscurridos = diasHabilesMes - diasRestantes
+ *   proyeccion        = ventaNeta + (ventaNeta / diasTranscurridos) * diasRestantes
+ *
+ * Fallback (cuando diasHabilesMes no está configurado): calcula los días
+ * desde el 1º del mes actual hasta hoy — solo se usa si la hoja CONFIG
+ * no tiene DIAS_HABILES_MES.
+ *
  * @param {number} ventaNeta
- * @param {number} diasHabilesRestantesConfig — CONFIG.DIAS_HABILES_RESTANTES (0 si no disponible)
+ * @param {number} diasRestantes  — CONFIG.DIAS_HABILES_RESTANTES
+ * @param {number} diasHabilesMes — CONFIG.DIAS_HABILES_MES (0 = no disponible)
  * @returns {{proyeccion:number, pctAvance:number, habilesTransc:number, habilesTotal:number} | null}
  */
-export function calcularProyeccionCierre(ventaNeta, diasHabilesRestantesConfig = 0) {
+export function calcularProyeccionCierre(ventaNeta, diasRestantes = 0, diasHabilesMes = 0) {
   if (!ventaNeta) return null;
-  const hoy    = new Date();
-  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const fin    = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
 
-  const habilesTransc = diasHabilesEnRango(inicio, hoy);
-  if (habilesTransc === 0) return null;
+  let habilesTotal;
+  let habilesTransc;
 
-  const habilesTotal = diasHabilesRestantesConfig > 0
-    ? habilesTransc + diasHabilesRestantesConfig
-    : diasHabilesEnRango(inicio, fin);
+  if (diasHabilesMes > 0) {
+    // Fuente primaria: CONFIG — no depende de la fecha del sistema
+    habilesTotal  = diasHabilesMes;
+    habilesTransc = diasHabilesMes - diasRestantes;
+  } else {
+    // Fallback: calcular el total del mes del período desde el calendario.
+    // Si estamos en los primeros 5 días del mes y quedan días del período,
+    // el dato pertenece al mes anterior (cierre reciente).
+    const hoy = new Date();
+    const esPrimerosDias = hoy.getDate() <= 5;
+    const mesRef = (esPrimerosDias && diasRestantes > 0)
+      ? new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+      : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const inicio = new Date(mesRef.getFullYear(), mesRef.getMonth(), 1);
+    const fin    = new Date(mesRef.getFullYear(), mesRef.getMonth() + 1, 0);
+    habilesTotal  = diasHabilesEnRango(inicio, fin);
+    habilesTransc = habilesTotal - diasRestantes;
+  }
 
-  const proyeccion = Math.round(ventaNeta / habilesTransc * habilesTotal);
-  const pctAvance  = Math.round(habilesTransc / habilesTotal * 100);
+  // Si no han transcurrido días (inicio de mes) la proyección es la venta actual
+  if (habilesTransc <= 0) {
+    return { proyeccion: Math.round(ventaNeta), pctAvance: 0, habilesTransc: 0, habilesTotal };
+  }
+
+  // Si no quedan días, el mes ya cerró: la proyección es la venta actual
+  if (diasRestantes <= 0) {
+    return { proyeccion: Math.round(ventaNeta), pctAvance: 100, habilesTransc, habilesTotal };
+  }
+
+  const promedioDiario = ventaNeta / habilesTransc;
+  const proyeccion     = Math.round(ventaNeta + promedioDiario * diasRestantes);
+  const pctAvance      = Math.round(habilesTransc / habilesTotal * 100);
   return { proyeccion, pctAvance, habilesTransc, habilesTotal };
 }
