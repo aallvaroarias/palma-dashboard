@@ -1,0 +1,123 @@
+{
+  "periodo": "Junio 2026",
+  "fecha_corte": "2026-06-29",
+  "generado": "1 de julio de 2026",
+  "ventas": {
+    "venta_bruta": 456288.81,
+    "devolucion_total": 46115.18,
+    "devolucion_pct": 10.11,
+    "averia_total": 16910.12,
+    "averia_pct": 3.71,
+    "venta_neta": 393263.51
+  },
+  "cobertura": {
+    "clientes_impactados": 1789,
+    "clientes_maestro": 2608,
+    "cobertura_pct": 68.6,
+    "clientes_sin_impactar": 819
+  },
+  "metas": {
+    "meta_palma": 564546.27,
+    "cumpl_palma": 69.66,
+    "falta_palma": 171282.76,
+    "meta_ecom": 462962.0,
+    "cumpl_ecom": 84.94,
+    "falta_ecom": 69698.49
+  },
+  "proyeccion": {
+    "aplica": false,
+    "nota": "Mes cerrado. Días hábiles restantes = 0. Corte 2026-06-29."
+  },
+  "venta_sin_negocio": 15101.89,
+  "venta_sin_negocio_pct": 3.84,
+  "negocios": [
+    {
+      "nombre": "Chocolates",
+      "venta_neta": 154328.35,
+      "pct_venta_total": 39.24,
+      "meta_ecom": 170589,
+      "meta_palma": 207673,
+      "cumpl_ecom": 90.47,
+      "cumpl_palma": 74.32,
+      "cobertura_impactados": 1352,
+      "cobertura_pct": 51.8
+    },
+    {
+      "nombre": "Cárnico",
+      "venta_neta": 94278.22,
+      "pct_venta_total": 23.97,
+      "meta_ecom": 137796,
+      "meta_palma": 167751,
+      "cumpl_ecom": 68.42,
+      "cumpl_palma": 56.2,
+      "cobertura_impactados": 1479,
+      "cobertura_pct": 56.7
+    },
+    {
+      "nombre": "Galletas",
+      "venta_neta": 60668.67,
+      "pct_venta_total": 15.43,
+      "meta_ecom": 85681,
+      "meta_palma": 104307,
+      "cumpl_ecom": 70.81,
+      "cumpl_palma": 58.16,
+      "cobertura_impactados": 1116,
+      "cobertura_pct": 42.8
+    },
+    {
+      "nombre": "Bebidas TMLUC",
+      "venta_neta": 35417.77,
+      "pct_venta_total": 9.01,
+      "meta_ecom": 34247,
+      "meta_palma": 41692,
+      "cumpl_ecom": 103.42,
+      "cumpl_palma": 84.97,
+      "cobertura_impactados": 834,
+      "cobertura_pct": 32.0
+    },
+    {
+      "nombre": "Café",
+      "venta_neta": 30064.11,
+      "pct_venta_total": 7.64,
+      "meta_ecom": 31562,
+      "meta_palma": 38423,
+      "cumpl_ecom": 95.25,
+      "cumpl_palma": 78.24,
+      "cobertura_impactados": 714,
+      "cobertura_pct": 27.4
+    },
+    {
+      "nombre": "Snacks TMLUC",
+      "venta_neta": 2464.67,
+      "pct_venta_total": 0.63,
+      "meta_ecom": 2037,
+      "meta_palma": 3520,
+      "cumpl_ecom": 121.0,
+      "cumpl_palma": 70.02,
+      "cobertura_impactados": 54,
+      "cobertura_pct": 2.1
+    },
+    {
+      "nombre": "Nutrición Experta",
+      "venta_neta": 868.39,
+      "pct_venta_total": 0.22,
+      "meta_ecom": 1000,
+      "meta_palma": 1120,
+      "cumpl_ecom": 86.84,
+      "cumpl_palma": 77.54,
+      "cobertura_impactados": 31,
+      "cobertura_pct": 1.2
+    },
+    {
+      "nombre": "Otros TMLUC",
+      "venta_neta": 71.44,
+      "pct_venta_total": 0.02,
+      "meta_ecom": 50,
+      "meta_palma": 61,
+      "cumpl_ecom": 142.88,
+      "cumpl_palma": 117.12,
+      "cobertura_impactados": 6,
+      "cobertura_pct": 0.2
+    }
+  ]
+}
