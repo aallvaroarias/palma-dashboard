@@ -315,14 +315,378 @@ function calcularCobertura() {
   hRes.getRange(2,1,rows.length,6).setValues(rows);
 }
 
+// Diagnóstico temporal: inspecciona MAESTRO_CLIENTES en crudo (headers +
+// muestra de filas de un vendedor) para ver si hay alguna columna de
+// "rutero válido" distinta de estado='A' que el sistema oficial use y que
+// Código.js no esté considerando. Solo lectura, no escribe nada.
+function debugMaestroClientes_(codAsesorParam) {
+  const cod = codAsesorParam ? obtenerCodAsesor_(String(codAsesorParam)) : '';
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (!hM || hM.getLastRow() < 2) return { ok: false, error: 'MAESTRO_CLIENTES vacía' };
+
+  const allData = hM.getDataRange().getValues();
+  const headers = allData[0].map((h, i) => `[${i}] ${h}`);
+
+  const filasVendedor = [];
+  let totalActivas = 0, totalParaCod = 0;
+  for (let i = 1; i < allData.length; i++) {
+    const r = allData[i];
+    const estado = String(r[19] || '').trim().toUpperCase();
+    if (estado === 'A') totalActivas++;
+    const asesorRaw = String(r[20] || '').trim();
+    const codV = obtenerCodAsesor_(asesorRaw);
+    if (cod && codV === cod) {
+      totalParaCod++;
+      if (filasVendedor.length < 30) {
+        filasVendedor.push({ fila: i + 1, valores: r, estado, asesor_raw: asesorRaw });
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    cod_asesor: cod || null,
+    total_filas_hoja:    allData.length - 1,
+    total_estado_A:      totalActivas,
+    total_para_vendedor: totalParaCod,
+    headers,
+    muestra_filas_vendedor: filasVendedor,
+  };
+}
+
+// Debug temporal de solo lectura — dump de encabezados + muestra de filas de
+// BASE_ACUMULADA para un vendedor, para confirmar qué columna es factura/doc
+// y cuál es producto/SAP antes de construir el diagnóstico de venta positiva.
+function debugBaseAcumulada_(codAsesorParam) {
+  const cod = codAsesorParam ? obtenerCodAsesor_(String(codAsesorParam)) : '';
+  const hB = getSheet_(HOJAS.BASE);
+  if (!hB || hB.getLastRow() < 2) return { ok: false, error: 'BASE_ACUMULADA vacía' };
+  const allData = hB.getDataRange().getValues();
+  const headers = allData[0].map((h, i) => `[${i}] ${h}`);
+  const muestra = [];
+  for (let i = 1; i < allData.length && muestra.length < 15; i++) {
+    const r = allData[i];
+    if (cod && obtenerCodAsesor_(r[3]) !== cod) continue;
+    muestra.push(r);
+  }
+  return { ok: true, headers, muestra };
+}
+
+// Diagnóstico de SOLO LECTURA: ¿qué 9 clientes de los 246 de PALMA podrían
+// no pertenecer al Rutero oficial? Reproduce EXACTAMENTE el mismo filtro
+// (estado==='A' + cod_asesor) que hoy usa calcularCoberturaNegocio() para
+// construir el universo, expone cada columna candidata, agrupa conteos y
+// detecta duplicados. No modifica ninguna hoja, no recalcula nada.
+// Uso: /api/datos?sheet=auditoria_universo_vendedor&cod_asesor=208
+function getAuditoriaUniversoVendedor_(codAsesorParam) {
+  const cod = codAsesorParam ? obtenerCodAsesor_(String(codAsesorParam)) : '';
+  if (!cod) return { ok: false, error: 'Falta parámetro cod_asesor' };
+
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (!hM || hM.getLastRow() < 2) return { ok: false, error: 'MAESTRO_CLIENTES vacía' };
+
+  const allData = hM.getDataRange().getValues();
+  let nombreVendedor = '';
+
+  // Filas crudas asignadas a este asesor, ANTES de deduplicar por cod_cliente
+  const filasCrudas = [];
+  for (let i = 1; i < allData.length; i++) {
+    const r = allData[i];
+    const asesorRaw = String(r[20] || '').trim();
+    const codV = obtenerCodAsesor_(asesorRaw);
+    if (codV !== cod) continue;
+    if (!nombreVendedor && asesorRaw) nombreVendedor = asesorRaw;
+
+    filasCrudas.push({
+      fila:              i + 1,
+      cod_cliente:       normalizarCodigoCliente_(r[0]),
+      cod_cliente_raw:   String(r[0]),
+      cliente:           String(r[1]  || '').trim(),
+      direccion:         String(r[6]  || '').trim(),
+      telefono:          String(r[7]  || '').trim(),
+      dia_visita:        String(r[8]  || '').trim(),
+      frecuencia_visita: String(r[9]  || '').trim(),
+      segmento:          String(r[23] || '').trim(),
+      // Hay dos columnas "Canal" en la hoja ([24] y [30]) — [30] es la que
+      // viene poblada en la práctica; se usa como principal con [24] de respaldo.
+      canal:             String(r[30] || '').trim() || String(r[24] || '').trim(),
+      sub_canal:         String(r[31] || '').trim(),
+      sector:            String(r[25] || '').trim(),
+      estado:            String(r[19] || '').trim(),
+      asesor:            asesorRaw,
+      cod_asesor:        codV,
+      fecha_creacion:    r[27] instanceof Date ? Utilities.formatDate(r[27], TZ, 'yyyy-MM-dd') : String(r[27] || '').trim(),
+    });
+  }
+
+  // Mismo filtro que hoy usa calcularCoberturaNegocio()/cargarMaestroActivos_
+  // para construir el universo de 246: estado==='A' + dedup por cod_cliente.
+  const universoMap = {};
+  filasCrudas.forEach(f => {
+    if (f.estado.toUpperCase() !== 'A') return;
+    if (!universoMap[f.cod_cliente]) universoMap[f.cod_cliente] = f;
+  });
+  const filasMaestro = Object.values(universoMap);
+
+  function contarPor(campo) {
+    const map = {};
+    filasMaestro.forEach(f => {
+      const v = f[campo] || '(vacío)';
+      map[v] = (map[v] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([valor, count]) => ({ valor, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const conteos = {
+    por_estado:            contarPor('estado'),
+    por_dia_visita:        contarPor('dia_visita'),
+    por_frecuencia_visita: contarPor('frecuencia_visita'),
+    por_segmento:          contarPor('segmento'),
+    por_canal:             contarPor('canal'),
+    por_sub_canal:         contarPor('sub_canal'),
+    por_sector:            contarPor('sector'),
+  };
+
+  const normTxt_ = s => String(s || '').toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+  function agruparDuplicados(keyFn) {
+    const map = {};
+    filasMaestro.forEach(f => {
+      const k = keyFn(f);
+      if (!k) return;
+      if (!map[k]) map[k] = [];
+      map[k].push(f);
+    });
+    return Object.values(map).filter(arr => arr.length > 1);
+  }
+
+  const duplicados_por_codigo        = agruparDuplicados(f => f.cod_cliente);
+  const duplicados_por_nombre        = agruparDuplicados(f => normTxt_(f.cliente));
+  const duplicados_por_codigo_nombre = agruparDuplicados(f => f.cod_cliente + '||' + normTxt_(f.cliente));
+  const duplicados_por_direccion     = agruparDuplicados(f => normTxt_(f.direccion));
+
+  // Candidatos a exclusión — heurística basada en campos vacíos típicos de
+  // un cliente sin ruta real asignada. No es una decisión, solo una pista.
+  const posibles_excluidos = [];
+  filasMaestro.forEach(f => {
+    const motivos = [];
+    if (!f.frecuencia_visita) motivos.push('frecuencia_visita vacía');
+    if (!f.dia_visita)        motivos.push('dia_visita vacío');
+    if (!f.canal)             motivos.push('canal vacío');
+    if (!f.sub_canal)         motivos.push('sub_canal vacío');
+    if (motivos.length) {
+      posibles_excluidos.push({
+        cod_cliente: f.cod_cliente, cliente: f.cliente, direccion: f.direccion,
+        dia_visita: f.dia_visita, frecuencia_visita: f.frecuencia_visita,
+        segmento: f.segmento, canal: f.canal, sub_canal: f.sub_canal, sector: f.sector,
+        motivo_sospecha: motivos.join(' + '),
+      });
+    }
+  });
+
+  // Referencia conocida del sistema oficial (solo la tenemos para 208 por ahora,
+  // tomada de REFERENCIA_COB_NEG — mismo Rutero en Cárnico y Café).
+  const refSistema = REFERENCIA_COB_NEG['Cárnico'] && REFERENCIA_COB_NEG['Cárnico'][cod];
+
+  return {
+    ok: true,
+    cod_asesor: cod,
+    vendedor: nombreVendedor,
+    palma_universo:      filasMaestro.length,
+    filas_crudas_total:  filasCrudas.length,
+    sistema_rutero:      refSistema ? refSistema.rutero : null,
+    diferencia:          refSistema ? filasMaestro.length - refSistema.rutero : null,
+    conteos,
+    duplicados_por_codigo,
+    duplicados_por_nombre,
+    duplicados_por_codigo_nombre,
+    duplicados_por_direccion,
+    posibles_excluidos,
+    filas_maestro: filasMaestro,
+  };
+}
+
+// Diagnóstico de solo lectura — identifica, para un vendedor + negocio dado,
+// los clientes del universo (maestroSet) que tienen movimiento en el período
+// actual pero NO quedan marcados "impactados" por calcularCoberturaNegocio()
+// (porque todas sus filas de ese negocio tienen cantidad<=0, ej. solo
+// devoluciones). No cambia lógica ni escribe nada — solo lista candidatos
+// para explicar la diferencia Impactados PALMA vs Impactados sistema.
+function getDiagnosticoImpactadosNegocio_(codAsesorParam, negocioParam) {
+  const cod = codAsesorParam ? obtenerCodAsesor_(String(codAsesorParam)) : '';
+  if (!cod) return { ok: false, error: 'Falta parámetro cod_asesor' };
+  const negocioObjetivo = normNegMiG_(String(negocioParam || '').trim());
+  if (!negocioObjetivo) return { ok: false, error: 'Falta parámetro negocio' };
+
+  const hB = getSheet_(HOJAS.BASE);
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (!hB || !hM) return { ok: false, error: 'Faltan hojas BASE_ACUMULADA o MAESTRO_CLIENTES' };
+
+  // Mismo universo (maestroSet) que usa calcularCoberturaNegocio(): estado='A' + dedup.
+  const maestroData = hM.getDataRange().getValues();
+  const maestroSet = new Set();
+  const nombreMaestro = {};
+  maestroData.slice(1).forEach(r => {
+    const asesorRaw = String(r[20] || '').trim();
+    const codV = obtenerCodAsesor_(asesorRaw);
+    if (codV !== cod) return;
+    if (String(r[19] || '').trim().toUpperCase() !== 'A') return;
+    const cli = normalizarCodigoCliente_(r[0]);
+    if (!cli) return;
+    maestroSet.add(cli);
+    if (!nombreMaestro[cli]) nombreMaestro[cli] = String(r[1] || '').trim();
+  });
+
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+  });
+
+  // Por cliente: todas las filas de este negocio+período, separando filas con
+  // cant>0 (las que SÍ marcan "impactado" hoy) de las que no.
+  const porCliente = {};
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    const codV = obtenerCodAsesor_(r[3]);
+    if (codV !== cod) return;
+    const negRaw = String(r[8] || '').trim();
+    if (normNegMiG_(negRaw) !== negocioObjetivo) return;
+    const cli = normalizarCodigoCliente_(r[1]);
+    if (!cli) return;
+    const cant  = parseFloat(r[13]) || 0;
+    const venta = parseFloat(r[14]) || 0;
+    if (!porCliente[cli]) porCliente[cli] = { cod_cliente: cli, filas: 0, cant_positivas: 0, cant_no_positivas: 0, venta_total: 0, venta_filas_positivas: 0 };
+    const acc = porCliente[cli];
+    acc.filas++;
+    acc.venta_total += venta;
+    if (cant > 0) { acc.cant_positivas++; acc.venta_filas_positivas += venta; }
+    else acc.cant_no_positivas++;
+  });
+
+  const impactadosPalma = [];
+  const candidatosExclusion = []; // en maestroSet, con movimiento, pero NUNCA cant>0
+  let ventaImpactadosPalma = 0;
+  Object.values(porCliente).forEach(acc => {
+    if (!maestroSet.has(acc.cod_cliente)) return; // fuera del universo — no aplica
+    const cliente = { ...acc, cliente: nombreMaestro[acc.cod_cliente] || '' };
+    if (acc.cant_positivas > 0) {
+      impactadosPalma.push(cliente);
+      ventaImpactadosPalma += acc.venta_filas_positivas;
+    } else {
+      candidatosExclusion.push(cliente);
+    }
+  });
+
+  return {
+    ok: true,
+    cod_asesor: cod,
+    negocio: negocioObjetivo,
+    periodo: periodoCalc,
+    universo_total: maestroSet.size,
+    impactados_palma: impactadosPalma.length,
+    venta_impactados_palma: round2_(ventaImpactadosPalma),
+    candidatos_exclusion: candidatosExclusion, // clientes con movimiento (solo cant<=0, ej. solo devoluciones) que el sistema podría contar como atendidos
+    impactados_detalle: impactadosPalma,
+  };
+}
+
+
+// Respaldo manual de COBERTURA_NEGOCIO antes de recalcular — copia completa
+// de la hoja (valores, formato, fórmulas) con nombre con timestamp, nunca
+// sobrescribe un backup existente. No borra ni modifica la hoja original.
+function backupCoberturaNegocio_() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const hCN = ss.getSheetByName('COBERTURA_NEGOCIO');
+  if (!hCN) return { ok: false, error: 'No existe la hoja COBERTURA_NEGOCIO' };
+
+  const stamp  = Utilities.formatDate(new Date(), TZ, 'yyyy_MM_dd_HHmmss');
+  const nombre = 'BACKUP_COBERTURA_NEGOCIO_' + stamp + '_ANTES_FIX';
+
+  const copia = hCN.copyTo(ss);
+  copia.setName(nombre);
+  copia.hideSheet();
+
+  return {
+    ok: true,
+    backup_sheet: nombre,
+    filas_respaldadas: hCN.getLastRow(),
+  };
+}
+
 // ── COBERTURA POR NEGOCIO ─────────────────────────────────────────
+// ── Negocio de respaldo cuando BASE_ACUMULADA llega con r[8] vacío ──────────
+// Algunos SKU llegan sin negocio asignado en BASE_ACUMULADA aunque sí lo
+// tienen en PRODUCTOS_CLAVE (ej. SALCH. HOTDOG BLUE RIBBON, CAFE COLCAFE
+// GRANULADO). Sin este respaldo esa venta/cantidad queda fuera de
+// COBERTURA_NEGOCIO por completo. Construido dinámicamente desde
+// PRODUCTOS_CLAVE — nunca se queman SAP en código.
+function construirContextoNegocioFallback_(baseData, periodoCalc) {
+  const mapaSkuNegocio = {};
+  cargarProductosClave_().todos.forEach(p => {
+    if (p.sap && p.negocio) mapaSkuNegocio[limpiarSap_(p.sap)] = normNegMiG_(p.negocio);
+  });
+
+  // Para no fragmentar COBERTURA_NEGOCIO con un string nuevo (ej. "Cárnico")
+  // cuando el resto de filas usa el crudo real (ej. "01-Carnico"), se resuelve
+  // al raw más frecuente que YA existe en BASE_ACUMULADA para ese negocio
+  // normalizado, en vez de usar el valor del catálogo directamente.
+  const frecPorNegNorm = {}; // negNormalizado -> { raw: count }
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    const raw = String(r[8] || '').trim();
+    if (!raw) return;
+    const norm = normNegMiG_(raw);
+    if (!frecPorNegNorm[norm]) frecPorNegNorm[norm] = {};
+    frecPorNegNorm[norm][raw] = (frecPorNegNorm[norm][raw] || 0) + 1;
+  });
+  const rawCanonicoPorNegocio = {};
+  Object.entries(frecPorNegNorm).forEach(([norm, conteos]) => {
+    rawCanonicoPorNegocio[norm] = Object.entries(conteos).sort((a, b) => b[1] - a[1])[0][0];
+  });
+
+  return { mapaSkuNegocio, rawCanonicoPorNegocio };
+}
+
+function resolverNegocioFinal_(negocioRaw, sap, ctx) {
+  const neg = String(negocioRaw || '').trim();
+  if (neg) return neg;
+  const negNorm = ctx.mapaSkuNegocio[limpiarSap_(sap)];
+  if (!negNorm) return 'Sin negocio identificado';
+  return ctx.rawCanonicoPorNegocio[negNorm] || negNorm;
+}
+
 function calcularCoberturaNegocio() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const hB = ss.getSheetByName('BASE_ACUMULADA');
   const hM = ss.getSheetByName('MAESTRO_CLIENTES');
-  const ui = SpreadsheetApp.getUi();
+  // SpreadsheetApp.getUi() solo funciona en contexto de menú de Sheets, no
+  // al invocar esta función vía el web app (doGet) — degradar sin romper.
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (_) { /* sin UI disponible */ }
 
-  if (!hB || !hM) { ui.alert('ERROR', 'Faltan hojas.', ui.ButtonSet.OK); return; }
+  if (!hB || !hM) {
+    const msg = 'Faltan hojas BASE_ACUMULADA o MAESTRO_CLIENTES.';
+    if (ui) ui.alert('ERROR', msg, ui.ButtonSet.OK);
+    else throw new Error(msg);
+    return;
+  }
 
   let hCN = ss.getSheetByName('COBERTURA_NEGOCIO');
   if (!hCN) hCN = ss.insertSheet('COBERTURA_NEGOCIO');
@@ -354,7 +718,7 @@ function calcularCoberturaNegocio() {
   const maestroData = hM.getDataRange().getValues();
   const maestroMap  = {};
   maestroData.slice(1).forEach(r => {
-    const cli    = String(r[0]  || '').trim();
+    const cli    = normalizarCodigoCliente_(r[0]);
     const asesor = String(r[20] || '').trim();
     const estado = String(r[19] || '').trim().toUpperCase();
     if (!cli || !asesor || estado !== 'A') return;
@@ -364,6 +728,8 @@ function calcularCoberturaNegocio() {
     if (!maestroMap[cod]) maestroMap[cod] = new Set();
     maestroMap[cod].add(cli);
   });
+
+  const ctxNegocio = construirContextoNegocioFallback_(baseData, periodoCalc);
 
   const impMap  = {};
   const negocios = new Set();
@@ -377,7 +743,7 @@ function calcularCoberturaNegocio() {
     if (!esFilaBaseValida_(r)) return;
     const cod  = obtenerCodAsesor_(r[3]);
     const codC = normalizarCodigoCliente_(r[1]);
-    const neg  = String(r[8] || '').trim();
+    const neg  = resolverNegocioFinal_(r[8], r[6], ctxNegocio);
     if (!cod || !codsValidos.has(cod)) return;
     negocios.add(neg);
     if (!impMap[cod])      impMap[cod]      = {};
@@ -799,6 +1165,50 @@ function doGet(e) {
         invalidarCache_();
         data = { ok: true };
         break;
+      case 'backup_cobertura_negocio':
+        data = backupCoberturaNegocio_();
+        break;
+      case 'debug_maestro_clientes':
+        data = debugMaestroClientes_(e.parameter.cod_asesor);
+        break;
+      case 'debug_base_acumulada':
+        data = debugBaseAcumulada_(e.parameter.cod_asesor);
+        break;
+      case 'auditoria_universo_vendedor':
+        // Solo lectura — no recalcula ni toca COBERTURA_NEGOCIO.
+        data = getAuditoriaUniversoVendedor_(e.parameter.cod_asesor);
+        break;
+      case 'diagnostico_impactados_negocio':
+        // Solo lectura — no recalcula ni toca COBERTURA_NEGOCIO.
+        data = getDiagnosticoImpactadosNegocio_(e.parameter.cod_asesor, e.parameter.negocio);
+        break;
+      case 'auditoria_cant_neta_todos':
+        // Solo lectura — regla OFICIAL (cant_neta>0) para los 14 vendedores × Cárnico/Café.
+        data = withCache_('audit_cantneta_todos', 60, getAuditoriaCantNetaTodos_);
+        break;
+      case 'diagnostico_negocio_variantes':
+        // Solo lectura — fragmentación de strings crudos de negocio (Cárnico/Café).
+        data = withCache_('diag_neg_variantes', 60, getDiagnosticoNegocioVariantes_);
+        break;
+      case 'diagnostico_sku_negocio':
+        // Solo lectura — SKUs cuyo negocio en PRODUCTOS_CLAVE no coincide con BASE_ACUMULADA.
+        data = withCache_('diag_sku_negocio', 60, getDiagnosticoSkuNegocio_);
+        break;
+      case 'diagnostico_concentracion_fecha':
+        // Solo lectura — venta de Cárnico/Café por fecha de carga, para un vendedor.
+        data = getDiagnosticoConcentracionFecha_(e.parameter.cod_asesor);
+        break;
+      case 'detalle_cobertura_negocio':
+        // Solo lectura — detalle exportable cliente/SKU para cruzar contra el sistema oficial.
+        data = withCache_('detalle_cobneg_' + e.parameter.cod_asesor + '_' + e.parameter.negocio, 60,
+          function() { return getDetalleCoberturaNegocio_(e.parameter.cod_asesor, e.parameter.negocio); });
+        break;
+      case 'recalcular_cobertura_negocio':
+        // Dispara vía HTTP lo mismo que el menú "🌴 PALMA → 3. Cobertura por
+        // negocio" — recalcula y reescribe la hoja COBERTURA_NEGOCIO completa.
+        calcularCoberturaNegocio();
+        data = { ok: true, ms: Date.now() - t0 };
+        break;
       case 'cuota_debug':       data = getCuotaDebug_();       break;
       case 'diagnostico':       data = getDiagnosticoAPI();    break;
       case 'fechas_debug':      data = getFechasDebug_();      break;
@@ -816,6 +1226,16 @@ function doGet(e) {
           function() { return getAuditoriaVendedor_(codAud); });
         break;
       }
+      case 'auditoria_cobertura_negocio': {
+        const codAudCN = e.parameter.cod_asesor || '';
+        data = withCache_('audit_cobneg_' + codAudCN, 60,
+          function() { return getAuditoriaCoberturaNegocio_(codAudCN); });
+        break;
+      }
+      case 'auditoria_universos_clientes':
+        // Solo lectura — audita los tres universos de clientes (2608/2670/2674).
+        data = getAuditoriaUniversosClientes_();
+        break;
       default:                  data = getResumen();           break;
     }
 
@@ -2661,6 +3081,761 @@ function getCoberturaNegocios() {
       if (normalizarTexto_(vendedor).includes('TOTAL')) return false;
       return esVendedorValido_(cod, vendedor);
     });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUDITORÍA: Cobertura por Negocio vs sistema oficial (DISTRIBUCION X
+// PRODUCTOS). Tabla de referencia provista manualmente por el usuario —
+// solo cubre Cárnico y Café por ahora. Uso:
+//   /api/datos?sheet=auditoria_cobertura_negocio[&cod_asesor=208]
+// ════════════════════════════════════════════════════════════════════
+var REFERENCIA_COB_NEG = {
+  'Cárnico': {
+    '201': { impactados: 168, rutero: 216, cobertura_pct: 77.78, venta: 6932.07 },
+    '202': { impactados: 164, rutero: 205, cobertura_pct: 80.00, venta: 9983.22 },
+    '203': { impactados: 162, rutero: 217, cobertura_pct: 74.65, venta: 13874.69 },
+    '204': { impactados: 157, rutero: 221, cobertura_pct: 71.04, venta: 7905.71 },
+    '205': { impactados: 79,  rutero: 132, cobertura_pct: 59.85, venta: 4596.62 },
+    '206': { impactados: 134, rutero: 181, cobertura_pct: 74.03, venta: 7339.50 },
+    '207': { impactados: 159, rutero: 234, cobertura_pct: 67.95, venta: 12046.99 },
+    '208': { impactados: 167, rutero: 237, cobertura_pct: 70.46, venta: 8198.45 },
+    '209': { impactados: 125, rutero: 238, cobertura_pct: 52.52, venta: 7680.40 },
+    '210': { impactados: 171, rutero: 259, cobertura_pct: 66.02, venta: 9626.74 },
+    '211': { impactados: 13,  rutero: 63,  cobertura_pct: 20.63, venta: 3678.98 },
+    '212': { impactados: 11,  rutero: 157, cobertura_pct: 7.01,  venta: 370.58  },
+    '213': { impactados: 48,  rutero: 150, cobertura_pct: 32.00, venta: 2302.52 },
+    '214': { impactados: 45,  rutero: 97,  cobertura_pct: 46.39, venta: 1926.50 },
+  },
+  'Café': {
+    '201': { impactados: 88,  rutero: 216, cobertura_pct: 40.74, venta: 2719.13 },
+    '202': { impactados: 72,  rutero: 205, cobertura_pct: 35.12, venta: 1722.84 },
+    '203': { impactados: 103, rutero: 217, cobertura_pct: 47.47, venta: 2434.85 },
+    '204': { impactados: 62,  rutero: 221, cobertura_pct: 28.05, venta: 2515.96 },
+    '205': { impactados: 34,  rutero: 132, cobertura_pct: 25.76, venta: 1155.41 },
+    '206': { impactados: 63,  rutero: 181, cobertura_pct: 34.81, venta: 2432.58 },
+    '207': { impactados: 56,  rutero: 234, cobertura_pct: 23.93, venta: 2108.11 },
+    '208': { impactados: 87,  rutero: 237, cobertura_pct: 36.71, venta: 1958.54 },
+    '209': { impactados: 57,  rutero: 238, cobertura_pct: 23.95, venta: 2277.62 },
+    '210': { impactados: 107, rutero: 259, cobertura_pct: 41.31, venta: 4778.02 },
+    '211': { impactados: 17,  rutero: 63,  cobertura_pct: 26.98, venta: 1426.33 },
+    '212': { impactados: 35,  rutero: 157, cobertura_pct: 22.29, venta: 2290.57 },
+    '213': { impactados: 31,  rutero: 150, cobertura_pct: 20.67, venta: 2046.46 },
+    '214': { impactados: 11,  rutero: 97,  cobertura_pct: 11.34, venta: 769.70  },
+  },
+};
+var REFERENCIA_COB_NEG_TOTAL = {
+  'Cárnico': { impactados: 1603, rutero: 2607, cobertura_pct: 61.49, venta: 96463.21 },
+  'Café':    { impactados: 823,  rutero: 2607, cobertura_pct: 31.57, venta: 30636.12 },
+};
+
+// Venta NETA por vendedor × negocio normalizado, con el mismo respaldo de
+// negocio (PRODUCTOS_CLAVE) que ya usa calcularCoberturaNegocio(). Escaneo
+// propio e independiente de BASE_ACUMULADA — NO reutiliza getVendedores()
+// a propósito: getVendedores() alimenta Mi Panel/Mi Gerencia/Gerencial/
+// Cobertura por marcas/Seguimiento de concursos, que no deben cambiar de
+// valor por este fix. Solo para auditoría de Cobertura por Negocio.
+function calcularVentaPorNegocioConFallback_() {
+  const hB = getSheet_(HOJAS.BASE);
+  if (!hB) return {};
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+  });
+  const ctxNegocio = construirContextoNegocioFallback_(baseData, periodoCalc);
+
+  const ventaMap = {}; // cod_asesor -> negocio normalizado -> venta neta
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    const cod = obtenerCodAsesor_(r[3]);
+    if (!cod) return;
+    const neg = normNegMiG_(resolverNegocioFinal_(r[8], r[6], ctxNegocio));
+    if (!neg) return;
+    if (!ventaMap[cod]) ventaMap[cod] = {};
+    ventaMap[cod][neg] = round2_((ventaMap[cod][neg] || 0) + (parseFloat(r[14]) || 0));
+  });
+  return ventaMap;
+}
+
+function getAuditoriaCoberturaNegocio_(codFiltroParam) {
+  const codFiltro = codFiltroParam ? obtenerCodAsesor_(String(codFiltroParam)) : '';
+
+  const filasCN = getCoberturaNegocios();
+  // Venta con respaldo de negocio (PRODUCTOS_CLAVE) — escaneo propio, no usa
+  // el cache de getVendedores() (ver comentario en calcularVentaPorNegocioConFallback_).
+  const ventaMap = withCache_('venta_negocio_fallback', 60, calcularVentaPorNegocioConFallback_);
+
+  const negociosObjetivo = Object.keys(REFERENCIA_COB_NEG);
+  const detalle = [];
+
+  negociosObjetivo.forEach(negObjetivo => {
+    const ref = REFERENCIA_COB_NEG[negObjetivo];
+    Object.keys(ref).forEach(codV => {
+      if (codFiltro && codV !== codFiltro) return;
+
+      const fila = filasCN.find(r =>
+        obtenerCodAsesor_(r.vendedor) === codV && normNegMiG_(r.negocio) === negObjetivo
+      );
+      const palmaImp    = fila ? Number(fila.impactados)      || 0 : 0;
+      const palmaUniv   = fila ? Number(fila.clientes_maestro) || 0 : 0;
+      const palmaPct    = fila ? Number(fila.cobertura_)       || 0 : 0;
+      const palmaVenta  = ventaMap[codV]?.[negObjetivo] || 0;
+
+      const sis = ref[codV];
+      detalle.push({
+        negocio:    negObjetivo,
+        cod_asesor: codV,
+        palma: {
+          impactados:    palmaImp,
+          universo:      palmaUniv,
+          cobertura_pct: palmaPct,
+          venta:         palmaVenta,
+        },
+        sistema_referencia: {
+          impactados:    sis.impactados,
+          rutero:        sis.rutero,
+          cobertura_pct: sis.cobertura_pct,
+          venta:         sis.venta,
+        },
+        diferencia: {
+          impactados:   palmaImp  - sis.impactados,
+          universo:     palmaUniv - sis.rutero,
+          cobertura_pp: round2_(palmaPct - sis.cobertura_pct),
+          venta:        round2_(palmaVenta - sis.venta),
+        },
+      });
+    });
+  });
+
+  // Los totales por negocio (suma de TODOS los vendedores) solo tienen
+  // sentido cuando no se filtra por un vendedor — comparar un solo vendedor
+  // contra el total del equipo sería engañoso.
+  const totales = codFiltro ? null : negociosObjetivo.map(neg => {
+    const filasNeg        = detalle.filter(r => r.negocio === neg);
+    const palmaImpTotal   = filasNeg.reduce((s, r) => s + r.palma.impactados, 0);
+    const palmaUnivTotal  = filasNeg.reduce((s, r) => s + r.palma.universo, 0);
+    const palmaVentaTotal = round2_(filasNeg.reduce((s, r) => s + r.palma.venta, 0));
+    const palmaPctTotal   = palmaUnivTotal > 0 ? round2_(palmaImpTotal / palmaUnivTotal * 100) : 0;
+    const sisT = REFERENCIA_COB_NEG_TOTAL[neg];
+    return {
+      negocio: neg,
+      palma: { impactados: palmaImpTotal, universo: palmaUnivTotal, cobertura_pct: palmaPctTotal, venta: palmaVentaTotal },
+      sistema_referencia: sisT,
+      diferencia: {
+        impactados:   palmaImpTotal  - sisT.impactados,
+        universo:     palmaUnivTotal - sisT.rutero,
+        cobertura_pp: round2_(palmaPctTotal - sisT.cobertura_pct),
+        venta:        round2_(palmaVentaTotal - sisT.venta),
+      },
+    };
+  });
+
+  return { ok: true, cod_asesor: codFiltro || null, detalle, totales };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Diagnóstico de solo lectura — regla OFICIAL confirmada: impactado =
+// cant_neta > 0 (r[13]), NO valor_venta. No cambia calcularCoberturaNegocio(),
+// no recalcula COBERTURA_NEGOCIO, no escribe nada. Solo compara contra
+// REFERENCIA_COB_NEG para los 14 vendedores × Cárnico/Café.
+// Uso: /api/datos?sheet=auditoria_cant_neta_todos
+// ════════════════════════════════════════════════════════════════════
+function getAuditoriaCantNetaTodos_() {
+  const hB = getSheet_(HOJAS.BASE);
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (!hB || !hM) return { ok: false, error: 'Faltan hojas BASE_ACUMULADA o MAESTRO_CLIENTES' };
+
+  // Universo (maestroSet) idéntico al de calcularCoberturaNegocio(): estado='A' + dedup.
+  const maestroPorCod = {};
+  const nombreVendedorPorCod = {};
+  hM.getDataRange().getValues().slice(1).forEach(r => {
+    const asesorRaw = String(r[20] || '').trim();
+    const cod = obtenerCodAsesor_(asesorRaw);
+    if (!cod) return;
+    if (String(r[19] || '').trim().toUpperCase() !== 'A') return;
+    const cli = normalizarCodigoCliente_(r[0]);
+    if (!cli) return;
+    if (!maestroPorCod[cod]) maestroPorCod[cod] = new Set();
+    maestroPorCod[cod].add(cli);
+    if (!nombreVendedorPorCod[cod]) nombreVendedorPorCod[cod] = asesorRaw;
+  });
+
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+  });
+
+  // Mismo respaldo de negocio que calcularCoberturaNegocio() — si r[8] viene
+  // vacío, se resuelve por cod_sku contra PRODUCTOS_CLAVE antes de descartar la fila.
+  const ctxNegocio = construirContextoNegocioFallback_(baseData, periodoCalc);
+
+  // Por vendedor+negocio(normalizado): impactados (clientes en maestroSet con
+  // cant_neta>0), clientesConCantPositiva (TODOS, dentro o fuera del maestro),
+  // filas con cant_neta>0, y venta NETA total del negocio (todas las filas,
+  // igual que getVendedores().venta_por_negocio — no solo impactados).
+  const acc = {}; // cod -> negocio -> {...}
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    const cod = obtenerCodAsesor_(r[3]);
+    if (!cod) return;
+    const negRaw = resolverNegocioFinal_(r[8], r[6], ctxNegocio);
+    const neg    = normNegMiG_(negRaw);
+    if (neg !== 'Cárnico' && neg !== 'Café') return;
+    const cli   = normalizarCodigoCliente_(r[1]);
+    const cant  = parseFloat(r[13]) || 0;
+    const venta = parseFloat(r[14]) || 0;
+
+    if (!acc[cod]) acc[cod] = {};
+    if (!acc[cod][neg]) {
+      acc[cod][neg] = {
+        venta_total_del_negocio: 0,
+        filas_con_cant_neta_positiva: 0,
+        clientesConCantPositiva: new Set(),
+        clientesImpactados: new Set(),
+        negocios_raw: new Set(),
+      };
+    }
+    const a = acc[cod][neg];
+    a.venta_total_del_negocio += venta; // NETO — incluye negativos, igual que getVendedores()
+    a.negocios_raw.add(negRaw);
+    if (cant > 0 && cli) {
+      a.filas_con_cant_neta_positiva++;
+      a.clientesConCantPositiva.add(cli);
+      if (maestroPorCod[cod] && maestroPorCod[cod].has(cli)) a.clientesImpactados.add(cli);
+    }
+  });
+
+  const detalle = [];
+  ['Cárnico', 'Café'].forEach(neg => {
+    Object.keys(REFERENCIA_COB_NEG[neg]).forEach(cod => {
+      const a = (acc[cod] && acc[cod][neg]) || {
+        venta_total_del_negocio: 0, filas_con_cant_neta_positiva: 0,
+        clientesConCantPositiva: new Set(), clientesImpactados: new Set(), negocios_raw: new Set(),
+      };
+      const sis = REFERENCIA_COB_NEG[neg][cod];
+      const palmaImp = a.clientesImpactados.size;
+      const palmaVenta = round2_(a.venta_total_del_negocio);
+      detalle.push({
+        cod_asesor: cod,
+        vendedor: nombreVendedorPorCod[cod] || '',
+        negocio: neg,
+        sistema: { impactados: sis.impactados, venta: sis.venta },
+        palma: {
+          impactados_por_cant_neta_positiva: palmaImp,
+          venta_total_del_negocio: palmaVenta,
+          filas_con_cant_neta_positiva: a.filas_con_cant_neta_positiva,
+          clientes_con_cant_neta_positiva: a.clientesConCantPositiva.size,
+          negocios_raw_detectados: [...a.negocios_raw],
+        },
+        diferencia: {
+          impactados: palmaImp - sis.impactados,
+          venta: round2_(palmaVenta - sis.venta),
+        },
+        // Si clientes_con_cant_neta_positiva > impactados, hay clientes con compra
+        // real que NO están en el universo/rutero (MAESTRO_CLIENTES) de este vendedor.
+        clientes_con_compra_fuera_de_maestro: a.clientesConCantPositiva.size - palmaImp,
+      });
+    });
+  });
+
+  return { ok: true, regla_impactado: 'cant_neta > 0 (r[13])', periodo: periodoCalc, detalle };
+}
+
+// Auditoría de solo lectura — explica de dónde salen los tres denominadores
+// distintos (2,608 / 2,670 / ~2,674) que PALMA muestra en diferentes partes
+// del dashboard. Clasifica cada fila de MAESTRO_CLIENTES según los filtros
+// que aplica cada función, lista los clientes excluidos con la razón exacta
+// y detecta duplicados de código de cliente. No modifica ninguna hoja.
+// Uso: /api/datos?sheet=auditoria_universos_clientes
+function getAuditoriaUniversosClientes_() {
+  var hM   = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  var hB   = getSheet_(HOJAS.BASE);
+  var hRes = getSheet_(HOJAS.RESUMEN_COBERTURA);
+
+  if (!hM) return { ok: false, error: 'No existe MAESTRO_CLIENTES' };
+
+  // ── 1. Construir codsValidos (idéntico a calcularCobertura) ─────────
+  var codsValidos = new Set();
+  if (hB && hB.getLastRow() > 1) {
+    hB.getRange(2, 4, hB.getLastRow() - 1, 1).getValues().forEach(function(r) {
+      var txt = String(r[0] || '').trim();
+      var cod = obtenerCodAsesor_(txt);
+      if (!esVendedorValido_(cod, txt)) return;
+      if (cod && /^\d{3}$/.test(cod)) codsValidos.add(cod);
+    });
+  }
+
+  // ── 2. Leer MAESTRO y clasificar cada fila ──────────────────────────
+  var filas = hM.getDataRange().getValues().slice(1);
+  var maestroTotalFilas = filas.length;
+
+  var setEstadoA    = new Set();   // estado='A' + codCli válido (sin filtro de asesor)
+  var setSinBodega  = new Set();   // ≡ cargarMaestroActivos_()  ≈ 2,670
+  var setCalcCob    = new Set();   // unique clientes tras filtros de calcularCobertura
+  var mapCalcCob    = {};          // cod_asesor → Set<cli_raw> (réplica de ruteroMap)
+
+  var listaBodega         = [];
+  var listaSinAsesor      = [];
+  var listaCodNo3Digits   = [];
+  var listaSinCodsValidos = [];
+  var rawCount            = {};    // codCli → nº de filas (para detectar duplicados)
+
+  filas.forEach(function(r) {
+    var codCli    = normalizarCodigoCliente_(r[0]);
+    var cliRaw    = String(r[0] || '').trim();         // calcularCobertura usa raw
+    var nombre    = String(r[1]  || '').trim();
+    var asesorRaw = String(r[20] || '').trim();
+    var codAs     = obtenerCodAsesor_(asesorRaw);
+    var estado    = String(r[19] || '').trim().toUpperCase();
+
+    if (codCli) rawCount[codCli] = (rawCount[codCli] || 0) + 1;
+
+    if (estado !== 'A') return;
+    if (!codCli) return;
+
+    // Universo A: estado='A' + codCli válido (cualquier asesor)
+    setEstadoA.add(codCli);
+
+    // Filtro BODEGA (cargarMaestroActivos_ excluye asesor BODEGA si asesorRaw es truthy)
+    if (asesorRaw && !esVendedorValido_(codAs, asesorRaw)) {
+      listaBodega.push({ cod_cliente: codCli, nombre: nombre, asesor: asesorRaw, cod_asesor: codAs });
+      return;
+    }
+
+    // Universo B: cargarMaestroActivos_() — incluye clientes sin asesor
+    setSinBodega.add(codCli);
+    if (!asesorRaw) {
+      listaSinAsesor.push({ cod_cliente: codCli, nombre: nombre });
+    }
+
+    // Réplica exacta de los filtros de calcularCobertura() para Universo C
+    if (!asesorRaw || !cliRaw || cliRaw === '0') return;
+    if (!codAs || !/^\d{3}$/.test(codAs)) {
+      listaCodNo3Digits.push({ cod_cliente: codCli, nombre: nombre, asesor: asesorRaw, cod_asesor: codAs || '' });
+      return;
+    }
+    if (codsValidos.size > 0 && !codsValidos.has(codAs)) {
+      listaSinCodsValidos.push({ cod_cliente: codCli, nombre: nombre, asesor: asesorRaw, cod_asesor: codAs });
+      return;
+    }
+
+    setCalcCob.add(codCli);
+    if (!mapCalcCob[codAs]) mapCalcCob[codAs] = new Set();
+    mapCalcCob[codAs].add(cliRaw);
+  });
+
+  // totM tal como lo reporta calcularCobertura (suma de Sets por vendedor,
+  // un cliente con dos asesores válidos contaría doble)
+  var totMCalcCob = Object.values(mapCalcCob).reduce(function(acc, s) { return acc + s.size; }, 0);
+
+  // Duplicados (mismo codCli en más de una fila de MAESTRO)
+  var duplicados = Object.keys(rawCount)
+    .filter(function(k) { return rawCount[k] > 1; })
+    .map(function(k) { return { cod_cliente: k, apariciones: rawCount[k] }; });
+
+  // Total reportado por RESUMEN_COBERTURA (lo que calcularCobertura escribió)
+  var resumenTotal = 0;
+  if (hRes && hRes.getLastRow() > 2) {
+    var rFilas = hRes.getDataRange().getValues().slice(1);
+    var ultima = rFilas[rFilas.length - 1];
+    if (ultima && String(ultima[0] || '').includes('TOTAL')) resumenTotal = Number(ultima[1]) || 0;
+  }
+
+  return {
+    ok: true,
+    fecha_auditoria: new Date().toISOString(),
+    universos: {
+      maestro_filas_total:        maestroTotalFilas,
+      maestro_estado_A:           setEstadoA.size,
+      maestro_sin_bodega:         setSinBodega.size,
+      maestro_calc_cobertura:     setCalcCob.size,
+      maestro_calc_cob_sum:       totMCalcCob,
+      resumen_cobertura_total:    resumenTotal,
+    },
+    diferencias: {
+      estado_A_vs_sin_bodega:     setEstadoA.size  - setSinBodega.size,
+      sin_bodega_vs_calc_cob:     setSinBodega.size - setCalcCob.size,
+      calc_cob_sum_vs_unique:     totMCalcCob       - setCalcCob.size,
+    },
+    conteos: {
+      bodega:                     listaBodega.length,
+      sin_asesor:                 listaSinAsesor.length,
+      cod_asesor_no_3digits:      listaCodNo3Digits.length,
+      asesor_sin_ventas_base:     listaSinCodsValidos.length,
+      duplicados:                 duplicados.length,
+      asesores_en_base:           codsValidos.size,
+    },
+    detalle: {
+      bodega:               listaBodega,
+      sin_asesor:           listaSinAsesor,
+      cod_no_3digits:       listaCodNo3Digits,
+      sin_codsValidos:      listaSinCodsValidos,
+      duplicados:           duplicados,
+    },
+  };
+}
+
+// Diagnóstico de solo lectura — distribución GLOBAL (todos los vendedores) de
+// los strings crudos de "negocio" (r[8]) que normalizan a Cárnico/Café, para
+// detectar fragmentación (variantes de texto que deberían ser un solo negocio
+// pero generan filas separadas en COBERTURA_NEGOCIO). No cambia nada.
+// Uso: /api/datos?sheet=diagnostico_negocio_variantes
+function getDiagnosticoNegocioVariantes_() {
+  const hB = getSheet_(HOJAS.BASE);
+  if (!hB) return { ok: false, error: 'Falta BASE_ACUMULADA' };
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+  });
+
+  const variantesPorNegocio = {}; // negocioNormalizado -> { rawString -> {filas, venta, vendedores:Set} }
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    const negRaw = String(r[8] || '').trim();
+    const neg = normNegMiG_(negRaw);
+    if (neg !== 'Cárnico' && neg !== 'Café') return;
+    const cod = obtenerCodAsesor_(r[3]);
+    if (!variantesPorNegocio[neg]) variantesPorNegocio[neg] = {};
+    if (!variantesPorNegocio[neg][negRaw]) {
+      variantesPorNegocio[neg][negRaw] = { filas: 0, venta: 0, vendedores: new Set() };
+    }
+    const x = variantesPorNegocio[neg][negRaw];
+    x.filas++;
+    x.venta += parseFloat(r[14]) || 0;
+    if (cod) x.vendedores.add(cod);
+  });
+
+  const resultado = {};
+  Object.entries(variantesPorNegocio).forEach(([neg, variantes]) => {
+    resultado[neg] = Object.entries(variantes).map(([raw, x]) => ({
+      negocio_raw: raw, filas: x.filas, venta: round2_(x.venta), vendedores: [...x.vendedores].sort(),
+    }));
+  });
+
+  return {
+    ok: true,
+    periodo: periodoCalc,
+    variantes_por_negocio: resultado,
+    fragmentado: Object.entries(resultado).filter(([, v]) => v.length > 1).map(([k]) => k),
+  };
+}
+
+// Diagnóstico de solo lectura — cruza el catálogo PRODUCTOS_CLAVE (negocio
+// oficial por SKU) contra el negocio realmente registrado en BASE_ACUMULADA
+// para ese mismo SKU, para detectar SKUs de Cárnico/Café mal clasificados
+// (o viceversa). No cambia nada.
+// Uso: /api/datos?sheet=diagnostico_sku_negocio
+function getDiagnosticoSkuNegocio_() {
+  const hB = getSheet_(HOJAS.BASE);
+  if (!hB) return { ok: false, error: 'Falta BASE_ACUMULADA' };
+  const catalogo = cargarProductosClave_().todos; // { sap, nombre, negocio, ... }
+  const negocioOficialPorSap = {};
+  catalogo.forEach(p => {
+    if (p.sap && p.negocio) negocioOficialPorSap[p.sap] = normNegMiG_(p.negocio);
+  });
+
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+  });
+
+  const discrepancias = {}; // sap -> { nombre, negocio_oficial, negocio_base_acumulada:Set, filas, venta }
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    const sap = limpiarSap_(r[6]);
+    const negOficial = negocioOficialPorSap[sap];
+    if (!negOficial) return; // SKU no está en el catálogo PRODUCTOS_CLAVE — no se puede comparar
+    const negBase = normNegMiG_(String(r[8] || '').trim());
+    if (negBase === negOficial) return; // coincide, no es discrepancia
+    if (negOficial !== 'Cárnico' && negOficial !== 'Café' && negBase !== 'Cárnico' && negBase !== 'Café') return;
+
+    if (!discrepancias[sap]) {
+      discrepancias[sap] = {
+        sap, nombre: String(r[7] || '').trim(), negocio_oficial_catalogo: negOficial,
+        negocio_en_base_acumulada: new Set(), filas: 0, venta: 0,
+      };
+    }
+    const d = discrepancias[sap];
+    d.negocio_en_base_acumulada.add(negBase);
+    d.filas++;
+    d.venta += parseFloat(r[14]) || 0;
+  });
+
+  const lista = Object.values(discrepancias).map(d => ({
+    sap: d.sap, nombre: d.nombre,
+    negocio_oficial_catalogo: d.negocio_oficial_catalogo,
+    negocio_en_base_acumulada: [...d.negocio_en_base_acumulada],
+    filas: d.filas, venta: round2_(d.venta),
+  })).sort((a, b) => b.venta - a.venta);
+
+  return { ok: true, periodo: periodoCalc, total_skus_discrepantes: lista.length, discrepancias: lista };
+}
+
+// Diagnóstico de solo lectura — concentración por fecha de la venta en
+// Cárnico/Café para un vendedor, para detectar si la venta "faltante" se
+// concentra en días/semanas específicos (indicio de corte de carga distinto
+// al del sistema oficial). No cambia nada.
+// Uso: /api/datos?sheet=diagnostico_concentracion_fecha&cod_asesor=208
+function getDiagnosticoConcentracionFecha_(codAsesorParam) {
+  const cod = codAsesorParam ? obtenerCodAsesor_(String(codAsesorParam)) : '';
+  if (!cod) return { ok: false, error: 'Falta parámetro cod_asesor' };
+  const hB = getSheet_(HOJAS.BASE);
+  if (!hB) return { ok: false, error: 'Falta BASE_ACUMULADA' };
+
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+  });
+
+  const porFecha = {}; // negocio -> fecha(yyyy-MM-dd de fecha_carga) -> {filas, venta, semana}
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    if (obtenerCodAsesor_(r[3]) !== cod) return;
+    const neg = normNegMiG_(String(r[8] || '').trim());
+    if (neg !== 'Cárnico' && neg !== 'Café') return;
+    const fc = r[0];
+    const fecha = fc instanceof Date ? Utilities.formatDate(fc, TZ, 'yyyy-MM-dd') : String(fc || '').trim();
+    const semana = r[15];
+
+    if (!porFecha[neg]) porFecha[neg] = {};
+    if (!porFecha[neg][fecha]) porFecha[neg][fecha] = { filas: 0, venta: 0, semana };
+    porFecha[neg][fecha].filas++;
+    porFecha[neg][fecha].venta += parseFloat(r[14]) || 0;
+  });
+
+  const resultado = {};
+  Object.entries(porFecha).forEach(([neg, fechas]) => {
+    resultado[neg] = Object.entries(fechas)
+      .map(([fecha, x]) => ({ fecha, semana: x.semana, filas: x.filas, venta: round2_(x.venta) }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+  });
+
+  return { ok: true, cod_asesor: cod, periodo: periodoCalc, fechas_carga_por_negocio: resultado };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Detalle exportable de solo lectura — para cruzar manualmente contra el
+// sistema oficial cliente por cliente / SKU por SKU. No cambia lógica, no
+// recalcula COBERTURA_NEGOCIO, no escribe nada. Usa la MISMA regla oficial
+// (cant_neta > 0) y el MISMO fallback de negocio por SKU (PRODUCTOS_CLAVE)
+// ya aplicados en calcularCoberturaNegocio().
+// Uso: /api/datos?sheet=detalle_cobertura_negocio&cod_asesor=208&negocio=Cárnico
+// ════════════════════════════════════════════════════════════════════
+function getDetalleCoberturaNegocio_(codAsesorParam, negocioParam) {
+  const cod = codAsesorParam ? obtenerCodAsesor_(String(codAsesorParam)) : '';
+  if (!cod) return { ok: false, error: 'Falta parámetro cod_asesor' };
+  // Acepta cualquier negocio reconocido por normNegMiG_ (Cárnico, Café, Galletas,
+  // Chocolates, etc.) — no se restringe a un par fijo para poder ampliar la
+  // auditoría a otros negocios sin tocar esta función de nuevo.
+  const negocioObjetivo = normNegMiG_(String(negocioParam || '').trim());
+  if (!negocioObjetivo) {
+    return { ok: false, error: 'Falta o es inválido el parámetro negocio' };
+  }
+
+  const hB = getSheet_(HOJAS.BASE);
+  const hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (!hB || !hM) return { ok: false, error: 'Faltan hojas BASE_ACUMULADA o MAESTRO_CLIENTES' };
+
+  // Universo (maestroSet) idéntico al de calcularCoberturaNegocio(): estado='A' + dedup.
+  const maestroSet = new Set();
+  const nombreClienteMaestro = {};
+  let nombreVendedor = '';
+  hM.getDataRange().getValues().slice(1).forEach(r => {
+    const asesorRaw = String(r[20] || '').trim();
+    const codV = obtenerCodAsesor_(asesorRaw);
+    if (codV !== cod) return;
+    if (!nombreVendedor && asesorRaw) nombreVendedor = asesorRaw;
+    if (String(r[19] || '').trim().toUpperCase() !== 'A') return;
+    const cli = normalizarCodigoCliente_(r[0]);
+    if (!cli) return;
+    maestroSet.add(cli);
+    if (!nombreClienteMaestro[cli]) nombreClienteMaestro[cli] = String(r[1] || '').trim();
+  });
+
+  const baseData = hB.getDataRange().getValues().slice(1);
+  let periodoCalc = '';
+  let corte = '';
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p > periodoCalc) periodoCalc = p;
+    const fc = r[0];
+    const fechaCarga = fc instanceof Date ? Utilities.formatDate(fc, TZ, 'yyyy-MM-dd') : String(fc || '').trim();
+    if (fechaCarga > corte) corte = fechaCarga;
+  });
+
+  const ctxNegocio = construirContextoNegocioFallback_(baseData, periodoCalc);
+
+  const detalleFilas   = [];
+  const clientesMap    = {}; // cod_cliente -> {cliente, cant_neta_total, valor_venta_total, skus:Set, tieneCantPositiva:bool}
+  const skusMap        = {}; // cod_sku -> {producto, cant_neta_total, valor_venta_total, clientesImpactados:Set}
+  let ventaResumenTotal = 0;
+
+  baseData.forEach(r => {
+    const v = r[18];
+    const p = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+      : String(v || '').substring(0, 7);
+    if (p !== periodoCalc) return;
+    if (!esFilaBaseValida_(r)) return;
+    const codV = obtenerCodAsesor_(r[3]);
+    if (codV !== cod) return;
+
+    const negOriginal = String(r[8] || '').trim();
+    const negFinalRaw = resolverNegocioFinal_(r[8], r[6], ctxNegocio);
+    const negFinalNorm = normNegMiG_(negFinalRaw);
+    if (negFinalNorm !== negocioObjetivo) return;
+
+    const cli   = normalizarCodigoCliente_(r[1]);
+    const sap   = limpiarSap_(r[6]);
+    const cant  = parseFloat(r[13]) || 0;
+    const venta = parseFloat(r[14]) || 0;
+    const fc    = r[0];
+    const fechaCarga = fc instanceof Date ? Utilities.formatDate(fc, TZ, 'yyyy-MM-dd') : String(fc || '').trim();
+
+    ventaResumenTotal += venta;
+
+    detalleFilas.push({
+      cod_asesor: cod,
+      vendedor: nombreVendedor,
+      negocio: negocioObjetivo,
+      cod_cliente: cli,
+      cliente: nombreClienteMaestro[cli] || String(r[2] || '').trim(),
+      cod_sku: sap,
+      producto: String(r[7] || '').trim(),
+      cant_neta: cant,
+      valor_venta: round2_(venta),
+      negocio_original_base: negOriginal,
+      negocio_final_con_fallback: negFinalRaw,
+      fecha_carga: fechaCarga,
+    });
+
+    if (cli) {
+      if (!clientesMap[cli]) {
+        clientesMap[cli] = {
+          cod_cliente: cli,
+          cliente: nombreClienteMaestro[cli] || String(r[2] || '').trim(),
+          negocio_final: negocioObjetivo,
+          cant_neta_total: 0,
+          valor_venta_total: 0,
+          skus: new Set(),
+          tieneCantPositiva: false,
+        };
+      }
+      const c = clientesMap[cli];
+      c.cant_neta_total += cant;
+      c.valor_venta_total += venta;
+      if (sap) c.skus.add(sap);
+      if (cant > 0) c.tieneCantPositiva = true;
+    }
+
+    if (sap) {
+      if (!skusMap[sap]) {
+        skusMap[sap] = {
+          cod_sku: sap,
+          producto: String(r[7] || '').trim(),
+          negocio_final: negocioObjetivo,
+          cant_neta_total: 0,
+          valor_venta_total: 0,
+          clientesImpactados: new Set(),
+        };
+      }
+      const s = skusMap[sap];
+      s.cant_neta_total += cant;
+      s.valor_venta_total += venta;
+      if (cant > 0 && cli && maestroSet.has(cli)) s.clientesImpactados.add(cli);
+    }
+  });
+
+  const detalleClientes = Object.values(clientesMap).map(c => ({
+    cod_cliente: c.cod_cliente,
+    cliente: c.cliente,
+    negocio_final: c.negocio_final,
+    cant_neta_total: round2_(c.cant_neta_total),
+    valor_venta_total: round2_(c.valor_venta_total),
+    skus_comprados: c.skus.size,
+    en_universo_maestro: maestroSet.has(c.cod_cliente),
+    impactado: maestroSet.has(c.cod_cliente) && c.tieneCantPositiva,
+  })).sort((a, b) => b.valor_venta_total - a.valor_venta_total);
+
+  const detalleSkus = Object.values(skusMap).map(s => ({
+    cod_sku: s.cod_sku,
+    producto: s.producto,
+    negocio_final: s.negocio_final,
+    cant_neta_total: round2_(s.cant_neta_total),
+    valor_venta_total: round2_(s.valor_venta_total),
+    clientes_impactados: s.clientesImpactados.size,
+  })).sort((a, b) => b.valor_venta_total - a.valor_venta_total);
+
+  const impactadosTotal = detalleClientes.filter(c => c.impactado).length;
+
+  return {
+    ok: true,
+    cod_asesor: cod,
+    vendedor: nombreVendedor,
+    negocio: negocioObjetivo,
+    periodo: periodoCalc,
+    corte,
+    resumen: {
+      universo: maestroSet.size,
+      impactados: impactadosTotal,
+      venta: round2_(ventaResumenTotal),
+    },
+    detalle_clientes: detalleClientes,
+    detalle_skus: detalleSkus,
+    detalle_filas: detalleFilas,
+  };
 }
 
 // Diagnóstico: muestra qué ve el script en CUOTAS y cómo cruza con vendedores
