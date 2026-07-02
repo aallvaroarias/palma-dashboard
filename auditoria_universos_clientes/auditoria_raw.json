@@ -1,0 +1,412 @@
+{
+  "ok": true,
+  "fecha_auditoria": "2026-07-02T20:47:58.769Z",
+  "universos": {
+    "maestro_filas_total": 2674,
+    "maestro_estado_A": 2674,
+    "maestro_sin_bodega": 2673,
+    "maestro_calc_cobertura": 2611,
+    "maestro_calc_cob_sum": 2611,
+    "resumen_cobertura_total": 2611
+  },
+  "diferencias": {
+    "estado_A_vs_sin_bodega": 1,
+    "sin_bodega_vs_calc_cob": 62,
+    "calc_cob_sum_vs_unique": 0
+  },
+  "conteos": {
+    "bodega": 1,
+    "sin_asesor": 0,
+    "cod_asesor_no_3digits": 62,
+    "asesor_sin_ventas_base": 0,
+    "duplicados": 0,
+    "asesores_en_base": 14
+  },
+  "detalle": {
+    "bodega": [
+      {
+        "cod_cliente": "9000000016450",
+        "nombre": "ALIMENTOS CARNICOS DE PANAMÁ S.A.",
+        "asesor": "BOD100 - BODEGA 100",
+        "cod_asesor": "BOD100"
+      }
+    ],
+    "sin_asesor": [],
+    "cod_no_3digits": [
+      {
+        "cod_cliente": "10419371",
+        "nombre": "MILIA CHEUNG CHIN",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10425274",
+        "nombre": "VELKIS NUï¿½EZ",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10432166",
+        "nombre": "XIN DI LUO WANG",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10447217",
+        "nombre": "MS CAPELLANIA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10454805",
+        "nombre": "DAVID ARCIA ARROCHA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10467856",
+        "nombre": "HECTOR LUO HOU",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10477491",
+        "nombre": "GRUPO E INVERSIONES ROFRA SA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10478538",
+        "nombre": "BAGATRAC SA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10582522",
+        "nombre": "ROGER ANTONIO BONILLA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10752890",
+        "nombre": "Nï¿½NNEZ PITTI LUZ MARIBEL",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10756318",
+        "nombre": "AYARZA BETZY",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10758322",
+        "nombre": "GARCIA MARIA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10768014",
+        "nombre": "CASTRELLON SONIA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10768564",
+        "nombre": "YAU LOO ERIKA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10768823",
+        "nombre": "QUINTERO MARIA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10770554",
+        "nombre": "GONZALES QUIEL OLGA MARIA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10795036",
+        "nombre": "ARAUZ JOHANIS",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10808142",
+        "nombre": "CHEN WEIDONG",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10825669",
+        "nombre": "ESCOBAR EDSELYS",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10848026",
+        "nombre": "INVERSIONES FRUTTOPIA PANAMA SA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10853027",
+        "nombre": "CABALLERO VICENTE",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10868236",
+        "nombre": "DE LA CONFIANZA TIENDA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10868916",
+        "nombre": "CONCEPCION DIEGO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10888436",
+        "nombre": "HURTADO LEDEZMA JUSTINA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10888993",
+        "nombre": "CHONG XHU ZHI YIN",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10895842",
+        "nombre": "LAMPARERO SERRANO ISIS MABEL",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10899616",
+        "nombre": "TRANSPORTES MELVIN REAL S A",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10903315",
+        "nombre": "CAFETERIA ESSENCES CAFETERIA ESSENC",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10912784",
+        "nombre": "VANEGAS VASQUEZ JOSE ISRAEL",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10917991",
+        "nombre": "GONZï¿½LES CARLOS",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10928623",
+        "nombre": "AGUIRRE STAFF GUILLERMO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10966959",
+        "nombre": "VILLARREAL ZURDO MOISES ALEXANDER",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10981738",
+        "nombre": "ATENCIO GUERRA DARIO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10986377",
+        "nombre": "GARCIA GONZALEZ MARIBEL HERMELINDA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10994793",
+        "nombre": "GUILLERMO GONZALEZ YOHANA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11009803",
+        "nombre": "APARICIO EDUARDO ENRIQUE",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11015743",
+        "nombre": "MAGALLON ENEN ULISES",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11025406",
+        "nombre": "GONZALEZ UREï¿½A ALEIDA DEL CARMEN",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11036240",
+        "nombre": "MIRANDA ROSALES EDWIN GILBERTO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11036241",
+        "nombre": "VIDRIOS UNIVERSALES",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11037096",
+        "nombre": "IMPORTACIONES XENIA PANAMA SA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11040858",
+        "nombre": "MARTINEZ RIVERA NELLYSBETH YARIELA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11040936",
+        "nombre": "VALDES GUERRA ANA LIDIETH",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11041509",
+        "nombre": "MOJICA BONICHE YULAY YOSIETH",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11061375",
+        "nombre": "MONTENEGRO ORTIZ JUAN ALEXI",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11070870",
+        "nombre": "VARGAS ORTEGA LARITZA ITZEL",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11078539",
+        "nombre": "PEREZ ALVAREZ RITA YASIEL",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11083889",
+        "nombre": "ENTONCES CORP",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "11084257",
+        "nombre": "CABALLERO CALDERA KERINA LINETH",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "10867858",
+        "nombre": "IRIS EMERITA GONZALEZ ARABA",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000015904",
+        "nombre": "APARICIO BEKER CASTILLO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000015905",
+        "nombre": "ANGELICA GUERRA PALACIO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000015952",
+        "nombre": "JOSE LUIS STEPHENSON",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016050",
+        "nombre": "ISSAC OMAR GONZALEZ",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016085",
+        "nombre": "FUJIAN ZHANG",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016118",
+        "nombre": "ANA LAURA GOMEZ CASTILLO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016139",
+        "nombre": "ROSA ISELA VELAZQUES MURILLO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016168",
+        "nombre": "NORIEL PALACIO BAKER",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016183",
+        "nombre": "YADIRA SERRANO PALACIO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000015882",
+        "nombre": "DANIEL SANTAMARIA CABALLERO",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016600",
+        "nombre": "OLMEDO GONZALEZ AGUIRRE",
+        "asesor": "-",
+        "cod_asesor": ""
+      },
+      {
+        "cod_cliente": "9000000016033",
+        "nombre": "ARLETTE YALITZA CHAVARRIA",
+        "asesor": "-",
+        "cod_asesor": ""
+      }
+    ],
+    "sin_codsValidos": [],
+    "duplicados": []
+  }
+}
