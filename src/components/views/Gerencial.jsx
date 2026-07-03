@@ -981,15 +981,20 @@ export default function Gerencial() {
       }
     }
 
-    // 6. Cobertura general baja
-    if ((rf?.cobertura_pct || 0) < 80 && items.length < 6) {
+    // 6. Cobertura Maestro Comercial + clientes sin frecuencia (siempre visible cuando hay datos)
+    const sinFrecuencia = rf?.calidad_datos?.clientes_sin_frecuencia ?? 0;
+    const cobMaestroPct = rf?.cobertura_maestro?.porcentaje ?? 0;
+    if ((sinFrecuencia > 0 || cobMaestroPct > 0) && items.length < 6) {
+      const maestroUniverso = rf?.cobertura_maestro?.universo_maestro_comercial ?? rf?.clientes_maestro ?? 0;
+      const maestroConVenta = rf?.cobertura_maestro?.clientes_con_venta ?? rf?.clientes_impactados ?? 0;
       items.push({
-        tipo:      (rf?.cobertura_pct || 0) < 60 ? 'rojo' : 'ambar',
-        titulo:    'Cobertura del equipo',
-        valor:     pct(rf?.cobertura_pct || 0),
-        sub:       `${rf?.clientes_impactados || 0} de ${rf?.clientes_maestro || 0} clientes activos`,
-        link:      '/cobertura',
-        linkLabel: 'Ver Cobertura →',
+        tipo:      'ambar',
+        titulo:    'Cobertura Maestro Comercial',
+        valor:     cobMaestroPct > 0 ? pct(cobMaestroPct) : pct(rf?.cobertura_pct || 0),
+        sub:       `${maestroConVenta.toLocaleString()} / ${maestroUniverso.toLocaleString()} clientes activos`
+                 + (sinFrecuencia > 0 ? ` · ${sinFrecuencia} sin frecuencia de visita (no son clientes cero)` : ''),
+        link:      null,
+        linkLabel: null,
       });
     }
 
@@ -1163,11 +1168,14 @@ export default function Gerencial() {
       {/* Fila 2 — cobertura, calidad y ejecución */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <KpiCard
-          label="Cobertura"
-          value={pct(rf.cobertura_pct || 0)}
-          sub={`${rf.clientes_impactados ?? 0} / ${rf.clientes_maestro ?? 0} clientes`}
-          color={(rf.cobertura_pct || 0) >= 90 ? 'green' : (rf.cobertura_pct || 0) >= 70 ? 'amber' : 'red'}
-          barValue={rf.cobertura_pct || 0}
+          label="Cobertura Operativa"
+          value={pct(rf.cobertura_operativa?.porcentaje ?? rf.cobertura_pct ?? 0)}
+          sub={rf.cobertura_operativa
+            ? `${(rf.cobertura_operativa.clientes_con_venta).toLocaleString()} / ${(rf.cobertura_operativa.universo_gestionado).toLocaleString()} gestionados`
+              + `<br><span style="color:var(--muted);font-size:10px">Cero: ${rf.cobertura_operativa.clientes_cero} · Sin frec.: ${rf.calidad_datos?.clientes_sin_frecuencia ?? 0}</span>`
+            : `${rf.clientes_impactados ?? 0} / ${rf.clientes_maestro ?? 0} clientes`}
+          color={(rf.cobertura_operativa?.porcentaje ?? rf.cobertura_pct ?? 0) >= 85 ? 'green' : (rf.cobertura_operativa?.porcentaje ?? rf.cobertura_pct ?? 0) >= 70 ? 'amber' : 'red'}
+          barValue={rf.cobertura_operativa?.porcentaje ?? rf.cobertura_pct ?? 0}
         />
         <KpiCard
           label="Devoluciones"
@@ -2181,6 +2189,9 @@ export default function Gerencial() {
           Cobertura = clientes impactados ÷ maestro de cada vendedor
           {rf?.clientes_maestro > 0
             ? ` · universo ${sedeFiltro === 'TODOS' ? 'total' : sedeFiltro === 'CENTRALES' ? 'Centrales' : 'Chiriquí'}: ${(rf.clientes_maestro).toLocaleString()} clientes activos`
+            : ''}
+          {rf?.calidad_datos?.clientes_sin_frecuencia > 0
+            ? ` · ${rf.calidad_datos.clientes_sin_frecuencia} sin frecuencia de visita fuera del rutero`
             : ''}
         </p>
         <HBarChart

@@ -1994,6 +1994,96 @@ function getConfig_() {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// COBERTURA OPERATIVA ECOM
+// Calcula los tres universos de cobertura sin tocar RESUMEN_COBERTURA.
+// Se llama desde getResumen() y sus resultados se agregan al response.
+// ════════════════════════════════════════════════════════════════════
+
+function getCoberturaOperativaECOM_(clientesImpGlobal) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. Clientes cero: contar desde FRECUENCIA_ECOM (misma lógica que getClientesCero)
+  var ceroSet    = new Set();
+  var fuenteCero = 'sin_datos';
+  var hF = ss.getSheetByName('FRECUENCIA_ECOM');
+  if (hF && hF.getLastRow() > 1) {
+    var raw     = hF.getDataRange().getValues();
+    var headers = raw[0].map(function(h) { return String(h||'').trim().toLowerCase(); });
+    var iCodUsr  = headers.indexOf('cod usuario');
+    var iUsr     = headers.indexOf('usuario');
+    var iCodCli  = headers.indexOf('cod. cliente');
+    var iCliente = headers.indexOf('cliente');
+    if (iCodUsr >= 0 && iCodCli >= 0 && iCliente >= 0) {
+      for (var i = 1; i < raw.length; i++) {
+        var r = raw[i];
+        if (String(r[0]||'').trim().toUpperCase() === 'TOTAL') continue;
+        var codUsr  = String(r[iCodUsr]||'').trim().replace(/\.0$/, '');
+        var codCli  = String(r[iCodCli]||'').trim();
+        var cliente = String(r[iCliente]||'').trim();
+        var usuario = iUsr >= 0 ? String(r[iUsr]||'').trim() : '';
+        if (!codUsr || !codCli || !cliente) continue;
+        if (!esVendedorValido_(codUsr, usuario || codUsr)) continue;
+        ceroSet.add(codCli);
+      }
+      fuenteCero = 'FRECUENCIA_ECOM';
+    }
+  }
+  if (ceroSet.size === 0) {
+    // Fallback: CLIENTES_CERO
+    var hCC = getSheet_(HOJAS.CLIENTES_CERO);
+    if (hCC && hCC.getLastRow() > 1) {
+      hCC.getDataRange().getValues().slice(1).forEach(function(r) {
+        var codCli = String(r[0]||'').trim();
+        if (codCli) ceroSet.add(codCli);
+      });
+      fuenteCero = 'CLIENTES_CERO';
+    }
+  }
+
+  // 2. Maestro comercial (2,673 = estado A, excluye BODEGA y asesor inválido)
+  var maestroData      = cargarMaestroActivos_();
+  var maestroComercial = maestroData.total;
+
+  // 3. Contar con venta
+  var conVentaSet = new Set(clientesImpGlobal);
+  var nConVenta   = conVentaSet.size;
+  var nCero       = ceroSet.size;
+
+  // Definición operativa (aditiva): universo = con_venta + cero (sin deduplicar).
+  // La cobertura 83.8% = 1789/(1789+345) es exactamente lo que pide el negocio.
+  var universoDisplay  = nConVenta + nCero;
+  var cobOperativaPct  = universoDisplay > 0 ? round2_(nConVenta / universoDisplay * 100) : 0;
+
+  // Clientes sin frecuencia: maestro − unión real(con_venta, cero)
+  var gestionadosUnion = new Set();
+  conVentaSet.forEach(function(c) { gestionadosUnion.add(c); });
+  ceroSet.forEach(function(c)     { gestionadosUnion.add(c); });
+  var sinFrecuencia = Math.max(0, maestroComercial - gestionadosUnion.size);
+
+  // Cobertura vs maestro comercial
+  var cobMaestroPct = maestroComercial > 0 ? round2_(nConVenta / maestroComercial * 100) : 0;
+
+  return {
+    cobertura_operativa: {
+      clientes_con_venta:  nConVenta,
+      clientes_cero:       nCero,
+      universo_gestionado: universoDisplay,
+      porcentaje:          cobOperativaPct,
+      fuente_cero:         fuenteCero
+    },
+    cobertura_maestro: {
+      clientes_con_venta:         nConVenta,
+      universo_maestro_comercial: maestroComercial,
+      porcentaje:                 cobMaestroPct
+    },
+    calidad_datos: {
+      clientes_sin_frecuencia: sinFrecuencia,
+      descripcion: 'Clientes activos en maestro sin frecuencia_visita — fuera del universo operativo ECOM.'
+    }
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
 // RESUMEN GLOBAL
 // ════════════════════════════════════════════════════════════════════
 
@@ -2162,6 +2252,9 @@ function getResumen() {
     }
   }
 
+  // ── Cobertura operativa ECOM (tres universos) ────────────────────────────
+  const cobOperativaData = getCoberturaOperativaECOM_(clientesImpGlobal);
+
   // ── Efectividad: global + por sede (EFECTIVIDAD_RESUMEN) ─────────────────
   var efPorSede = {};
   SEDES.forEach(function(s) { efPorSede[s] = { vals: [] }; });
@@ -2282,6 +2375,11 @@ function getResumen() {
     // Cuotas / metas del equipo
     cuota_total:             round2_(cuotaTotal),
     pct_cumplimiento_equipo: cuotaTotal > 0 ? round2_(ventaNeta / cuotaTotal * 100) : 0,
+
+    // ── Cobertura operativa ECOM (tres universos) ────────────────────────────
+    cobertura_operativa: cobOperativaData.cobertura_operativa,
+    cobertura_maestro:   cobOperativaData.cobertura_maestro,
+    calidad_datos:       cobOperativaData.calidad_datos,
 
     // ── Desglose por sede (para KPI cards filtradas) ──────────────────────
     por_sede: {
