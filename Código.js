@@ -237,11 +237,18 @@ function calcularCobertura() {
   const hB   = ss.getSheetByName('BASE_ACUMULADA');
   const hM   = ss.getSheetByName('MAESTRO_CLIENTES');
   const hRes = ss.getSheetByName('RESUMEN_COBERTURA');
-  const ui   = SpreadsheetApp.getUi();
 
-  if (!hB)   { ui.alert('ERROR', 'No existe BASE_ACUMULADA.',    ui.ButtonSet.OK); return; }
-  if (!hM)   { ui.alert('ERROR', 'No existe MAESTRO_CLIENTES.',  ui.ButtonSet.OK); return; }
-  if (!hRes) { ui.alert('ERROR', 'No existe RESUMEN_COBERTURA.', ui.ButtonSet.OK); return; }
+  // Degradar sin romper cuando se llama desde doGet (sin UI disponible)
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch(_) {}
+  function alerta_(titulo, msg) {
+    if (ui) ui.alert(titulo, msg, ui.ButtonSet.OK);
+    else    Logger.log('[calcularCobertura] ' + titulo + ': ' + msg);
+  }
+
+  if (!hB)   { alerta_('ERROR', 'No existe BASE_ACUMULADA.');    return; }
+  if (!hM)   { alerta_('ERROR', 'No existe MAESTRO_CLIENTES.');  return; }
+  if (!hRes) { alerta_('ERROR', 'No existe RESUMEN_COBERTURA.'); return; }
 
   const rutData    = hM.getDataRange().getValues();
   const ruteroMap  = {};
@@ -1235,6 +1242,10 @@ function doGet(e) {
       case 'auditoria_universos_clientes':
         // Solo lectura — audita los tres universos de clientes (2608/2670/2674).
         data = getAuditoriaUniversosClientes_();
+        break;
+      case 'auditoria_clientes_no_gestionados':
+        // Solo lectura — cruza maestro comercial vs clientes con venta vs clientes cero.
+        data = getAuditoriaClientesNoGestionados_();
         break;
       default:                  data = getResumen();           break;
     }
@@ -3358,6 +3369,189 @@ function getAuditoriaCantNetaTodos_() {
   });
 
   return { ok: true, regla_impactado: 'cant_neta > 0 (r[13])', periodo: periodoCalc, detalle };
+}
+
+// Auditoría de solo lectura — cruza el universo maestro comercial activo contra
+// clientes con venta en BASE_ACUMULADA y clientes cero de FRECUENCIA_ECOM.
+// Devuelve el listado exacto de clientes que están en el maestro pero no
+// aparecen en ninguno de los dos grupos (ni con venta ni como cero).
+// Uso: /api/datos?sheet=auditoria_clientes_no_gestionados
+function getAuditoriaClientesNoGestionados_() {
+  var hM  = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  var hB  = getSheet_(HOJAS.BASE);
+  var ss  = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (!hM) return { ok: false, error: 'No existe MAESTRO_CLIENTES' };
+  if (!hB) return { ok: false, error: 'No existe BASE_ACUMULADA' };
+
+  // ── 1. Universo maestro comercial (= cargarMaestroActivos_()) ─────────
+  var maestroMap = {};
+  var filas = hM.getDataRange().getValues().slice(1);
+  filas.forEach(function(r) {
+    var codCli    = normalizarCodigoCliente_(r[0]);
+    var asesorRaw = String(r[20] || '').trim();
+    var codAs     = obtenerCodAsesor_(asesorRaw);
+    var estado    = String(r[19] || '').trim().toUpperCase();
+    if (!codCli) return;
+    if (estado !== 'A') return;
+    if (asesorRaw && !esVendedorValido_(codAs, asesorRaw)) return;
+    if (!maestroMap[codCli]) {
+      maestroMap[codCli] = {
+        cod_cliente:       codCli,
+        cliente:           String(r[1]  || '').trim(),
+        direccion:         String(r[6]  || '').trim(),
+        telefono:          String(r[7]  || '').trim(),
+        dia_visita:        String(r[8]  || '').trim(),
+        frecuencia_visita: String(r[9]  || '').trim(),
+        estado:            estado,
+        canal:             String(r[30] || '').trim() || String(r[24] || '').trim(),
+        sub_canal:         String(r[31] || '').trim(),
+        asesor:            asesorRaw,
+        cod_asesor:        codAs || '',
+      };
+    }
+  });
+  var maestroComercial = Object.keys(maestroMap).length;
+
+  // ── 2. Período actual desde BASE_ACUMULADA ───────────────────────────
+  var baseData = hB.getDataRange().getValues();
+  var periodos = [];
+  baseData.slice(1).forEach(function(r) {
+    var v = r[18];
+    var p = v instanceof Date
+      ? (v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0'))
+      : String(v || '').substring(0, 7);
+    if (p) periodos.push(p);
+  });
+  var periodoActual = periodos
+    .filter(function(p, i, a) { return a.indexOf(p) === i; })
+    .sort().slice(-1)[0] || '';
+
+  // ── 3. Clientes con venta en el período actual ────────────────────────
+  var conVentaSet = new Set();
+  baseData.slice(1).forEach(function(r) {
+    var v  = r[18];
+    var p  = v instanceof Date
+      ? (v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0'))
+      : String(v || '').substring(0, 7);
+    if (p !== periodoActual) return;
+    var valor  = parseFloat(r[14]) || 0;
+    var codCli = normalizarCodigoCliente_(r[1]);
+    if (valor > 0 && codCli) conVentaSet.add(codCli);
+  });
+
+  // ── 4. Clientes cero — MISMA lógica que getClientesCero() ─────────────
+  var ceroSet    = new Set();
+  var fuenteCero = 'CLIENTES_CERO';
+  var hF = ss.getSheetByName('FRECUENCIA_ECOM');
+
+  if (hF && hF.getLastRow() > 1) {
+    var rawF     = hF.getDataRange().getValues();
+    var headersF = rawF[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+    var iCodCli  = headersF.indexOf('cod. cliente');
+    var iCodUsr  = headersF.indexOf('cod usuario');
+    var iUsr     = headersF.indexOf('usuario');
+
+    if (iCodCli !== -1 && iCodUsr !== -1) {
+      fuenteCero = 'FRECUENCIA_ECOM';
+      var vendNomMap = {};
+      baseData.slice(1).forEach(function(r) {
+        var cod    = obtenerCodAsesor_(String(r[3] || '').trim());
+        var nombre = String(r[4] || '').trim();
+        if (cod && nombre && !vendNomMap[cod]) vendNomMap[cod] = nombre;
+      });
+      rawF.slice(1).forEach(function(r) {
+        var empresa = String(r[0] || '').trim();
+        if (empresa.toUpperCase() === 'TOTAL') return;
+        var codUsr = String(r[iCodUsr] || '').trim().replace(/\.0$/, '');
+        var usr    = iUsr >= 0 ? String(r[iUsr] || '').trim() : '';
+        var nomV   = vendNomMap[codUsr] || usr;
+        if (!esVendedorValido_(codUsr, nomV)) return;
+        var codCli = normalizarCodigoCliente_(r[iCodCli]);
+        if (codCli) ceroSet.add(codCli);
+      });
+    }
+  }
+
+  if (fuenteCero === 'CLIENTES_CERO') {
+    var hCC = getSheet_(HOJAS.CLIENTES_CERO);
+    if (hCC && hCC.getLastRow() > 1) {
+      var rawCC  = hCC.getDataRange().getValues();
+      var headCC = rawCC[0].map(function(h) { return normalizarHeader_(h); });
+      var iCC    = headCC.indexOf('cod_cliente');
+      if (iCC === -1) iCC = 0;
+      rawCC.slice(1).forEach(function(r) {
+        var codCli = normalizarCodigoCliente_(r[iCC]);
+        if (codCli) ceroSet.add(codCli);
+      });
+    }
+  }
+
+  // ── 5. Cruce: clientes no gestionados ─────────────────────────────────
+  var noGestionados = [];
+  var sinAsesor = 0, conAsesor = 0, sinDia = 0, sinFrec = 0;
+
+  Object.values(maestroMap).forEach(function(m) {
+    if (conVentaSet.has(m.cod_cliente) || ceroSet.has(m.cod_cliente)) return;
+    noGestionados.push({
+      cod_cliente:       m.cod_cliente,
+      cliente:           m.cliente,
+      asesor:            m.asesor,
+      cod_asesor:        m.cod_asesor,
+      direccion:         m.direccion,
+      telefono:          m.telefono,
+      canal:             m.canal,
+      sub_canal:         m.sub_canal,
+      dia_visita:        m.dia_visita,
+      frecuencia_visita: m.frecuencia_visita,
+      estado:            m.estado,
+      en_maestro:        true,
+      tiene_venta:       false,
+      es_cliente_cero:   false,
+      motivo:            'Activo en maestro comercial, pero no aparece con venta ni como cliente cero del mes.'
+    });
+    if (!m.cod_asesor || !/^\d{3}$/.test(m.cod_asesor)) sinAsesor++; else conAsesor++;
+    if (!m.dia_visita)        sinDia++;
+    if (!m.frecuencia_visita) sinFrec++;
+  });
+
+  // ── 6. Agrupaciones para análisis ────────────────────────────────────
+  function agrupar_(campo) {
+    var mapa = {};
+    noGestionados.forEach(function(c) {
+      var k = c[campo] || '(vacío)';
+      mapa[k] = (mapa[k] || 0) + 1;
+    });
+    return Object.entries(mapa)
+      .map(function(e) { return { valor: e[0], cantidad: e[1] }; })
+      .sort(function(a, b) { return b.cantidad - a.cantidad; });
+  }
+
+  return {
+    ok:                               true,
+    fecha_auditoria:                  new Date().toISOString(),
+    periodo:                          periodoActual,
+    fuente_clientes_cero:             fuenteCero,
+    maestro_comercial:                maestroComercial,
+    clientes_con_venta:               conVentaSet.size,
+    clientes_cero:                    ceroSet.size,
+    clientes_no_gestionados_teoricos: maestroComercial - conVentaSet.size - ceroSet.size,
+    clientes_no_gestionados_reales:   noGestionados.length,
+    clientes_no_gestionados:          noGestionados,
+    diagnostico: {
+      sin_asesor_valido:    sinAsesor,
+      con_asesor_valido:    conAsesor,
+      sin_dia_visita:       sinDia,
+      sin_frecuencia:       sinFrec,
+    },
+    resumen: {
+      por_asesor:            agrupar_('asesor'),
+      por_canal:             agrupar_('canal'),
+      por_sub_canal:         agrupar_('sub_canal'),
+      por_dia_visita:        agrupar_('dia_visita'),
+      por_frecuencia_visita: agrupar_('frecuencia_visita'),
+    },
+  };
 }
 
 // Auditoría de solo lectura — explica de dónde salen los tres denominadores
