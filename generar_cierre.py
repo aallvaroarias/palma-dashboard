@@ -46,9 +46,14 @@ VN          = 393263.51
 DEV_PCT     = 10.11
 AV_PCT      = 3.71
 
-COB_IMP     = 1789
-COB_MAE     = 2608
-COB_PCT     = 68.6
+COB_IMP           = 1789   # clientes con venta en el mes
+COB_MAE           = 2134   # universo operativo ECOM = con_venta + cero_ecom
+COB_PCT           = 83.8   # Cobertura Operativa ECOM = 1789/2134*100
+
+COB_MAE_COMERCIAL = 2673   # maestro comercial completo (indicador secundario)
+COB_PCT_MAESTRO   = 66.9   # = 1789/2673*100 (vs maestro)
+CLIENTES_CERO     = 345    # clientes rutero ECOM sin compra en el mes
+CLIENTES_SIN_FREC = 543    # clientes activos sin frecuencia_visita (fuera de ruta)
 
 META_PALMA  = 564546.27
 META_ECOM   = 462962.00
@@ -211,8 +216,8 @@ def page_cover(c, meta_type):
         ("VENTA NETA",    c_fmt(VN),        white,                 f"Neta de dev. y averías"),
         ("CUMPLIMIENTO",  p_fmt(cumpl),
          GOLD if cumpl < 85 else GREEN,      f"vs Meta {'PALMA' if meta_type=='palma' else 'ECOM'}"),
-        ("COBERTURA",     p_fmt(COB_PCT),    HexColor('#5DC8E8'),
-         f"{COB_IMP:,} / {COB_MAE:,} clientes"),
+        ("COB. OPERATIVA", p_fmt(COB_PCT),    HexColor('#5DC8E8'),
+         f"{COB_IMP:,} / {COB_MAE:,} clientes gestionados"),
     ]
     bkw, bkg = 53*mm, 4.5*mm
     bk0 = (W - (3*bkw + 2*bkg)) / 2
@@ -302,7 +307,7 @@ def page_resumen(c, meta_type):
     kpi(x1, y_r1, "VENTA BRUTA",  c_fmt(VB),  "Total facturado")
     kpi(x2, y_r1, "VENTA NETA",   c_fmt(VN),  "Neta de dev. y averías",
         NAVY, HexColor('#E0EBF5'), NAVY)
-    kpi(x3, y_r1, "COBERTURA",    p_fmt(COB_PCT),
+    kpi(x3, y_r1, "COB. OPERATIVA", p_fmt(COB_PCT),
         f"{COB_IMP:,} / {COB_MAE:,} clientes",
         cumpl_color(COB_PCT), cumpl_bg(COB_PCT))
 
@@ -327,18 +332,18 @@ def page_resumen(c, meta_type):
             f"Palumar cerró junio 2026 con una venta neta de {c_fmt(VN)}, "
             f"equivalente al {p_fmt(CUMPL_PALMA)} de cumplimiento frente a la "
             f"Meta PALMA de {c_fmt(META_PALMA)}. El déficit del período asciende "
-            f"a {c_fmt(FALTA_PALMA)}. La cobertura de clientes finalizó en "
-            f"{p_fmt(COB_PCT)} ({COB_IMP:,} de {COB_MAE:,} clientes impactados), "
-            f"con 819 clientes sin visita durante el mes."
+            f"a {c_fmt(FALTA_PALMA)}. La cobertura operativa ECOM finalizó en "
+            f"{p_fmt(COB_PCT)} ({COB_IMP:,} de {COB_MAE:,} clientes gestionados), "
+            f"con {CLIENTES_CERO} clientes cero ECOM y {CLIENTES_SIN_FREC} clientes activos sin frecuencia de visita."
         )
     else:
         resumen = (
             f"Palumar cerró junio 2026 con una venta neta de {c_fmt(VN)}, "
             f"equivalente al {p_fmt(CUMPL_ECOM)} de cumplimiento frente a la "
             f"Meta ECOM de {c_fmt(META_ECOM)}. El déficit del período asciende "
-            f"a {c_fmt(FALTA_ECOM)}. La cobertura de clientes finalizó en "
-            f"{p_fmt(COB_PCT)} ({COB_IMP:,} de {COB_MAE:,} clientes impactados), "
-            f"con 819 clientes sin visita durante el mes."
+            f"a {c_fmt(FALTA_ECOM)}. La cobertura operativa ECOM finalizó en "
+            f"{p_fmt(COB_PCT)} ({COB_IMP:,} de {COB_MAE:,} clientes gestionados), "
+            f"con {CLIENTES_CERO} clientes cero ECOM y {CLIENTES_SIN_FREC} clientes activos sin frecuencia de visita."
         )
     y_txt = wrap_text(c, ML, y_txt, resumen, "Helvetica", 9, DARK, CW, 14)
 
@@ -475,12 +480,15 @@ def page_calidad(c, meta_type):
         ("Venta Neta / Venta Bruta",
          p_fmt(100-DEV_PCT-AV_PCT), c_fmt(VN),
          "Eficiencia neta del período"),
-        ("Cobertura de clientes",
+        ("Cobertura Operativa ECOM",
          p_fmt(COB_PCT), f"{COB_IMP:,} / {COB_MAE:,}",
-         "Clientes con compra neta > 0 en el período"),
-        ("Clientes sin impactar",
-         f"{COB_MAE - COB_IMP:,}", "—",
-         "Oportunidad de cobertura no aprovechada"),
+         f"Clientes con venta / universo gestionado del mes ({COB_IMP:,} con venta + {CLIENTES_CERO} cero ECOM)"),
+        ("Clientes cero ECOM  (en rutero sin compra)",
+         f"{CLIENTES_CERO:,}", "—",
+         "Están en el rutero ECOM pero no compraron en el período"),
+        ("Clientes sin frecuencia de visita",
+         f"{CLIENTES_SIN_FREC:,}", "—",
+         "Activos en maestro pero sin frecuencia_visita — fuera del universo operativo"),
     ]
     for i, (lbl, pct, monto, nota) in enumerate(filas):
         bg = white if i % 2 == 0 else HexColor('#F7FAFD')
@@ -501,6 +509,15 @@ def page_calidad(c, meta_type):
           f"Alerta de datos:  {c_fmt(SIN_NEG)} ({p_fmt(SIN_NEG_PCT)} de venta neta) "
           "sin negocio identificado en BASE_ACUMULADA — requiere auditoría.",
           "Helvetica-Bold", 8.5, HexColor('#8B4000'))
+
+    # Alerta clientes sin frecuencia
+    y -= 13*mm
+    frect(c, ML, y - 8, CW, 20, HexColor('#FFF0F0'), radius=3,
+          stroke_color=RED, lw=0.8)
+    ftext(c, ML + 6, y + 3,
+          f"Alerta de cobertura:  {CLIENTES_SIN_FREC} clientes activos no tienen frecuencia de visita "
+          f"— no están en el rutero ECOM. NO son clientes cero (son {CLIENTES_CERO}). Depurar frecuencia_visita.",
+          "Helvetica-Bold", 8.5, HexColor('#7B0000'))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -525,7 +542,7 @@ def page_negocios(c, meta_type):
 
     ftext(c, ML, y - 2,
           f"Venta neta vs {mlbl} ({c_fmt(mval)}) · "
-          f"Cobertura empresa: {p_fmt(COB_PCT)} ({COB_IMP:,}/{COB_MAE:,})",
+          f"Cob. Operativa ECOM: {p_fmt(COB_PCT)} ({COB_IMP:,}/{COB_MAE:,} gestionados)",
           "Helvetica", 8, MGRAY)
     y -= 8*mm
 
@@ -638,8 +655,10 @@ def page_negocios(c, meta_type):
     # Nota al pie
     y -= 4*mm
     ftext(c, ML, y,
-          "* Cobertura: clientes con cant. neta > 0 / universo empresa (2,608). "
-          "Sin negocio: ventas sin código de negocio en BASE_ACUMULADA.",
+          f"* Cobertura Operativa ECOM: clientes con venta / universo gestionado del mes "
+          f"({COB_MAE:,} = {COB_IMP:,} con venta + {CLIENTES_CERO} cero ECOM). "
+          f"Maestro comercial: {COB_MAE_COMERCIAL:,} ({CLIENTES_SIN_FREC} sin frecuencia excluidos). "
+          "Sin negocio: ventas sin código en BASE_ACUMULADA.",
           "Helvetica-Oblique", 7, MGRAY)
 
 
@@ -734,8 +753,9 @@ def page_hallazgos(c, meta_type):
             "identificado en BASE_ACUMULADA — impacta la distribución por categoría",
             f"Devoluciones en {p_fmt(DEV_PCT)} ({c_fmt(DEV)}) — "
             "nivel a monitorear si supera el 10% de forma sistemática",
-            f"819 clientes ({p_fmt((COB_MAE-COB_IMP)/COB_MAE*100)}) sin impactar "
-            "en el mes — oportunidad de cobertura no aprovechada",
+            f"{CLIENTES_SIN_FREC} clientes activos sin frecuencia de visita — fuera del "
+            f"rutero ECOM; {CLIENTES_CERO} en rutero sin compra (cero ECOM). Se recomienda "
+            "depurar o parametrizar frecuencia_visita para estos clientes.",
         ]
     )
 
@@ -775,8 +795,9 @@ def page_recomendaciones(c, meta_type):
             f"Plan de recuperación Galletas: "
             f"{p_fmt(70.81 if meta_type=='ecom' else 58.16)} vs meta {mlbl}. "
             "Identificar segmentos con mayor potencial.",
-            f"Aumentar cobertura: de {COB_IMP:,} a 1,900+ clientes en julio "
-            "(+111 clientes). Revisar clientes sin visita en el mes.",
+            f"Incorporar al rutero ECOM los {CLIENTES_SIN_FREC} clientes activos sin frecuencia de visita — "
+            f"cobertura operativa actual {p_fmt(COB_PCT)} ({COB_IMP:,}/{COB_MAE:,}). "
+            f"Parametrizar frecuencia_visita para los {CLIENTES_SIN_FREC} clientes pendientes.",
         ]),
         (BLUE, "ACCIONES COMERCIALES", [
             "Mantener momentum en Bebidas TMLUC, Snacks y Otros TMLUC — "
@@ -861,8 +882,13 @@ def generate_data_files(out_dir):
             "averia_pct": AV_PCT, "venta_neta": VN,
         },
         "cobertura": {
-            "clientes_impactados": COB_IMP, "clientes_maestro": COB_MAE,
-            "cobertura_pct": COB_PCT, "clientes_sin_impactar": COB_MAE - COB_IMP,
+            "clientes_con_venta": COB_IMP,
+            "universo_operativo_ecom": COB_MAE,
+            "cobertura_operativa_pct": COB_PCT,
+            "clientes_cero_ecom": CLIENTES_CERO,
+            "clientes_sin_frecuencia": CLIENTES_SIN_FREC,
+            "maestro_comercial": COB_MAE_COMERCIAL,
+            "cobertura_vs_maestro_pct": COB_PCT_MAESTRO,
         },
         "metas": {
             "meta_palma": META_PALMA, "cumpl_palma": CUMPL_PALMA,

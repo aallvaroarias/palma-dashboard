@@ -11,10 +11,13 @@
     "venta_neta": 393263.51
   },
   "cobertura": {
-    "clientes_impactados": 1789,
-    "clientes_maestro": 2608,
-    "cobertura_pct": 68.6,
-    "clientes_sin_impactar": 819
+    "clientes_con_venta": 1789,
+    "universo_operativo_ecom": 2134,
+    "cobertura_operativa_pct": 83.8,
+    "clientes_cero_ecom": 345,
+    "clientes_sin_frecuencia": 543,
+    "maestro_comercial": 2673,
+    "cobertura_vs_maestro_pct": 66.9
   },
   "metas": {
     "meta_palma": 564546.27,
