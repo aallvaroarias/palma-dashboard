@@ -1247,6 +1247,10 @@ function doGet(e) {
         // Solo lectura — cruza maestro comercial vs clientes con venta vs clientes cero.
         data = getAuditoriaClientesNoGestionados_();
         break;
+      case 'incentivos_vendedores':
+        // Solo lectura — agrega venta, Nutrición Experta, TOSH y HORECA por vendedor.
+        data = getIncentivosVendedores_();
+        break;
       default:                  data = getResumen();           break;
     }
 
@@ -6350,4 +6354,167 @@ function getCombosVendedorDetalle_() {
   });
 
   return { vendedores: vendedores };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// INCENTIVOS VENDEDORES — Endpoint: ?sheet=incentivos_vendedores
+// Agrega, en una sola pasada sobre BASE_ACUMULADA:
+//   - venta_neta por vendedor
+//   - venta Nutrición Experta (positiva)
+//   - clientes únicos impactados con barras TOSH
+//   - clientes creados en el período con perfil HORECA y con venta
+// Solo lectura. No modifica ninguna hoja.
+// ════════════════════════════════════════════════════════════════════
+
+function getIncentivosVendedores_() {
+  var mesData  = getBasePeriodoActual_();
+  var periodo  = getPeriodoActualDesdeBase_();
+  var periodoAnio = periodo ? parseInt(periodo.substring(0,4)) : 0;
+  var periodoMes  = periodo ? parseInt(periodo.substring(4,6)) : 0;
+
+  // ── 1. Canal/sub_canal + fecha_creacion desde MAESTRO_CLIENTES ───────────
+  var maestroMeta  = {};  // codCli -> { canal, sub_canal, nombre, cod_asesor, creado_este_mes }
+  var hM = getSheet_(HOJAS.MAESTRO_CLIENTES);
+  if (hM && hM.getLastRow() > 1) {
+    hM.getDataRange().getValues().slice(1).forEach(function(r) {
+      var cod = normalizarCodigoCliente_(r[0]);
+      if (!cod) return;
+      var canal    = String(r[30] || r[24] || '').trim();
+      var sub      = String(r[31] || '').trim();
+      var nombre   = String(r[1]  || '').trim();
+      var asesorR  = String(r[20] || '').trim();
+      var codAs    = obtenerCodAsesor_(asesorR);
+      // Fecha de creación: buscar en columnas 27-29
+      var creadoMes = false;
+      for (var ci = 27; ci <= 29; ci++) {
+        var fRaw = r[ci];
+        if (!fRaw) continue;
+        var f = (fRaw instanceof Date) ? fRaw : new Date(fRaw);
+        if (!isNaN(f.getTime()) &&
+            f.getFullYear() === periodoAnio && (f.getMonth()+1) === periodoMes) {
+          creadoMes = true;
+          break;
+        }
+      }
+      maestroMeta[cod] = {
+        canal: canal, sub_canal: sub, nombre_cliente: nombre,
+        cod_asesor: codAs, creado_este_mes: creadoMes
+      };
+    });
+  }
+
+  // Palabras clave HORECA (normalizado sin tildes)
+  var HORECA_KW = ['hotel','restaurante','restauran','rest.','cafeteria','cafetería',
+                   'horeca','food service','parrilla','cantina','comedor'];
+  function esHoreca_(codCli) {
+    var m = maestroMeta[codCli];
+    if (!m) return false;
+    var texto = (m.canal + ' ' + m.sub_canal + ' ' + m.nombre_cliente).toLowerCase()
+                  .normalize('NFD').replace(/[̀-ͯ]/g,'');
+    for (var ki = 0; ki < HORECA_KW.length; ki++) {
+      var kw = HORECA_KW[ki].normalize('NFD').replace(/[̀-ͯ]/g,'');
+      if (texto.indexOf(kw) >= 0) return true;
+    }
+    return false;
+  }
+
+  // ── 2. Pasada única por BASE_ACUMULADA ────────────────────────────────────
+  var vendMap = {};
+
+  mesData.forEach(function(row) {
+    var cod   = obtenerCodAsesor_(row[3]);
+    var nomAs = String(row[4] || '').trim();
+    if (!cod || !esVendedorValido_(cod, row[3])) return;
+
+    var valor    = parseFloat(row[14]) || 0;
+    var cantNeta = parseFloat(row[13]) || 0;
+    var codCli   = String(row[1] || '').trim();
+    var negocio  = String(row[8] || '').trim();
+    var skuNom   = String(row[7] || '').trim();
+
+    if (!vendMap[cod]) {
+      vendMap[cod] = {
+        cod: cod, nombre: nomAs,
+        venta_neta: 0, nutricion_exp: 0,
+        tosh_clientes: new Set(), tosh_skus: {},
+        horeca_clientes: new Set(), horeca_detalle: {},
+        por_negocio: {}
+      };
+    }
+    var v = vendMap[cod];
+    if (nomAs && !v.nombre) v.nombre = nomAs;
+
+    v.venta_neta += valor;
+
+    // Nutrición Experta (solo ventas positivas)
+    var negL = negocio.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    if ((negL.indexOf('nutrici') >= 0 || negL.indexOf('experta') >= 0) && valor > 0) {
+      v.nutricion_exp += valor;
+    }
+
+    // TOSH barras: nombre empieza con "brr." y contiene "tosh"
+    var skuL = skuNom.toLowerCase();
+    if (skuL.indexOf('brr.') === 0 && skuL.indexOf('tosh') >= 0 && cantNeta > 0 && codCli) {
+      v.tosh_clientes.add(codCli);
+      v.tosh_skus[skuNom] = (v.tosh_skus[skuNom] || 0) + 1;
+    }
+
+    // HORECA: creado este mes, canal HORECA, con venta positiva
+    var mMeta = maestroMeta[codCli];
+    if (codCli && mMeta && mMeta.creado_este_mes && esHoreca_(codCli) && valor > 0) {
+      v.horeca_clientes.add(codCli);
+      if (!v.horeca_detalle[codCli]) {
+        v.horeca_detalle[codCli] = {
+          cod_cliente: codCli, nombre_cliente: mMeta.nombre_cliente || codCli,
+          canal: mMeta.canal || '', sub_canal: mMeta.sub_canal || '', venta: 0
+        };
+      }
+      v.horeca_detalle[codCli].venta = round2_((v.horeca_detalle[codCli].venta || 0) + valor);
+    }
+
+    // Por negocio (solo positivo)
+    if (negocio && valor > 0) {
+      v.por_negocio[negocio] = (v.por_negocio[negocio] || 0) + valor;
+    }
+  });
+
+  // ── 3. Construir respuesta ────────────────────────────────────────────────
+  var result = Object.values(vendMap).map(function(v) {
+    var toshCnt   = v.tosh_clientes.size;
+    var horecaCnt = v.horeca_clientes.size;
+    return {
+      cod:                      v.cod,
+      nombre:                   v.nombre,
+      venta_neta:               round2_(v.venta_neta),
+      venta_nutricion_experta:  round2_(v.nutricion_exp),
+      clientes_tosh_impactados: toshCnt,
+      tosh_skus_vendidos:       Object.keys(v.tosh_skus),
+      clientes_horeca_junio:    horecaCnt,
+      horeca_detalle:           Object.values(v.horeca_detalle),
+      por_negocio:              Object.entries(v.por_negocio)
+        .map(function(e) { return { negocio: e[0], venta: round2_(e[1]) }; })
+        .sort(function(a, b) { return b.venta - a.venta; })
+    };
+  }).sort(function(a, b) { return parseInt(a.cod) - parseInt(b.cod); });
+
+  // ── 4. Resumen de clientes nuevos del período (diagnóstico HORECA) ────────
+  var clientesNuevosMes  = 0;
+  var clientesHorecaMes  = 0;
+  Object.values(maestroMeta).forEach(function(m) {
+    if (m.creado_este_mes) {
+      clientesNuevosMes++;
+      if (esHoreca_(m.cod_asesor)) clientesHorecaMes++;
+    }
+  });
+
+  return {
+    ok:               true,
+    periodo:          periodo,
+    total_vendedores: result.length,
+    vendedores:       result,
+    meta_diagnostico: {
+      clientes_nuevos_periodo: clientesNuevosMes,
+      clientes_horeca_periodo: clientesHorecaMes
+    }
+  };
 }
