@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-generar_incentivos.py - v5.0
-DN Jet y Tikys calculados desde cobertura_marcas; notas pendiente corregidas.
+generar_incentivos.py - v6.0
+Devolución calculada (meta ≤5%); negocios con cuotas (escala presupuesto);
+DN Galletas Cremas calculado desde detalle_cobertura_negocio; frontend Venta Neta.
 PALUMAR S.A. — Junio 2026
 """
 
-import requests, csv, os, math
+import requests, csv, os, math, unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime
 from reportlab.platypus import (
@@ -58,8 +59,12 @@ VBI_NE_IND        = 11.00   # pendiente — sin meta definida
 META_DN_CAFE_PCT  = 40.0
 META_DN_JET_PCT   = 40.0
 META_DN_TIKYS_PCT = 15.0
-META_NUEVOS       = 10      # era 15 — CORREGIDO
-META_CERO_PCT     = 4.0     # era 2%  — CORREGIDO
+META_NUEVOS           = 10    # era 15 — CORREGIDO
+META_CERO_PCT         = 4.0   # era 2%  — CORREGIDO
+META_DEVOLUCION_PCT   = 5.0   # ≤5% → $22, >5% → $0
+
+# SKUs de Galletas Cremas (negocio 02-Galletas, marca 146-Pozuelo)
+CREMAS_SKUS = {'1080669', '1007777', '1047712'}
 
 # Indicador especial: pago = None → "Pendiente por dato fuente"
 PENDIENTE_STR = "Pendiente por dato fuente"
@@ -165,6 +170,59 @@ def es_horeca(nombre):
         if kw in n: return True, kw
     return False, None
 
+def norm_neg(s):
+    """Normaliza nombre de negocio: sin tildes, minúsculas, sin prefijo numérico."""
+    s = unicodedata.normalize("NFD", str(s or ""))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return s.strip().lower()
+
+def buscar_venta_neg(vn_map, keyword):
+    """Busca venta en venta_neg_map por substring del nombre de negocio."""
+    kw = keyword.lower()
+    for key, val in vn_map.items():
+        if kw in str(key).lower():
+            return float(val)
+    return 0.0
+
+def calc_dn_cremas(detalle_data, fallback_universo=0):
+    """Cuenta clientes únicos con venta positiva en SKUs CREMAS."""
+    filas = detalle_data.get("detalle_filas", [])
+    clientes = set()
+    for row in filas:
+        if str(row.get("cod_sku", "")) not in CREMAS_SKUS:
+            continue
+        if float(row.get("cant_neta", 0)) <= 0:
+            continue
+        clt = str(row.get("cod_cliente", ""))
+        if clt:
+            clientes.add(clt)
+    n = len(clientes)
+    uni = int((detalle_data.get("resumen") or {}).get("universo", fallback_universo))
+    if uni <= 0:
+        uni = int(fallback_universo)
+    pct = round(n / uni * 100, 1) if uni > 0 else 0.0
+    return n, uni, pct
+
+def fetch_all_cremas(vendedores_list):
+    """Fetches detalle_cobertura_negocio para cada vendedor y calcula DN Cremas."""
+    print("  → Obteniendo DN Galletas Cremas (detalle_cobertura_negocio ×14)...")
+    cremas_por_vend = {}
+    for v in sorted(vendedores_list, key=lambda x: x["cod"]):
+        cod = str(v["cod"]).zfill(3)
+        mae = int(v.get("maestro", 0))
+        print(f"    Vendedor {cod}...", end="", flush=True)
+        try:
+            t0 = datetime.now()
+            data = fetch("detalle_cobertura_negocio", {"cod_asesor": cod, "negocio": "Galletas"})
+            elapsed = (datetime.now() - t0).seconds
+            n, uni, pct = calc_dn_cremas(data, mae)
+            cremas_por_vend[cod] = {"n": n, "universo": uni, "pct": pct}
+            print(f" {n}/{uni} ({pct:.1f}%) — {elapsed}s")
+        except Exception as e:
+            print(f" ERROR: {e}")
+            cremas_por_vend[cod] = {"n": 0, "universo": mae, "pct": 0.0}
+    return cremas_por_vend
+
 
 # ── NOTA DE NÓMINA ────────────────────────────────────────────────────────
 def nota_nomina(r):
@@ -177,8 +235,8 @@ def nota_nomina(r):
     pend_note = ""
     if n_pend > 0:
         pend_note = (f" Hay {n_pend} indicador(es) con valor potencial máximo de "
-                     f"{fmt_usd(pend_vbi)} que no pudieron calcularse por falta de fuente "
-                     f"de datos y quedarán pendientes para próximo período.")
+                     f"{fmt_usd(pend_vbi)} pendientes "
+                     f"(sin meta definida o sin fuente de datos).")
 
     if pct >= 100:
         extra = venta - cuota
@@ -212,7 +270,8 @@ def fetch(sheet, extra=None):
 # ── CÁLCULO PRINCIPAL ─────────────────────────────────────────────────────
 def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
                         cafe_map, nuevos_map, cob_neg_map,
-                        cartera_map, venta_neg_map, marcas_por_vend):
+                        cartera_map, venta_neg_map, marcas_por_vend,
+                        cuotas_por_vend, cremas_por_vend):
     results = []
     for v in sorted(vendedores_list, key=lambda x: x["cod"]):
         cod  = str(v["cod"])
@@ -273,7 +332,7 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
             p_tikys = 0.0; tramo_tikys = f"{pct_tikys:.1f}% < {META_DN_TIKYS_PCT:.0f}%"
         tikys_resultado = f"{fmt_pct(pct_tikys)} ({imp_tikys}/{uni_tikys})"
 
-        # ── Marca Zuko ────────────────────────────────────────────────────
+        # ── Marca Zuko (cobertura_marcas — no tiene cuota en endpoint) ───────
         zuko_info  = _marcas_vend.get("295-ZUKO", {})
         pct_zuko   = float(zuko_info.get("cobertura_pct", 0)) if zuko_info else 0.0
         imp_zuko   = int(zuko_info.get("clientes_impactados", 0)) if zuko_info else 0
@@ -284,16 +343,57 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
 
         # ── Venta por negocio (per vendor) ────────────────────────────────
         _vn = venta_neg_map.get(cod, {})
-        venta_choc    = 0.0
-        venta_gall_neg = 0.0
-        venta_ne_ind  = 0.0
-        for _k, _v in _vn.items():
-            if "hocolat" in _k:
-                venta_choc = float(_v)
-            elif "alleta" in _k:
-                venta_gall_neg = float(_v)
-            elif "utrici" in _k:
-                venta_ne_ind = float(_v)
+        venta_choc     = buscar_venta_neg(_vn, "hocolat")
+        venta_gall_neg = buscar_venta_neg(_vn, "alleta")
+        venta_ne_ind   = buscar_venta_neg(_vn, "utrici")
+        venta_cafe_neg = buscar_venta_neg(_vn, "af")    # "04-CafÈ"
+        venta_carn_neg = buscar_venta_neg(_vn, "arnico") # "01-Carnico"
+
+        # ── Cuotas por negocio (endpoint cuotas, keys normalizadas) ──────────
+        cuotas_vend = cuotas_por_vend.get(cod, {})
+
+        def _calc_neg(venta, vbi, neg_key):
+            """Calcula pago negocio con escala presupuesto desde cuotas."""
+            meta = cuotas_vend.get(neg_key)
+            if meta and meta > 0:
+                cum = venta / meta * 100
+                p, tramo, f, _ = calc_presupuesto(cum, vbi=vbi)
+                return p, f"{fmt_usd(venta)} / {fmt_usd(meta)}", f"{fmt_pct(cum)} · {tramo}"
+            return None, (fmt_usd(venta) if venta > 0 else "Sin venta"), "Meta no encontrada en cuotas"
+
+        p_choc,   choc_resultado,  choc_escala  = _calc_neg(venta_choc,    VBI_EJ_CHOCOLATES, "chocolates")
+        p_gall,   gall_resultado,  gall_escala  = _calc_neg(venta_gall_neg, VBI_EJ_GALLETAS,   "galletas")
+        p_ne_ind, ne_ind_resultado, ne_ind_escala = _calc_neg(venta_ne_ind, VBI_NE_IND,        "nutricion experta")
+
+        # Café ($0 informativo)
+        meta_cafe_q = cuotas_vend.get("cafe") or cuotas_vend.get("bebidas tmluc") or 0
+        if meta_cafe_q > 0:
+            cum_cafe = venta_cafe_neg / meta_cafe_q * 100
+            cafe_neg_resultado = f"{fmt_usd(venta_cafe_neg)} / {fmt_usd(meta_cafe_q)} ({fmt_pct(cum_cafe)})"
+        else:
+            cafe_neg_resultado = fmt_usd(venta_cafe_neg) if venta_cafe_neg > 0 else "Sin venta"
+
+        # Cárnico ($0 informativo)
+        meta_carn_q = cuotas_vend.get("carnico") or 0
+        if meta_carn_q > 0:
+            cum_carn = venta_carn_neg / meta_carn_q * 100
+            carn_neg_resultado = f"{fmt_usd(venta_carn_neg)} / {fmt_usd(meta_carn_q)} ({fmt_pct(cum_carn)})"
+        else:
+            carn_neg_resultado = fmt_usd(venta_carn_neg) if venta_carn_neg > 0 else "Sin venta"
+
+        # ── Devolución (meta ≤5%) ─────────────────────────────────────────
+        pct_devol = float(v.get("pct_devolucion", 0))
+        if pct_devol <= META_DEVOLUCION_PCT:
+            p_devol = VBI_DEVOLUCION_IND; tramo_devol = f"≤{META_DEVOLUCION_PCT:.0f}% ✓"
+        else:
+            p_devol = 0.0; tramo_devol = f"{fmt_pct(pct_devol)} > {META_DEVOLUCION_PCT:.0f}%"
+
+        # ── DN Galletas Cremas (calculado desde detalle_cobertura_negocio) ──
+        cremas_data    = cremas_por_vend.get(cod, {})
+        n_cremas       = cremas_data.get("n", 0)
+        uni_cremas     = cremas_data.get("universo", mae)
+        pct_cremas     = cremas_data.get("pct", 0.0)
+        cremas_resultado = f"{fmt_pct(pct_cremas)} ({n_cremas}/{uni_cremas})"
 
         # ── Concursos ──────────────────────────────────────────────────────
         tosh_n    = int(inc.get("clientes_tosh_impactados", 0))
@@ -303,109 +403,76 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
         horeca_list = horeca_por_vend.get(cod, [])
         horeca_pago = float(len(horeca_list))
 
-        # ── Lista de indicadores completa ─────────────────────────────────
+        # ── Lista de indicadores completa (v6.0) ─────────────────────────
         indicadores = [
             # CALIDAD
             ind("Presupuesto / Total negocio", "calidad",
-                VBI_PRESUPUESTO,
-                fmt_pct(pct_cum),
-                tramo_ppto,
-                p_ppto, f_ppto),
+                VBI_PRESUPUESTO, fmt_pct(pct_cum), tramo_ppto, p_ppto, f_ppto),
             ind("Efectividad de visitas", "calidad",
-                VBI_EFECTIVIDAD,
-                fmt_pct(pct_ef),
-                tramo_ef,
-                p_ef, f_ef),
+                VBI_EFECTIVIDAD, fmt_pct(pct_ef), tramo_ef, p_ef, f_ef),
             ind("DN Café Molido Sello Rojo", "calidad",
                 VBI_DN_CAFE,
                 f"{fmt_pct(pct_cafe)} ({imp_cafe}/{mae_cafe})",
                 f"≥{META_DN_CAFE_PCT:.0f}% maestra",
                 p_cafe),
             ind("DN Jet (Chocolates Jet)", "calidad",
-                VBI_DN_JET,
-                jet_resultado,
+                VBI_DN_JET, jet_resultado,
                 f"≥{META_DN_JET_PCT:.0f}% maestra",
                 p_jet, tramo_jet),
             ind("DN Galletas Cremas ×6", "calidad",
                 VBI_DN_GALLETAS_CREMAS,
-                "Sin marca identificada",
-                "Meta en fuente",
+                cremas_resultado,
+                "Meta pendiente de confirmar",
                 None,
-                nota="Sin marca Galletas Cremas ×6 identificada en datos disponibles",
-                tipo_pendiente="sin_fuente"),
+                nota="Resultado calculado desde detalle Galletas; meta de pago sin definir",
+                tipo_pendiente="sin_meta"),
             ind("Clientes nuevos con pedido", "calidad",
-                VBI_NUEVOS,
-                f"{n_nuevos} clientes",
-                f"≥{META_NUEVOS} clientes",
-                p_nuevos),
+                VBI_NUEVOS, f"{n_nuevos} clientes", f"≥{META_NUEVOS} clientes", p_nuevos),
             ind("Cliente cero", "calidad",
-                VBI_CERO,
-                f"{fmt_pct(pct_cero)} ({sc}/{mae})",
-                f"≤{META_CERO_PCT:.0f}% de maestra",
-                p_cero),
+                VBI_CERO, f"{fmt_pct(pct_cero)} ({sc}/{mae})",
+                f"≤{META_CERO_PCT:.0f}% de maestra", p_cero),
             ind("DN Tikys", "calidad",
-                VBI_DN_TIKYS,
-                tikys_resultado,
+                VBI_DN_TIKYS, tikys_resultado,
                 f"≥{META_DN_TIKYS_PCT:.0f}% maestra",
                 p_tikys, tramo_tikys),
-            ind("Devolución (meta)", "calidad",
-                VBI_DEVOLUCION_IND,
-                fmt_pct(float(v.get("pct_devolucion", 0))),
-                "Meta no definida",
-                None,
-                nota="Resultado disponible; falta confirmar meta de devolución",
-                tipo_pendiente="sin_meta"),
+            ind("Devolución (meta ≤5%)", "calidad",
+                VBI_DEVOLUCION_IND, fmt_pct(pct_devol), tramo_devol, p_devol),
             ind("Ejecución de fotos", "calidad",
-                VBI_FOTOS,
-                "Sin fuente",
-                "Meta en fuente",
-                None,  # pendiente
+                VBI_FOTOS, "Sin fuente", "Meta en fuente", None,
                 nota="No existe fuente de datos de fotos en API"),
             # CANTIDAD
             ind("Ejecución negocio Chocolates", "cantidad",
-                VBI_EJ_CHOCOLATES,
-                fmt_usd(venta_choc) if venta_choc > 0 else "Sin venta registrada",
-                "Meta por definir",
-                None,
-                nota="Resultado disponible; falta meta de pago",
-                tipo_pendiente="sin_meta"),
+                VBI_EJ_CHOCOLATES, choc_resultado, choc_escala, p_choc,
+                nota="" if p_choc is not None else "Meta no encontrada en cuotas",
+                tipo_pendiente="sin_fuente"),
             ind("Ejecución negocio Galletas", "cantidad",
-                VBI_EJ_GALLETAS,
-                fmt_usd(venta_gall_neg) if venta_gall_neg > 0 else "Sin venta registrada",
-                "Meta por definir",
-                None,
-                nota="Resultado disponible; falta meta de pago",
-                tipo_pendiente="sin_meta"),
+                VBI_EJ_GALLETAS, gall_resultado, gall_escala, p_gall,
+                nota="" if p_gall is not None else "Meta no encontrada en cuotas",
+                tipo_pendiente="sin_fuente"),
             ind("Ejecución negocio Zuko", "cantidad",
                 VBI_EJ_ZUKO,
                 zuko_resultado if zuko_resultado else "Sin datos marca Zuko",
-                "Meta por definir",
+                "Meta no en cuotas",
                 None,
-                nota="Resultado disponible; falta meta de pago",
-                tipo_pendiente="sin_meta"),
+                nota="Negocio Zuko no existe en endpoint cuotas",
+                tipo_pendiente="sin_fuente"),
+            ind("Ejecución negocio Café", "cantidad",
+                0, cafe_neg_resultado, "VBI $0 — informativo", 0.0),
+            ind("Ejecución negocio Cárnico", "cantidad",
+                0, carn_neg_resultado, "VBI $0 — informativo", 0.0),
             ind("Nutrición Experta (indicador)", "cantidad",
-                VBI_NE_IND,
-                fmt_usd(venta_ne_ind) if venta_ne_ind > 0 else "Sin venta NE registrada",
-                "Meta por definir",
-                None,
-                nota="Resultado disponible; falta meta del indicador",
-                tipo_pendiente="sin_meta"),
+                VBI_NE_IND, ne_ind_resultado, ne_ind_escala, p_ne_ind,
+                nota="" if p_ne_ind is not None else "Meta no encontrada en cuotas",
+                tipo_pendiente="sin_fuente"),
             # CONCURSOS
             ind("Barras TOSH (×20 clientes)", "concurso",
-                0,
-                f"{tosh_n} clientes ({math.floor(tosh_n/20)} bloq. de 20)",
-                "$10 / bloque de 20",
-                tosh_pago),
+                0, f"{tosh_n} clientes ({math.floor(tosh_n/20)} bloq. de 20)",
+                "$10 / bloque de 20", tosh_pago),
             ind("Nutrición Experta (concurso)", "concurso",
-                0,
-                fmt_usd(ne_venta),
-                "≥$200 → $20",
-                ne_pago),
+                0, fmt_usd(ne_venta), "≥$200 → $20", ne_pago),
             ind("Clientes nuevos HORECA", "concurso",
-                0,
-                f"{len(horeca_list)} cliente(s) con venta",
-                "$1 / cliente HORECA",
-                horeca_pago),
+                0, f"{len(horeca_list)} cliente(s) con venta",
+                "$1 / cliente HORECA", horeca_pago),
         ]
 
         # ── Totales ────────────────────────────────────────────────────────
@@ -479,8 +546,17 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
             "p_tikys": p_tikys, "pct_tikys": pct_tikys, "imp_tikys": imp_tikys, "uni_tikys": uni_tikys,
             # Zuko marca
             "pct_zuko": pct_zuko, "imp_zuko": imp_zuko, "uni_zuko": uni_zuko, "venta_zuko": venta_zuko,
-            # Negocios venta (indicador)
+            # Negocios venta + cuotas (v6.0)
             "venta_choc": venta_choc, "venta_gall_neg": venta_gall_neg, "venta_ne_ind": venta_ne_ind,
+            "venta_cafe_neg": venta_cafe_neg, "venta_carn_neg": venta_carn_neg,
+            "p_choc": p_choc or 0.0, "p_gall": p_gall or 0.0, "p_ne_ind": p_ne_ind or 0.0,
+            "meta_choc": cuotas_vend.get("chocolates") or 0.0,
+            "meta_gall": cuotas_vend.get("galletas") or 0.0,
+            "meta_ne":   cuotas_vend.get("nutricion experta") or 0.0,
+            # Devolución (v6.0)
+            "p_devol": p_devol, "pct_devol": pct_devol, "tramo_devol": tramo_devol,
+            # DN Cremas (v6.0)
+            "n_cremas": n_cremas, "uni_cremas": uni_cremas, "pct_cremas": pct_cremas,
         })
     return results
 
@@ -1010,10 +1086,10 @@ def build_pdf_consolidado(results, styles, out):
         story.append(e)
 
     # Columns: Cód | Vendedor | Venta N. | Meta | %Cum | Cob% | Efec%
-    #          | Ppto | Efec | Café | Jet* | Gall* | Nuevos | Cero | Tikys*
-    #          | Devol* | Fotos* | Ej.Choc* | Ej.Gall* | Ej.Zuko* | NE Ind*
+    #          | Ppto | Efec | Café | Jet | Gall* | Nuevos | Cero | Tikys
+    #          | Devol | Fotos* | Ej.Choc | Ej.Gall | Ej.Zuko* | NE Ind
     #          | TOSH | NE Conc | HORECA | TOTAL
-    # * = pendiente para todos
+    # * = aún pendiente; sin * = calculado en v6.0
     cols = [
         ("Cód",     W*.036),("Vendedor",  W*.10),
         ("Venta\nNeta",W*.058),("Meta",    W*.058),
@@ -1021,8 +1097,8 @@ def build_pdf_consolidado(results, styles, out):
         ("Pago\nPpto.",W*.052),("Pago\nEfec.",W*.047),
         ("Pago\nCafé", W*.047),("DN\nJet", W*.040),("DN\nGall*",W*.040),
         ("Pago\nNuevos",W*.047),("Pago\nCero",W*.047),("DN\nTikys", W*.040),
-        ("Devol*",  W*.040),("Fotos*",    W*.040),
-        ("Ej.\nChoc*",W*.038),("Ej.\nGall*",W*.038),("Ej.\nZuko*",W*.038),("NE\nInd*",W*.034),
+        ("Devol",   W*.040),("Fotos*",    W*.040),
+        ("Ej.\nChoc",W*.038),("Ej.\nGall",W*.038),("Ej.\nZuko*",W*.038),("NE\nInd",W*.034),
         ("TOSH",    W*.042),("NE\nConc.", W*.040),("HOR.",    W*.036),
         ("TOTAL",   W*.076),
     ]
@@ -1059,13 +1135,14 @@ def build_pdf_consolidado(results, styles, out):
             _num(r["p_ppto"]), _num(r["p_ef"]),
             _num(r["p_cafe"]), _num(r["p_jet"]), _pend(),
             _num(r["p_nuevos"]), _num(r["p_cero"]), _num(r["p_tikys"]),
-            _pend(), _pend(),
-            _pend(), _pend(), _pend(), _pend(),
+            _num(r["p_devol"]), _pend(),
+            _num(r["p_choc"]), _num(r["p_gall"]), _pend(), _num(r["p_ne_ind"]),
             _num(r["tosh_pago"]), _num(r["ne_pago"]), _num(r["horeca_pago"]),
             Paragraph(f"<b>{fmt_usd(r['total_final'])}</b>",
                       ParagraphStyle("tf",parent=styles["cons_num"],fontSize=8)),
         ])
         for k in ["p_ppto","p_ef","p_cafe","p_jet","p_tikys","p_nuevos","p_cero",
+                  "p_devol","p_choc","p_gall","p_ne_ind",
                   "tosh_pago","ne_pago","horeca_pago","total_final"]:
             tot[k] += r[k]
 
@@ -1083,7 +1160,12 @@ def build_pdf_consolidado(results, styles, out):
         Paragraph(f"<b>{fmt_usd(tot['p_nuevos'])}</b>",  styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_cero'])}</b>",    styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_tikys'])}</b>",   styles["cons_num"]),
-        _pend(), _pend(), _pend(), _pend(), _pend(), _pend(), _pend(),
+        Paragraph(f"<b>{fmt_usd(tot['p_devol'])}</b>",   styles["cons_num"]),
+        _pend(),
+        Paragraph(f"<b>{fmt_usd(tot['p_choc'])}</b>",    styles["cons_num"]),
+        Paragraph(f"<b>{fmt_usd(tot['p_gall'])}</b>",    styles["cons_num"]),
+        _pend(),
+        Paragraph(f"<b>{fmt_usd(tot['p_ne_ind'])}</b>",  styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['tosh_pago'])}</b>", styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['ne_pago'])}</b>",   styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['horeca_pago'])}</b>",styles["cons_num"]),
@@ -1115,13 +1197,12 @@ def build_pdf_consolidado(results, styles, out):
         story.append(e)
 
     story.append(Paragraph(
-        "* Indicadores pendientes por falta de meta: Devolución, Ejecución Chocolates, "
-        "Ejecución Galletas, Ejecución Zuko, Nutrición Experta (indicador) — resultado disponible "
-        "en API pero sin meta de pago definida. "
-        "Sin fuente de datos: DN Galletas Cremas×6 (marca no existe en API), Fotos. "
-        f"Potencial máximo pendiente por vendedor promedio: "
-        f"{fmt_usd(sum(r['potencial_pendiente'] for r in results)/len(results))}. "
-        "DN Jet y DN Tikys ya calculados desde cobertura_marcas.",
+        "v6.0 — Indicadores calculados: Devolución (meta ≤5%), Ejecución Chocolates/Galletas/NE "
+        "(metas desde cuotas, escala presupuesto), DN Cremas (SKUs CREMAS en negocio Galletas), "
+        "DN Jet, DN Tikys. "
+        "Pendientes: DN Galletas Cremas (meta sin confirmar), Ejecución Zuko (no en cuotas), Fotos. "
+        f"Potencial pendiente promedio: "
+        f"{fmt_usd(sum(r['potencial_pendiente'] for r in results)/len(results))}.",
         ParagraphStyle("al",parent=styles["body"],textColor=C_ORANGE,spaceAfter=4)))
 
     sin_presup = [r["nombre_limpio"][:15] for r in results if r["p_ppto"] == 0]
@@ -1280,57 +1361,99 @@ def write_csv_dn_tikys(results, out):
 def write_csv_dn_galletas_cremas(results, out):
     with open(out,"w",newline="",encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["concepto","estado","motivo"])
-        w.writerow([
-            "DN Galletas Cremas ×6",
-            "Sin fuente",
-            "La marca Galletas Cremas ×6 no existe en cobertura_marcas ni en productos_clave de PALMA",
-        ])
-        w.writerow([
-            "Vendedores afectados",
-            str(len(results)),
-            f"VBI potencial: ${VBI_DN_GALLETAS_CREMAS:.0f}/vendedor",
-        ])
+        w.writerow(["cod_asesor","nombre","n_clientes_cremas","universo",
+                    "pct_dn_cremas","vbi","meta","estado"])
+        for r in results:
+            w.writerow([
+                r["cod"], r["nombre_limpio"],
+                r["n_cremas"], r["uni_cremas"],
+                f"{r['pct_cremas']:.1f}",
+                f"{VBI_DN_GALLETAS_CREMAS:.0f}",
+                "Pendiente de confirmar",
+                "Resultado calculado — meta de pago sin definir",
+            ])
 
 def write_csv_negocios_incentivos(results, out):
     with open(out,"w",newline="",encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["cod_asesor","nombre","venta_chocolates","venta_galletas",
-                    "pct_zuko","imp_zuko","uni_zuko","venta_zuko","venta_ne_ind",
-                    "estado_choc","estado_gall","estado_zuko","estado_ne"])
+        w.writerow(["cod_asesor","nombre","negocio","venta_neta_negocio",
+                    "meta_negocio","cumplimiento_negocio","vbi",
+                    "escala_aplicada","pago","observacion"])
+        negocios_spec = [
+            ("Chocolates", "venta_choc",    "meta_choc", VBI_EJ_CHOCOLATES, "p_choc"),
+            ("Galletas",   "venta_gall_neg","meta_gall", VBI_EJ_GALLETAS,   "p_gall"),
+            ("NE indicador","venta_ne_ind", "meta_ne",   VBI_NE_IND,        "p_ne_ind"),
+            ("Zuko",       "venta_zuko",    None,        VBI_EJ_ZUKO,       None),
+            ("Café",       "venta_cafe_neg",None,        0,                 None),
+            ("Cárnico",    "venta_carn_neg",None,        0,                 None),
+        ]
         for r in results:
-            w.writerow([
-                r["cod"], r["nombre_limpio"],
-                f"{r['venta_choc']:.2f}", f"{r['venta_gall_neg']:.2f}",
-                f"{r['pct_zuko']:.1f}", r["imp_zuko"], r["uni_zuko"],
-                f"{r['venta_zuko']:.2f}", f"{r['venta_ne_ind']:.2f}",
-                "Resultado disponible — sin meta de pago",
-                "Resultado disponible — sin meta de pago",
-                "Resultado disponible — sin meta de pago",
-                "Resultado disponible — sin meta del indicador",
-            ])
+            for neg, vk, mk, vbi, pk in negocios_spec:
+                venta = r.get(vk, 0)
+                meta  = r.get(mk, 0) if mk else 0
+                cum   = f"{venta/meta*100:.1f}%" if meta and meta > 0 else "—"
+                pago  = r.get(pk, None) if pk else (0.0 if vbi == 0 else None)
+                if pk is None and vbi > 0:
+                    obs = "Meta no en cuotas — pendiente"
+                elif vbi == 0:
+                    obs = "VBI $0 — informativo"
+                elif meta and meta > 0:
+                    obs = "Calculado — escala presupuesto"
+                else:
+                    obs = "Meta no encontrada en cuotas"
+                w.writerow([
+                    r["cod"], r["nombre_limpio"], neg,
+                    f"{venta:.2f}", f"{meta:.2f}", cum,
+                    f"{vbi:.0f}",
+                    "escala_presupuesto" if (pago is not None and vbi > 0) else "—",
+                    f"{pago:.2f}" if pago is not None else "Pendiente",
+                    obs,
+                ])
 
 def write_csv_devolucion(results, out):
     with open(out,"w",newline="",encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["cod_asesor","nombre","pct_devolucion","devolucion_total",
-                    "estado","nota"])
+                    "meta_pct","cumple","vbi","pago","nota"])
         for r in results:
-            w.writerow([r["cod"],r["nombre_limpio"],
-                        f"{r['pct_devolucion']:.2f}",f"{r['devol']:.2f}",
-                        "Resultado disponible — falta meta de devolución",
-                        "El porcentaje de devolución se calcula correctamente desde API; falta definir meta"])
+            cumple = "SI" if r["pct_devol"] <= META_DEVOLUCION_PCT else "NO"
+            w.writerow([r["cod"], r["nombre_limpio"],
+                        f"{r['pct_devol']:.2f}", f"{r['devol']:.2f}",
+                        f"{META_DEVOLUCION_PCT:.1f}",
+                        cumple, f"{VBI_DEVOLUCION_IND:.0f}",
+                        f"{r['p_devol']:.2f}",
+                        f"Meta ≤{META_DEVOLUCION_PCT:.0f}%; {r['tramo_devol']}"])
+
+
+def write_csv_homologacion_venta_neta(results, venta_neg_map_full, out):
+    with open(out,"w",newline="",encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(["cod_asesor","nombre","venta_neta_total","suma_venta_neta_negocios",
+                    "sin_negocio_identificado","diferencia","estado"])
+        for r in results:
+            cod = r["cod"]
+            vn_total = r["venta_neta"]
+            vn_map = venta_neg_map_full.get(cod, {})
+            suma_neg = sum(float(val) for val in vn_map.values() if float(val) > 0)
+            diff = vn_total - suma_neg
+            sin_neg = max(0.0, round(diff, 2))
+            estado = ("OK" if abs(diff) < 1.0
+                      else ("Diferencia <5%" if abs(diff) < vn_total * 0.05 else "Revisar"))
+            w.writerow([cod, r["nombre_limpio"],
+                        f"{vn_total:.2f}", f"{suma_neg:.2f}",
+                        f"{sin_neg:.2f}", f"{diff:.2f}", estado])
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────
 def main():
     print(f"\n{'='*65}")
     print(f"  RECÁLCULO INCENTIVOS — {PERIODO_LABEL.upper()}")
-    print(f"  PALUMAR S.A. — DN Jet/Tikys calculados (v5.0)")
+    print(f"  PALUMAR S.A. — v6.0 (devolución+negocios+cremas calculados)")
     print(f"{'='*65}\n")
     print(f"  VBI Presupuesto: ${VBI_PRESUPUESTO:.0f}  Efectividad: ${VBI_EFECTIVIDAD:.0f}")
     print(f"  DN Jet: ${VBI_DN_JET:.0f} (meta ≥{META_DN_JET_PCT:.0f}%)  "
           f"DN Tikys: ${VBI_DN_TIKYS:.0f} (meta ≥{META_DN_TIKYS_PCT:.0f}%)")
+    print(f"  Devolución: ${VBI_DEVOLUCION_IND:.0f} (meta ≤{META_DEVOLUCION_PCT:.0f}%)")
     print(f"  Meta Clientes Nuevos: {META_NUEVOS}  Meta Cliente Cero: ≤{META_CERO_PCT:.0f}%")
     print()
 
@@ -1344,6 +1467,7 @@ def main():
     cob_neg_raw     = fetch("cob_negocio")
     cartera_raw     = fetch("cartera")
     marcas_raw      = fetch("cobertura_marcas")
+    cuotas_raw      = fetch("cuotas")
 
     assert isinstance(vendedores_data, list) and len(vendedores_data) > 0
 
@@ -1407,20 +1531,38 @@ def main():
             _key = str(_m.get("marca", "")).upper()
             marcas_por_vend[_cod][_key] = _m
 
+    # cuotas_por_vend (keys normalizadas por negocio)
+    _cuotas_list = (cuotas_raw if isinstance(cuotas_raw, list)
+                    else cuotas_raw.get("vendedores", []) if isinstance(cuotas_raw, dict)
+                    else [])
+    cuotas_por_vend = {}
+    for vq in _cuotas_list:
+        _cq = str(vq.get("cod", "")).zfill(3)
+        cuotas_por_vend[_cq] = {
+            norm_neg(n["negocio"]): float(n.get("meta", 0))
+            for n in vq.get("por_negocio", [])
+        }
+
     print(f"   Vendedores:        {len(vendedores_data)}")
     print(f"   Clientes nuevos:   {sum(nuevos_map.values())}")
     print(f"   HORECA detectados: {sum(len(v) for v in horeca_por_vend.values())}")
     print(f"   Negocios DN Café:  {len(cafe_map)}")
     print(f"   Vendedores marcas: {len(marcas_por_vend)}")
+    print(f"   Cuotas cargadas:   {len(cuotas_por_vend)} vendedores")
     jet_total = sum(1 for d in marcas_por_vend.values() if "053-JET" in d)
     tikys_total = sum(1 for d in marcas_por_vend.values() if "083-TIKYS" in d)
     print(f"   Vendedores con Jet: {jet_total}  con Tikys: {tikys_total}")
 
-    # 2. Calcular
-    print("\n2. Calculando incentivos (v5.0 — DN Jet/Tikys calculados)...\n")
+    # 2. DN Cremas (requiere 14 llamadas a detalle_cobertura_negocio)
+    print("\n2. Obteniendo DN Galletas Cremas (puede tomar ~3-6 minutos)...\n")
+    cremas_por_vend = fetch_all_cremas(vendedores_data)
+
+    # 3. Calcular
+    print("\n3. Calculando incentivos (v6.0 — devolución+negocios+cremas calculados)...\n")
     results = calcular_incentivos(
         vendedores_data, inc_map, horeca_por_vend,
-        cafe_map, nuevos_map, cob_neg_map, cartera_map, venta_neg_map, marcas_por_vend
+        cafe_map, nuevos_map, cob_neg_map, cartera_map, venta_neg_map, marcas_por_vend,
+        cuotas_por_vend, cremas_por_vend
     )
     assert all(r["total_final"] >= 0 for r in results), "Pago negativo detectado"
 
@@ -1441,14 +1583,14 @@ def main():
             fmt_usd(r["total_final"]),
         ))
     print("-"*82)
-    TOTAL_V4 = 922.60
-    diff = grand - TOTAL_V4
+    TOTAL_V5 = 922.60
+    diff = grand - TOTAL_V5
     print(f"{'GRAN TOTAL':>62} {fmt_usd(grand)}")
-    print(f"  vs v4.0 (era {fmt_usd(TOTAL_V4)}): diferencia = {fmt_usd(diff)} "
-          f"({'▲ DN Jet/Tikys calculados' if diff >= 0 else '▼'})")
+    print(f"  vs v5.0 (era {fmt_usd(TOTAL_V5)}): diferencia = {fmt_usd(diff)} "
+          f"({'▲ nuevos indicadores calculados' if diff >= 0 else '▼'})")
 
-    # 3. PDFs individuales
-    print("\n3. Generando PDFs individuales (3 páginas c/u)...\n")
+    # 4. PDFs individuales
+    print("\n4. Generando PDFs individuales (3 páginas c/u)...\n")
     styles = make_styles()
     for r in results:
         slug  = slug_nombre(r["nombre"])
@@ -1457,14 +1599,14 @@ def main():
         pend_note = f"  [+{r['n_pendiente']} pend.]" if r["n_pendiente"] > 0 else ""
         print(f"   ✓ {r['cod']} {r['nombre_limpio'][:22]:22}  {fmt_usd(r['total_final'])}{pend_note}")
 
-    # 4. Consolidado
-    print("\n4. Generando PDF consolidado...\n")
+    # 5. Consolidado
+    print("\n5. Generando PDF consolidado...\n")
     build_pdf_consolidado(results, styles,
         os.path.join(OUTPUT_DIR, "CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.pdf"))
     print("   ✓ CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.pdf")
 
-    # 5. CSVs
-    print("\n5. Generando CSVs de auditoría...\n")
+    # 6. CSVs
+    print("\n6. Generando CSVs de auditoría...\n")
     write_csv_consolidado(results,
         os.path.join(OUTPUT_DIR, "CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.csv"))
     print("   ✓ CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.csv")
@@ -1500,16 +1642,19 @@ def main():
     print("   ✓ AUDITORIA_DN_TIKYS_JUNIO_2026.csv")
     write_csv_dn_galletas_cremas(results,
         os.path.join(OUTPUT_DIR, "AUDITORIA_DN_GALLETAS_CREMAS_JUNIO_2026.csv"))
-    print("   ✓ AUDITORIA_DN_GALLETAS_CREMAS_JUNIO_2026.csv  ← sin fuente confirmado")
+    print("   ✓ AUDITORIA_DN_GALLETAS_CREMAS_JUNIO_2026.csv  ← resultado calculado")
     write_csv_negocios_incentivos(results,
         os.path.join(OUTPUT_DIR, "AUDITORIA_NEGOCIOS_INCENTIVOS_JUNIO_2026.csv"))
     print("   ✓ AUDITORIA_NEGOCIOS_INCENTIVOS_JUNIO_2026.csv")
     write_csv_devolucion(results,
         os.path.join(OUTPUT_DIR, "AUDITORIA_DEVOLUCION_META_JUNIO_2026.csv"))
     print("   ✓ AUDITORIA_DEVOLUCION_META_JUNIO_2026.csv")
+    write_csv_homologacion_venta_neta(results, venta_neg_map,
+        os.path.join(OUTPUT_DIR, "AUDITORIA_HOMOLOGACION_VENTA_NETA_JUNIO_2026.csv"))
+    print("   ✓ AUDITORIA_HOMOLOGACION_VENTA_NETA_JUNIO_2026.csv")
 
-    # 6. Validaciones
-    print("\n6. Validaciones...\n")
+    # 7. Validaciones
+    print("\n7. Validaciones...\n")
     assert len(results) == 14,              f"Esperados 14 vendedores, got {len(results)}"
     n_pdfs = sum(1 for f in os.listdir(OUTPUT_DIR)
                  if f.startswith("LIQUIDACION_INCENTIVOS_JUNIO_2026_") and f.endswith(".pdf"))
@@ -1537,40 +1682,54 @@ def main():
     print("   ✓ VBI Efectividad = $33")
     print("   ✓ Meta clientes nuevos = 10")
     print("   ✓ Meta cliente cero = 4%")
+    print(f"  ✓ Meta devolución ≤{META_DEVOLUCION_PCT:.0f}% — VBI ${VBI_DEVOLUCION_IND:.0f}")
     print("   ✓ Concursos TOSH / HORECA / Nutrición Experta activos")
     print("   ✓ Sin pagos negativos")
     print(f"   ✓ Suma individuales = total consolidado = {fmt_usd(grand)}")
     total_jet   = sum(r["p_jet"] for r in results)
     total_tikys = sum(r["p_tikys"] for r in results)
+    total_devol = sum(r["p_devol"] for r in results)
+    total_choc  = sum(r["p_choc"] for r in results)
+    total_gall  = sum(r["p_gall"] for r in results)
+    total_ne_ind = sum(r["p_ne_ind"] for r in results)
     n_jet_cumple  = sum(1 for r in results if r["pct_jet"]  >= META_DN_JET_PCT)
     n_tikys_cumple= sum(1 for r in results if r["pct_tikys"]>= META_DN_TIKYS_PCT)
-    print(f"   ✓ DN Jet   calculado: {n_jet_cumple}/{len(results)} cumplen meta "
-          f"≥{META_DN_JET_PCT:.0f}%  → total {fmt_usd(total_jet)}")
-    print(f"   ✓ DN Tikys calculado: {n_tikys_cumple}/{len(results)} cumplen meta "
-          f"≥{META_DN_TIKYS_PCT:.0f}%  → total {fmt_usd(total_tikys)}")
+    n_devol_cumple= sum(1 for r in results if r["pct_devol"] <= META_DEVOLUCION_PCT)
+    print(f"   ✓ DN Jet   : {n_jet_cumple}/{len(results)} cumplen ≥{META_DN_JET_PCT:.0f}% → {fmt_usd(total_jet)}")
+    print(f"   ✓ DN Tikys : {n_tikys_cumple}/{len(results)} cumplen ≥{META_DN_TIKYS_PCT:.0f}% → {fmt_usd(total_tikys)}")
+    print(f"   ✓ Devolución: {n_devol_cumple}/{len(results)} cumplen ≤{META_DEVOLUCION_PCT:.0f}% → {fmt_usd(total_devol)}")
+    print(f"   ✓ Ej.Chocolates: {fmt_usd(total_choc)}  Ej.Galletas: {fmt_usd(total_gall)}  NE ind: {fmt_usd(total_ne_ind)}")
+    cremas_total = sum(r["pct_cremas"] for r in results)
+    print(f"   ✓ DN Cremas calculado — promedio equipo: {cremas_total/len(results):.1f}% — pago pendiente meta")
 
     n_pend_uniq = len({i["concepto"] for r in results for i in r["indicadores"] if i["pendiente"]})
-    print(f"   ℹ {n_pend_uniq} indicadores pendientes por dato fuente (no suman al total)")
+    print(f"   ℹ {n_pend_uniq} indicadores aún pendientes (sin meta o sin fuente — no suman al total)")
 
-    # 7. Resumen final
+    # 8. Resumen final
     print(f"\n{'='*65}")
-    print(f"  RESUMEN FINAL — TOTAL A PAGAR JUNIO 2026")
+    print(f"  RESUMEN FINAL — TOTAL A PAGAR JUNIO 2026  (v6.0)")
     print(f"{'='*65}")
-    print(f"  Presupuesto (VBI $132):       {fmt_usd(sum(r['p_ppto'] for r in results))}")
-    print(f"  Efectividad (VBI $33):        {fmt_usd(sum(r['p_ef'] for r in results))}")
-    print(f"  DN Café Sello Rojo (VBI $55): {fmt_usd(sum(r['p_cafe'] for r in results))}")
-    print(f"  Clientes nuevos (VBI $22):    {fmt_usd(sum(r['p_nuevos'] for r in results))}")
-    print(f"  Cliente cero (VBI $33):       {fmt_usd(sum(r['p_cero'] for r in results))}")
+    print(f"  Presupuesto (VBI $132):             {fmt_usd(sum(r['p_ppto'] for r in results))}")
+    print(f"  Efectividad (VBI $33):              {fmt_usd(sum(r['p_ef'] for r in results))}")
+    print(f"  DN Café Sello Rojo (VBI $55):       {fmt_usd(sum(r['p_cafe'] for r in results))}")
+    print(f"  DN Jet (VBI $33):                   {fmt_usd(total_jet)}")
+    print(f"  DN Tikys (VBI $22):                 {fmt_usd(total_tikys)}")
+    print(f"  Clientes nuevos (VBI $22):          {fmt_usd(sum(r['p_nuevos'] for r in results))}")
+    print(f"  Cliente cero (VBI $33):             {fmt_usd(sum(r['p_cero'] for r in results))}")
+    print(f"  Devolución (VBI $22, meta ≤5%):     {fmt_usd(total_devol)}")
+    print(f"  Ej. Chocolates (VBI $22):           {fmt_usd(total_choc)}")
+    print(f"  Ej. Galletas (VBI $33):             {fmt_usd(total_gall)}")
+    print(f"  NE indicador (VBI $11):             {fmt_usd(total_ne_ind)}")
     print(f"  ─────────────────────────────────────────────")
-    print(f"  Subtotal indicadores calc.:   {fmt_usd(t_ind)}")
-    print(f"  Concurso TOSH:                {fmt_usd(tosh_total)}")
-    print(f"  Concurso Nutrición Experta:   {fmt_usd(ne_total)}")
-    print(f"  Concurso HORECA:              {fmt_usd(horeca_total)}")
-    print(f"  Subtotal concursos:           {fmt_usd(t_con)}")
+    print(f"  Subtotal indicadores calc.:         {fmt_usd(t_ind)}")
+    print(f"  Concurso TOSH:                      {fmt_usd(tosh_total)}")
+    print(f"  Concurso Nutrición Experta:         {fmt_usd(ne_total)}")
+    print(f"  Concurso HORECA:                    {fmt_usd(horeca_total)}")
+    print(f"  Subtotal concursos:                 {fmt_usd(t_con)}")
     print(f"  ═════════════════════════════════════════════")
-    print(f"  TOTAL GENERAL:                {fmt_usd(grand)}")
+    print(f"  TOTAL GENERAL:                      {fmt_usd(grand)}")
     print(f"  ─────────────────────────────────────────────")
-    print(f"  Potencial indicadores pend.:  {fmt_usd(sum(r['potencial_pendiente'] for r in results))}")
+    print(f"  Potencial indicadores pend.:        {fmt_usd(sum(r['potencial_pendiente'] for r in results))}")
     print(f"{'='*65}\n")
 
 

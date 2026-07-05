@@ -7,6 +7,7 @@ import HBarChart from '../charts/HBarChart';
 import DoughnutChart from '../charts/DoughnutChart';
 import LineChart from '../charts/LineChart';
 import { fmt, pct, getCoberturaValue, getCoberturaVendedor, esRutaCentral } from '../../utils/formatters';
+import { calcularProyeccionCierre } from '../../utils/proyeccion';
 import { VEND_COLORS, NEG_COLORS, COLORS } from '../../utils/colors';
 
 export default function Vendedor() {
@@ -201,33 +202,17 @@ export default function Vendedor() {
     }).sort((a, b) => b.meta - a.meta);
   }, [cuotas, v]);
 
-  // Factor de proyección de cierre de mes
-  // Usa DIAS_HABILES_RESTANTES desde CONFIG cuando está disponible
-  const factorProyeccion = useMemo(() => {
-    function diasHabiles(desde, hasta) {
-      let c = 0; const d = new Date(desde);
-      while (d <= hasta) { if (d.getDay() !== 0) c++; d.setDate(d.getDate() + 1); }
-      return c;
-    }
-    const hoy    = new Date();
-    const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const fin    = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-    const transc = diasHabiles(inicio, hoy);
-    const configDias = config?.dias_habiles_restantes || 0;
-    const total  = configDias > 0 ? transc + configDias : diasHabiles(inicio, fin);
-    return transc > 0 ? total / transc : 1;
-  }, [config]);
+  // Proyección desde CONFIG — sin new Date() local
+  const diasHabilesRestantes = config?.dias_habiles_restantes ?? 0;
 
-  const diasHabilesRestantes = useMemo(() => {
-    const configDias = config?.dias_habiles_restantes || 0;
-    if (configDias > 0) return configDias;
-    const hoy = new Date();
-    const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-    let c = 0, d = new Date(hoy);
-    d.setDate(d.getDate() + 1);
-    while (d <= fin) { if (d.getDay() !== 0) c++; d.setDate(d.getDate() + 1); }
-    return c;
-  }, [config]);
+  const factorProyeccion = useMemo(() => {
+    const diasRestantes = config?.dias_habiles_restantes ?? 0;
+    const diasHabilesMes = config?.dias_habiles_mes ?? 0;
+    if (!v?.venta_neta) return 1;
+    const res = calcularProyeccionCierre(v.venta_neta, diasRestantes, diasHabilesMes);
+    if (!res || !v.venta_neta) return 1;
+    return res.proyeccion / v.venta_neta;
+  }, [config, v]);
 
   // Top clientes por negocio de este vendedor
   const topNegociosVend = useMemo(() => {
@@ -389,7 +374,7 @@ export default function Vendedor() {
     );
   }
 
-  const devPct = v.pct_devolucion ?? (v.venta_real > 0 ? (v.devol / v.venta_real * 100) : 0);
+  const devPct = v.pct_devolucion ?? (v.venta_bruta > 0 ? (v.devol / v.venta_bruta * 100) : 0);
   // Solo negocios con venta neta positiva
   const negocios = (Array.isArray(v.venta_por_negocio) ? v.venta_por_negocio : [])
     .filter(n => n.venta > 0)
@@ -423,7 +408,7 @@ export default function Vendedor() {
       {/* KPIs */}
       <SectionTitle>Mis Métricas</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        <KpiCard label="Venta Bruta" value={fmt(v.venta_real)} color="blue" />
+        <KpiCard label="Venta Bruta" value={fmt(v.venta_bruta)} color="blue" />
         <KpiCard
           label="Devoluciones"
           value={fmt(v.devol)}
@@ -548,7 +533,7 @@ export default function Vendedor() {
                   <tr>
                     <th>Negocio</th>
                     <th style={{ textAlign: 'right' }}>Meta</th>
-                    <th style={{ textAlign: 'right' }}>Venta Real</th>
+                    <th style={{ textAlign: 'right' }}>Venta Neta</th>
                     <th style={{ textAlign: 'right' }}>Proyección</th>
                     <th style={{ textAlign: 'right' }}>Cumplimiento</th>
                     <th style={{ textAlign: 'right' }}>Falta / Exceso</th>
@@ -558,7 +543,7 @@ export default function Vendedor() {
                 <tbody>
                   {metasPorNegocio.map((item, i) => {
                     const proyec = Math.round(item.venta * factorProyeccion);
-                    const falta  = item.meta - item.venta;           // meta − venta real
+                    const falta  = item.meta - item.venta;
                     const col    = item.meta > 0
                       ? (item.pct_c >= 100 ? 'var(--green)' : item.pct_c >= 75 ? 'var(--amber)' : 'var(--red)')
                       : 'var(--muted)';
@@ -588,7 +573,7 @@ export default function Vendedor() {
                             : falta <= 0
                               ? <span style={{ color: 'var(--green)', fontWeight: 600 }}>Meta alcanzada</span>
                               : diasHabilesRestantes === 0
-                                ? <span style={{ color: 'var(--amber)' }}>Configurar días</span>
+                                ? <span style={{ color: 'var(--amber)' }}>Mes cerrado</span>
                                 : <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{fmt(Math.round(falta / diasHabilesRestantes))}</span>}
                         </td>
                       </tr>
@@ -878,7 +863,7 @@ export default function Vendedor() {
           <strong style={{ display: 'block', marginBottom: '2px', fontSize: '11px', fontWeight: 700 }}>
             Devoluciones
           </strong>
-          {pct(devPct)} de la venta real
+          {pct(devPct)} de la venta bruta
         </div>
         <div className={`alert-item ${+v.cobertura >= 95 ? 'alert-green' : +v.cobertura >= 75 ? 'alert-amber' : 'alert-red'}`}>
           <strong style={{ display: 'block', marginBottom: '2px', fontSize: '11px', fontWeight: 700 }}>
