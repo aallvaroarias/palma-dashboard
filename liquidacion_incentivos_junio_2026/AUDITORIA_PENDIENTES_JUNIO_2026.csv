@@ -1,10 +1,8 @@
 ﻿concepto,categoria,vbi,razon_pendiente,vendedores_afectados
-DN Jet (Chocolates Jet),calidad,33.00,No hay datos de distribución SKU Jet en API,14
-DN Galletas Cremas ×6,calidad,33.00,No hay datos de distribución SKU Galletas Cremas en API,14
-DN Tikys,calidad,22.00,No hay datos de distribución SKU Tikys en API,14
-Devolución (meta),calidad,22.00,Meta de devolución no disponible en fuente de datos,14
+DN Galletas Cremas ×6,calidad,33.00,Sin marca Galletas Cremas ×6 identificada en datos disponibles,14
+Devolución (meta),calidad,22.00,Resultado disponible; falta confirmar meta de devolución,14
 Ejecución de fotos,calidad,33.00,No existe fuente de datos de fotos en API,14
-Ejecución negocio Chocolates,cantidad,22.00,Sin cuota de venta por negocio en API,14
-Ejecución negocio Galletas,cantidad,33.00,Sin cuota de venta por negocio en API,14
-Ejecución negocio Zuko,cantidad,22.00,Negocio Zuko no identificado en API,14
-Nutrición Experta (indicador),cantidad,11.00,Meta del indicador NE no disponible; concurso NE sí aplica,14
+Ejecución negocio Chocolates,cantidad,22.00,Resultado disponible; falta meta de pago,14
+Ejecución negocio Galletas,cantidad,33.00,Resultado disponible; falta meta de pago,14
+Ejecución negocio Zuko,cantidad,22.00,Resultado disponible; falta meta de pago,14
+Nutrición Experta (indicador),cantidad,11.00,Resultado disponible; falta meta del indicador,14
