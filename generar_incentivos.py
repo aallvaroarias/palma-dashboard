@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-generar_incentivos.py - v6.2
-Indicador Bebidas TMLUC calculado (venta negocio 10-TMLUC / meta cuotas);
-Zuko se mantiene solo como auditoría de apoyo.
+generar_incentivos.py - v6.3
+DN Galletas Cremas liquidado: meta 10% universo, filtro por nombre CREMA en negocio Galletas.
+Bebidas TMLUC calculado (venta negocio 10-TMLUC / meta cuotas).
 PALUMAR S.A. — Junio 2026
 """
 
@@ -59,12 +59,10 @@ VBI_NE_IND           = 11.00   # calculado desde cuotas v6.0
 META_DN_CAFE_PCT  = 40.0
 META_DN_JET_PCT   = 40.0
 META_DN_TIKYS_PCT = 15.0
+META_DN_CREMAS_PCT = 10.0    # v6.3 — 10% del universo del vendedor
 META_NUEVOS           = 10    # era 15 — CORREGIDO
 META_CERO_PCT         = 4.0   # era 2%  — CORREGIDO
 META_DEVOLUCION_PCT   = 5.0   # ≤5% → $22, >5% → $0
-
-# SKUs de Galletas Cremas (negocio 02-Galletas, marca 146-Pozuelo)
-CREMAS_SKUS = {'1080669', '1007777', '1047712'}
 
 # SKUs de Zuko (negocio 10-TMLUC, marca 295-Zuko) — desde endpoint skus
 ZUKO_SKUS = {
@@ -193,23 +191,28 @@ def buscar_venta_neg(vn_map, keyword):
     return 0.0
 
 def calc_dn_cremas(detalle_data, fallback_universo=0):
-    """Cuenta clientes únicos con venta positiva en SKUs CREMAS."""
+    """Cuenta clientes únicos con venta positiva en referencias CREMAS del negocio Galletas."""
     filas = detalle_data.get("detalle_filas", [])
     clientes = set()
+    skus_vistos = {}  # cod_sku -> producto
     for row in filas:
-        if str(row.get("cod_sku", "")) not in CREMAS_SKUS:
+        if "CREMA" not in str(row.get("producto", "")).upper():
             continue
         if float(row.get("cant_neta", 0)) <= 0:
             continue
         clt = str(row.get("cod_cliente", ""))
         if clt:
             clientes.add(clt)
+        cod_sku = str(row.get("cod_sku", ""))
+        if cod_sku:
+            skus_vistos[cod_sku] = str(row.get("producto", ""))
     n = len(clientes)
     uni = int((detalle_data.get("resumen") or {}).get("universo", fallback_universo))
     if uni <= 0:
         uni = int(fallback_universo)
     pct = round(n / uni * 100, 1) if uni > 0 else 0.0
-    return n, uni, pct
+    skus_list = [{"cod_sku": k, "producto": v} for k, v in sorted(skus_vistos.items())]
+    return n, uni, pct, skus_list
 
 def fetch_all_cremas(vendedores_list):
     """Fetches detalle_cobertura_negocio para cada vendedor y calcula DN Cremas."""
@@ -223,12 +226,12 @@ def fetch_all_cremas(vendedores_list):
             t0 = datetime.now()
             data = fetch("detalle_cobertura_negocio", {"cod_asesor": cod, "negocio": "Galletas"})
             elapsed = (datetime.now() - t0).seconds
-            n, uni, pct = calc_dn_cremas(data, mae)
-            cremas_por_vend[cod] = {"n": n, "universo": uni, "pct": pct}
+            n, uni, pct, skus_list = calc_dn_cremas(data, mae)
+            cremas_por_vend[cod] = {"n": n, "universo": uni, "pct": pct, "skus": skus_list}
             print(f" {n}/{uni} ({pct:.1f}%) — {elapsed}s")
         except Exception as e:
             print(f" ERROR: {e}")
-            cremas_por_vend[cod] = {"n": 0, "universo": mae, "pct": 0.0}
+            cremas_por_vend[cod] = {"n": 0, "universo": mae, "pct": 0.0, "skus": []}
     return cremas_por_vend
 
 
@@ -464,12 +467,14 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
         else:
             p_devol = 0.0; tramo_devol = f"{fmt_pct(pct_devol)} > {META_DEVOLUCION_PCT:.0f}%"
 
-        # ── DN Galletas Cremas (calculado desde detalle_cobertura_negocio) ──
+        # ── DN Galletas Cremas (meta 10% universo v6.3) ───────────────────
         cremas_data    = cremas_por_vend.get(cod, {})
         n_cremas       = cremas_data.get("n", 0)
         uni_cremas     = cremas_data.get("universo", mae)
         pct_cremas     = cremas_data.get("pct", 0.0)
+        cremas_skus_det = cremas_data.get("skus", [])
         cremas_resultado = f"{fmt_pct(pct_cremas)} ({n_cremas}/{uni_cremas})"
+        p_cremas = VBI_DN_GALLETAS_CREMAS if pct_cremas >= META_DN_CREMAS_PCT else 0.0
 
         # ── Concursos ──────────────────────────────────────────────────────
         tosh_n    = int(inc.get("clientes_tosh_impactados", 0))
@@ -498,10 +503,9 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
             ind("DN Galletas Cremas ×6", "calidad",
                 VBI_DN_GALLETAS_CREMAS,
                 cremas_resultado,
-                "Meta pendiente de confirmar",
-                None,
-                nota="Resultado calculado desde detalle Galletas; meta de pago sin definir",
-                tipo_pendiente="sin_meta"),
+                f"≥{META_DN_CREMAS_PCT:.0f}% maestra",
+                p_cremas,
+                nota="calculado con referencias CREMAS del negocio Galletas"),
             ind("Clientes nuevos con pedido", "calidad",
                 VBI_NUEVOS, f"{n_nuevos} clientes", f"≥{META_NUEVOS} clientes", p_nuevos),
             ind("Cliente cero", "calidad",
@@ -634,8 +638,9 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
             "meta_ne":   cuotas_vend.get("nutricion experta") or 0.0,
             # Devolución (v6.0)
             "p_devol": p_devol, "pct_devol": pct_devol, "tramo_devol": tramo_devol,
-            # DN Cremas (v6.0)
+            # DN Cremas (indicador calculado v6.3)
             "n_cremas": n_cremas, "uni_cremas": uni_cremas, "pct_cremas": pct_cremas,
+            "p_cremas": p_cremas, "cremas_skus_det": cremas_skus_det,
         })
     return results
 
@@ -1165,8 +1170,8 @@ def build_pdf_consolidado(results, styles, out):
         story.append(e)
 
     # Columns: Cód | Vendedor | Venta N. | Meta | %Cum | Cob% | Efec%
-    #          | Ppto | Efec | Café | Jet | Gall* | Nuevos | Cero | Tikys
-    #          | Devol | Fotos* | Ej.Choc | Ej.Gall | Ej.Zuko* | NE Ind
+    #          | Ppto | Efec | Café | Jet | Gall | Nuevos | Cero | Tikys
+    #          | Devol | Fotos* | Ej.Choc | Ej.Gall | Ej.Beb.TMLUC | NE Ind
     #          | TOSH | NE Conc | HORECA | TOTAL
     # * = pago aún pendiente; sin * = calculado en v6.x
     cols = [
@@ -1174,7 +1179,7 @@ def build_pdf_consolidado(results, styles, out):
         ("Venta\nNeta",W*.058),("Meta",    W*.058),
         ("%\nCum.", W*.040),("Cob\n%",   W*.036),("Efec\n%", W*.036),
         ("Pago\nPpto.",W*.052),("Pago\nEfec.",W*.047),
-        ("Pago\nCafé", W*.047),("DN\nJet", W*.040),("DN\nGall*",W*.040),
+        ("Pago\nCafé", W*.047),("DN\nJet", W*.040),("DN\nGall.",W*.040),
         ("Pago\nNuevos",W*.047),("Pago\nCero",W*.047),("DN\nTikys", W*.040),
         ("Devol",   W*.040),("Fotos*",    W*.040),
         ("Ej.\nChoc",W*.038),("Ej.\nGall",W*.038),("Ej.\nBeb.\nTMLUC",W*.040),("NE\nInd",W*.034),
@@ -1212,7 +1217,7 @@ def build_pdf_consolidado(results, styles, out):
                                      textColor=C_GREEN if pe>=90 else(C_AMBER if pe>=80 else C_RED),
                                      alignment=TA_CENTER)),
             _num(r["p_ppto"]), _num(r["p_ef"]),
-            _num(r["p_cafe"]), _num(r["p_jet"]), _pend(),
+            _num(r["p_cafe"]), _num(r["p_jet"]), _num(r["p_cremas"]),
             _num(r["p_nuevos"]), _num(r["p_cero"]), _num(r["p_tikys"]),
             _num(r["p_devol"]), _pend(),
             _num(r["p_choc"]), _num(r["p_gall"]), _num(r["p_bebidas_tmluc"]), _num(r["p_ne_ind"]),
@@ -1220,7 +1225,7 @@ def build_pdf_consolidado(results, styles, out):
             Paragraph(f"<b>{fmt_usd(r['total_final'])}</b>",
                       ParagraphStyle("tf",parent=styles["cons_num"],fontSize=8)),
         ])
-        for k in ["p_ppto","p_ef","p_cafe","p_jet","p_tikys","p_nuevos","p_cero",
+        for k in ["p_ppto","p_ef","p_cafe","p_jet","p_cremas","p_tikys","p_nuevos","p_cero",
                   "p_devol","p_choc","p_gall","p_bebidas_tmluc","p_ne_ind",
                   "tosh_pago","ne_pago","horeca_pago","total_final"]:
             tot[k] += r[k]
@@ -1235,7 +1240,7 @@ def build_pdf_consolidado(results, styles, out):
         Paragraph(f"<b>{fmt_usd(tot['p_ef'])}</b>",      styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_cafe'])}</b>",    styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_jet'])}</b>",     styles["cons_num"]),
-        _pend(),
+        Paragraph(f"<b>{fmt_usd(tot['p_cremas'])}</b>",  styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_nuevos'])}</b>",  styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_cero'])}</b>",    styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_tikys'])}</b>",   styles["cons_num"]),
@@ -1276,10 +1281,10 @@ def build_pdf_consolidado(results, styles, out):
         story.append(e)
 
     story.append(Paragraph(
-        "v6.2 — Indicadores calculados: Devolución (meta ≤5%), Ejecución Chocolates/Galletas/"
-        "Bebidas TMLUC/NE (metas desde cuotas, escala presupuesto), "
-        "DN Cremas (SKUs CREMAS en negocio Galletas), DN Jet, DN Tikys. "
-        "Pendientes: DN Galletas Cremas (meta sin confirmar), Fotos. "
+        "v6.3 — Indicadores calculados: Devolución (meta ≤5%), DN Galletas Cremas (≥10% universo), "
+        "Ejecución Chocolates/Galletas/Bebidas TMLUC/NE (metas desde cuotas, escala presupuesto), "
+        "DN Jet, DN Tikys. "
+        "Pendiente: Fotos. "
         f"Potencial pendiente promedio: "
         f"{fmt_usd(sum(r['potencial_pendiente'] for r in results)/len(results))}.",
         ParagraphStyle("al",parent=styles["body"],textColor=C_ORANGE,spaceAfter=4)))
@@ -1440,16 +1445,24 @@ def write_csv_dn_tikys(results, out):
 def write_csv_dn_galletas_cremas(results, out):
     with open(out,"w",newline="",encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["cod_asesor","nombre","n_clientes_cremas","universo",
-                    "pct_dn_cremas","vbi","meta","estado"])
+        w.writerow(["cod_vendedor","vendedor","universo","clientes_cremas",
+                    "dn_cremas_pct","meta_pct","cumple","vbi","pago",
+                    "productos_skus_considerados","observacion"])
         for r in results:
+            cumple = "SI" if r["pct_cremas"] >= META_DN_CREMAS_PCT else "NO"
+            skus_str = "; ".join(
+                f"{s['cod_sku']}:{s['producto']}" for s in r["cremas_skus_det"]
+            ) if r["cremas_skus_det"] else "ninguno"
             w.writerow([
                 r["cod"], r["nombre_limpio"],
-                r["n_cremas"], r["uni_cremas"],
+                r["uni_cremas"], r["n_cremas"],
                 f"{r['pct_cremas']:.1f}",
+                f"{META_DN_CREMAS_PCT:.0f}",
+                cumple,
                 f"{VBI_DN_GALLETAS_CREMAS:.0f}",
-                "Pendiente de confirmar",
-                "Resultado calculado — meta de pago sin definir",
+                f"{r['p_cremas']:.2f}",
+                skus_str,
+                "Calculado — referencias CREMAS negocio Galletas / meta 10% universo",
             ])
 
 def write_csv_negocios_incentivos(results, out):
@@ -1584,7 +1597,7 @@ def write_csv_zuko(results, out):
 def main():
     print(f"\n{'='*65}")
     print(f"  RECÁLCULO INCENTIVOS — {PERIODO_LABEL.upper()}")
-    print(f"  PALUMAR S.A. — v6.2 (Bebidas TMLUC indicador calculado)")
+    print(f"  PALUMAR S.A. — v6.3 (DN Cremas + Bebidas TMLUC liquidados)")
     print(f"{'='*65}\n")
     print(f"  VBI Presupuesto: ${VBI_PRESUPUESTO:.0f}  Efectividad: ${VBI_EFECTIVIDAD:.0f}")
     print(f"  DN Jet: ${VBI_DN_JET:.0f} (meta ≥{META_DN_JET_PCT:.0f}%)  "
@@ -1698,7 +1711,7 @@ def main():
     zuko_por_vend = fetch_all_zuko(vendedores_data)
 
     # 4. Calcular
-    print("\n4. Calculando incentivos (v6.2 — Bebidas TMLUC indicador calculado)...\n")
+    print("\n4. Calculando incentivos (v6.3 — DN Cremas + Bebidas TMLUC liquidados)...\n")
     results = calcular_incentivos(
         vendedores_data, inc_map, horeca_por_vend,
         cafe_map, nuevos_map, cob_neg_map, cartera_map, venta_neg_map, marcas_por_vend,
@@ -1838,15 +1851,17 @@ def main():
     total_choc  = sum(r["p_choc"] for r in results)
     total_gall  = sum(r["p_gall"] for r in results)
     total_ne_ind = sum(r["p_ne_ind"] for r in results)
-    n_jet_cumple  = sum(1 for r in results if r["pct_jet"]  >= META_DN_JET_PCT)
-    n_tikys_cumple= sum(1 for r in results if r["pct_tikys"]>= META_DN_TIKYS_PCT)
-    n_devol_cumple= sum(1 for r in results if r["pct_devol"] <= META_DEVOLUCION_PCT)
+    total_cremas = sum(r["p_cremas"] for r in results)
+    n_jet_cumple   = sum(1 for r in results if r["pct_jet"]   >= META_DN_JET_PCT)
+    n_tikys_cumple = sum(1 for r in results if r["pct_tikys"] >= META_DN_TIKYS_PCT)
+    n_devol_cumple = sum(1 for r in results if r["pct_devol"] <= META_DEVOLUCION_PCT)
+    n_cremas_cumple = sum(1 for r in results if r["pct_cremas"] >= META_DN_CREMAS_PCT)
     print(f"   ✓ DN Jet   : {n_jet_cumple}/{len(results)} cumplen ≥{META_DN_JET_PCT:.0f}% → {fmt_usd(total_jet)}")
     print(f"   ✓ DN Tikys : {n_tikys_cumple}/{len(results)} cumplen ≥{META_DN_TIKYS_PCT:.0f}% → {fmt_usd(total_tikys)}")
     print(f"   ✓ Devolución: {n_devol_cumple}/{len(results)} cumplen ≤{META_DEVOLUCION_PCT:.0f}% → {fmt_usd(total_devol)}")
     print(f"   ✓ Ej.Chocolates: {fmt_usd(total_choc)}  Ej.Galletas: {fmt_usd(total_gall)}  NE ind: {fmt_usd(total_ne_ind)}")
-    cremas_total = sum(r["pct_cremas"] for r in results)
-    print(f"   ✓ DN Cremas calculado — promedio equipo: {cremas_total/len(results):.1f}% — pago pendiente meta")
+    print(f"   ✓ DN Galletas Cremas: {n_cremas_cumple}/{len(results)} vendedores pagan "
+          f"(meta ≥{META_DN_CREMAS_PCT:.0f}%) → {fmt_usd(total_cremas)}")
     total_beb        = sum(r["p_bebidas_tmluc"] for r in results)
     n_beb_pagan      = sum(1 for r in results if r["p_bebidas_tmluc"] > 0)
     print(f"   ✓ Ej. Bebidas TMLUC: {n_beb_pagan}/{len(results)} vendedores pagan → {fmt_usd(total_beb)}")
@@ -1856,18 +1871,19 @@ def main():
           f"con venta → {fmt_usd(total_venta_zuko)}")
 
     n_pend_uniq = len({i["concepto"] for r in results for i in r["indicadores"] if i["pendiente"]})
-    print(f"   ℹ {n_pend_uniq} indicadores aún pendientes (sin meta o sin fuente — no suman al total)")
+    print(f"   ℹ {n_pend_uniq} indicador(es) aún pendiente(s) (sin fuente — no suman al total)")
 
     # 9. Resumen final
-    TOTAL_V61 = 1134.93
-    diff_v = grand - TOTAL_V61
+    TOTAL_V62 = 1340.80
+    diff_v = grand - TOTAL_V62
     print(f"\n{'='*65}")
-    print(f"  RESUMEN FINAL — TOTAL A PAGAR JUNIO 2026  (v6.2)")
+    print(f"  RESUMEN FINAL — TOTAL A PAGAR JUNIO 2026  (v6.3)")
     print(f"{'='*65}")
     print(f"  Presupuesto (VBI $132):             {fmt_usd(sum(r['p_ppto'] for r in results))}")
     print(f"  Efectividad (VBI $33):              {fmt_usd(sum(r['p_ef'] for r in results))}")
     print(f"  DN Café Sello Rojo (VBI $55):       {fmt_usd(sum(r['p_cafe'] for r in results))}")
     print(f"  DN Jet (VBI $33):                   {fmt_usd(total_jet)}")
+    print(f"  DN Galletas Cremas (VBI $33):       {fmt_usd(total_cremas)}")
     print(f"  DN Tikys (VBI $22):                 {fmt_usd(total_tikys)}")
     print(f"  Clientes nuevos (VBI $22):          {fmt_usd(sum(r['p_nuevos'] for r in results))}")
     print(f"  Cliente cero (VBI $33):             {fmt_usd(sum(r['p_cero'] for r in results))}")
@@ -1885,7 +1901,7 @@ def main():
     print(f"  ═════════════════════════════════════════════")
     print(f"  TOTAL GENERAL:                      {fmt_usd(grand)}")
     print(f"  ─────────────────────────────────────────────")
-    print(f"  vs v6.1 (era {fmt_usd(TOTAL_V61)}):            {'+' if diff_v>=0 else ''}{fmt_usd(diff_v)}")
+    print(f"  vs v6.2 (era {fmt_usd(TOTAL_V62)}):            {'+' if diff_v>=0 else ''}{fmt_usd(diff_v)}")
     print(f"  Potencial indicadores pend.:        {fmt_usd(sum(r['potencial_pendiente'] for r in results))}")
     print(f"{'='*65}\n")
 
