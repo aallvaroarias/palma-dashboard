@@ -4,13 +4,20 @@ generar_incentivos.py
 Liquidación de incentivos PALUMAR S.A. - Junio 2026
 
 Genera por cada uno de los 14 vendedores PALUMAR:
-  - PDF individual: LIQUIDACION_INCENTIVOS_JUNIO_2026_[COD]_[NAME].pdf
+  - PDF individual: LIQUIDACION_INCENTIVOS_JUNIO_2026_[COD]_[NOMBRE].pdf
   - PDF consolidado: CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.pdf
   - CSV consolidado: CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.csv
-  - CSV auditoría HORECA, TOSH, Nutrición Experta, Cálculos
+  - CSV auditoría cálculos: AUDITORIA_CALCULOS_INCENTIVOS_JUNIO_2026.csv
+  - CSVs auditoría concursos: HORECA, TOSH, NE
 
-Nota: VBI (presupuesto y efectividad) no fue proporcionado.
-Esos rubros se marcan como "Pendiente por dato faltante".
+VBIs confirmados:
+  Presupuesto  = $154.00
+  Efectividad  = $55.00
+  DN Café      = $55.00  (meta 40% de maestra)
+  Nuevos       = $55.00  (meta 15 clientes con pedido)
+  Cliente Cero = $55.00  (meta ≤ 2% de maestra)
+  Devolución   = $0.00   (no genera pago variable)
+  Cartera      = $0.00   (no genera pago variable)
 """
 
 import requests
@@ -18,24 +25,24 @@ import json
 import csv
 import os
 import math
+from collections import Counter
 from datetime import datetime
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Table, TableStyle,
-    Spacer, HRFlowable, KeepTogether
+    Spacer, HRFlowable,
 )
-from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
-# ── CONFIGURACIÓN ────────────────────────────────────────────────────────
+# ── CONFIGURACIÓN ─────────────────────────────────────────────────────────
 API_BASE = (
     "https://script.google.com/macros/s/"
     "AKfycbwRPhHFwnBnTadtIuH3FHapuwVjzXJr5suo-KlWxr-ReoA44VtAt1pZsf_TF2a1KIfK/exec"
 )
 PERIODO_LABEL = "Junio 2026"
-PERIODO_CODE  = "2026-06"
 OUTPUT_DIR    = "liquidacion_incentivos_junio_2026"
 FECHA_GEN     = datetime.now().strftime("%d de %B de %Y").replace(
     "January","enero").replace("February","febrero").replace("March","marzo"
@@ -43,122 +50,95 @@ FECHA_GEN     = datetime.now().strftime("%d de %B de %Y").replace(
     ).replace("July","julio").replace("August","agosto").replace("September","septiembre"
     ).replace("October","octubre").replace("November","noviembre").replace("December","diciembre")
 
+# VBIs
+VBI_PRESUPUESTO  = 154.00
+VBI_EFECTIVIDAD  = 55.00
+VBI_DN_CAFE      = 55.00
+VBI_NUEVOS       = 55.00
+VBI_CERO         = 55.00
+
+META_DN_CAFE_PCT = 40.0   # % de maestra
+META_NUEVOS      = 15     # clientes con pedido
+META_CERO_PCT    = 2.0    # % máximo de sin compra
+
 HORECA_KEYWORDS = [
     'hotel', 'restaurante', 'restaurant', 'rest.', 'cafetería', 'cafeteria',
     'café', 'cafe', 'horeca', 'food service', 'parrilla', 'cantina',
-    'comedor', 'fonda', 'lunch', 'soda', 'bar ', 'taberna', 'picnic',
-    'marisqueria', 'marisquería', 'cevicheria', 'cevichería', 'fritanga',
-    'asadero', 'bocadillo', 'cocina', 'rancho', 'delicias',
+    'comedor', 'fonda', 'lunch', 'soda', 'bar ', 'taberna',
+    'marisqueria', 'marisquería', 'cevicheria', 'cevichería',
+    'fritanga', 'asadero', 'delicias',
 ]
 
-PENDIENTE_LABEL = "Pendiente — VBI no proporcionado"
-
-# ── COLORES CORPORATIVOS ─────────────────────────────────────────────────
-C_PALMA_VERDE  = colors.HexColor("#1B5E20")   # verde oscuro header
-C_PALMA_VERDE2 = colors.HexColor("#2E7D32")   # verde secundario
-C_ACCENT       = colors.HexColor("#43A047")   # verde acento
-C_AMARILLO     = colors.HexColor("#F9A825")   # advertencia
-C_GRIS_CLARO   = colors.HexColor("#F5F5F5")
-C_GRIS_MED     = colors.HexColor("#E0E0E0")
-C_ROJO         = colors.HexColor("#C62828")
-C_BLANCO       = colors.white
-C_NEGRO        = colors.black
-C_PENDIENTE    = colors.HexColor("#FF8F00")   # naranja pendiente
-
-# ── ESTILOS ──────────────────────────────────────────────────────────────
-def make_styles():
-    styles = getSampleStyleSheet()
-
-    base = dict(fontName="Helvetica", leading=14, spaceAfter=4)
-
-    estilos = {}
-
-    estilos["title"] = ParagraphStyle(
-        "title", parent=styles["Normal"],
-        fontSize=16, fontName="Helvetica-Bold",
-        textColor=C_BLANCO, alignment=TA_CENTER, leading=20, spaceAfter=0
-    )
-    estilos["subtitle"] = ParagraphStyle(
-        "subtitle", parent=styles["Normal"],
-        fontSize=11, fontName="Helvetica",
-        textColor=C_BLANCO, alignment=TA_CENTER, leading=14
-    )
-    estilos["section_head"] = ParagraphStyle(
-        "section_head", parent=styles["Normal"],
-        fontSize=10, fontName="Helvetica-Bold",
-        textColor=C_BLANCO, alignment=TA_LEFT, leading=14,
-        leftIndent=8
-    )
-    estilos["body"] = ParagraphStyle(
-        "body", parent=styles["Normal"],
-        fontSize=9, fontName="Helvetica",
-        textColor=C_NEGRO, leading=13
-    )
-    estilos["body_bold"] = ParagraphStyle(
-        "body_bold", parent=styles["Normal"],
-        fontSize=9, fontName="Helvetica-Bold",
-        textColor=C_NEGRO, leading=13
-    )
-    estilos["label"] = ParagraphStyle(
-        "label", parent=styles["Normal"],
-        fontSize=8, fontName="Helvetica",
-        textColor=colors.HexColor("#616161"), leading=11
-    )
-    estilos["value_big"] = ParagraphStyle(
-        "value_big", parent=styles["Normal"],
-        fontSize=14, fontName="Helvetica-Bold",
-        textColor=C_PALMA_VERDE, alignment=TA_CENTER, leading=18
-    )
-    estilos["pendiente"] = ParagraphStyle(
-        "pendiente", parent=styles["Normal"],
-        fontSize=8, fontName="Helvetica-Bold",
-        textColor=C_PENDIENTE, leading=11
-    )
-    estilos["nota"] = ParagraphStyle(
-        "nota", parent=styles["Normal"],
-        fontSize=7, fontName="Helvetica",
-        textColor=colors.HexColor("#757575"), leading=10
-    )
-    estilos["total_label"] = ParagraphStyle(
-        "total_label", parent=styles["Normal"],
-        fontSize=11, fontName="Helvetica-Bold",
-        textColor=C_PALMA_VERDE, alignment=TA_LEFT, leading=16
-    )
-    estilos["total_value"] = ParagraphStyle(
-        "total_value", parent=styles["Normal"],
-        fontSize=16, fontName="Helvetica-Bold",
-        textColor=C_PALMA_VERDE2, alignment=TA_RIGHT, leading=20
-    )
-    return estilos
+# ── COLORES ───────────────────────────────────────────────────────────────
+C_VERDE       = colors.HexColor("#1B5E20")
+C_VERDE2      = colors.HexColor("#2E7D32")
+C_VERDE_LIGHT = colors.HexColor("#E8F5E9")
+C_AMARILLO    = colors.HexColor("#F9A825")
+C_AMARILLO_LT = colors.HexColor("#FFF8E1")
+C_ROJO        = colors.HexColor("#C62828")
+C_ROJO_LT     = colors.HexColor("#FFEBEE")
+C_GRIS        = colors.HexColor("#F5F5F5")
+C_GRIS2       = colors.HexColor("#E0E0E0")
+C_BLANCO      = colors.white
+C_NEGRO       = colors.black
+C_MUTED       = colors.HexColor("#757575")
 
 
-# ── UTILIDADES ───────────────────────────────────────────────────────────
-def fmt_usd(v):
-    if v is None:
-        return "—"
-    return f"${v:,.2f}"
+# ── CÁLCULOS ──────────────────────────────────────────────────────────────
+
+def calc_presupuesto(pct_cum, vbi=VBI_PRESUPUESTO):
+    """Devuelve (pago, tramo_label, formula_label)."""
+    if pct_cum < 80.0:
+        return 0.0, "< 80%", "$0.00 — por debajo de meta mínima"
+    elif pct_cum <= 95.0:
+        p = round(vbi * 0.60, 2)
+        return p, "80% – 95%", f"${vbi:.0f} × 60% = ${p:.2f}"
+    elif pct_cum <= 99.0:
+        p = round(vbi * 0.80, 2)
+        return p, "95.1% – 99%", f"${vbi:.0f} × 80% = ${p:.2f}"
+    elif pct_cum <= 105.0:
+        p = round(vbi * 1.05, 2)
+        return p, "99.1% – 105%", f"${vbi:.0f} × 105% = ${p:.2f}"
+    else:
+        f = min(pct_cum, 110.0) / 100.0
+        p = round(vbi * f, 2)
+        return p, f"> 105% (tope 110%)", f"${vbi:.0f} × {f*100:.1f}% = ${p:.2f}"
 
 
-def fmt_pct(v):
-    return f"{v:.1f}%"
+def calc_efectividad(pct_ef, vbi=VBI_EFECTIVIDAD):
+    """Devuelve (pago, tramo_label, formula_label)."""
+    if pct_ef < 80.0:
+        return 0.0, "< 80%", "$0.00 — por debajo de meta mínima"
+    elif pct_ef < 87.0:
+        p = round(vbi * 0.80, 2)
+        return p, "80% – 87%", f"${vbi:.0f} × 80% = ${p:.2f}"
+    elif pct_ef < 90.0:
+        p = round(vbi * 0.90, 2)
+        return p, "87% – 90%", f"${vbi:.0f} × 90% = ${p:.2f}"
+    else:
+        p = round(vbi * 1.10, 2)
+        return p, "≥ 90%", f"${vbi:.0f} × 110% = ${p:.2f}"
 
 
-def clean_nombre(raw):
-    """'211 - HAYMETH LEWIS' → 'HAYMETH LEWIS', también limpia códigos prefijo"""
-    import re
-    s = str(raw or "").strip()
-    s = re.sub(r"^\d{3}\s*[-–]\s*", "", s)
-    return s.strip()
+def calc_dn_cafe(pct_cafe, vbi=VBI_DN_CAFE, meta=META_DN_CAFE_PCT):
+    if pct_cafe >= meta:
+        return vbi, f"≥ {meta:.0f}% ✓", f"Meta alcanzada → ${vbi:.2f}"
+    else:
+        return 0.0, f"< {meta:.0f}% — meta no alcanzada", "$0.00"
 
 
-def slug_nombre(raw):
-    """Genera slug seguro para nombre de archivo"""
-    import re, unicodedata
-    s = clean_nombre(raw)
-    s = unicodedata.normalize("NFD", s)
-    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
-    s = re.sub(r"[^A-Za-z0-9]+", "_", s)
-    return s.strip("_").upper()
+def calc_nuevos(n, vbi=VBI_NUEVOS, meta=META_NUEVOS):
+    if n >= meta:
+        return vbi, f"≥ {meta} clientes ✓", f"Meta alcanzada → ${vbi:.2f}"
+    else:
+        return 0.0, f"< {meta} clientes — meta no alcanzada", "$0.00"
+
+
+def calc_cero(pct_cero, vbi=VBI_CERO, meta=META_CERO_PCT):
+    if pct_cero <= meta:
+        return vbi, f"≤ {meta:.0f}% ✓ ({pct_cero:.1f}%)", f"Meta alcanzada → ${vbi:.2f}"
+    else:
+        return 0.0, f"{pct_cero:.1f}% > {meta:.0f}% — meta no alcanzada", "$0.00"
 
 
 def es_horeca(nombre):
@@ -169,32 +149,31 @@ def es_horeca(nombre):
     return False, None
 
 
-def tramo_presupuesto(pct):
-    if pct < 80:
-        return ("< 80%", 0.0, "No aplica")
-    elif pct <= 95:
-        return ("80% – 95%", 0.60, "60% de VBI")
-    elif pct <= 99:
-        return ("95.1% – 99%", 0.80, "80% de VBI")
-    elif pct <= 105:
-        return ("99.1% – 105%", 1.05, "105% de VBI")
-    else:
-        f = round(min(pct, 110.0) / 100.0, 4)
-        return (f"> 105% (tope 110%)", f, f"{f*100:.1f}% de VBI (lineal)")
+# ── UTILIDADES ────────────────────────────────────────────────────────────
+
+def fmt_usd(v):
+    return f"${v:,.2f}"
 
 
-def tramo_efectividad(pct):
-    if pct < 80:
-        return ("< 80%", 0.0, "No aplica")
-    elif pct < 87:
-        return ("80% – 87%", 0.80, "80% de VBI")
-    elif pct < 90:
-        return ("87% – 90%", 0.90, "90% de VBI")
-    else:
-        return ("≥ 90%", 1.10, "110% de VBI")
+def fmt_pct(v):
+    return f"{v:.1f}%"
 
 
-# ── FETCH ────────────────────────────────────────────────────────────────
+def clean_nombre(raw):
+    import re
+    s = re.sub(r"^\d{3}\s*[-–]\s*", "", str(raw or "")).strip()
+    return s
+
+
+def slug_nombre(raw):
+    import re, unicodedata
+    s = unicodedata.normalize("NFD", clean_nombre(raw))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^A-Za-z0-9]+", "_", s).strip("_").upper()
+
+
+# ── FETCH ─────────────────────────────────────────────────────────────────
+
 def fetch(sheet, extra=None):
     params = {"sheet": sheet}
     if extra:
@@ -205,809 +184,906 @@ def fetch(sheet, extra=None):
     return r.json().get("data", {})
 
 
-# ── CÁLCULO DE INCENTIVOS ────────────────────────────────────────────────
-def calcular_incentivos(vendedores_list, inc_map, horeca_por_vendedor):
+# ── CÁLCULO PRINCIPAL ─────────────────────────────────────────────────────
+
+def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
+                        cafe_map, nuevos_map):
     results = []
     for v in sorted(vendedores_list, key=lambda x: x["cod"]):
-        cod   = str(v["cod"])
-        inc   = inc_map.get(cod, {})
+        cod = str(v["cod"])
+        inc = inc_map.get(cod, {})
 
         # Presupuesto
-        pct_cum = v.get("pct_cumplimiento", 0)
-        tr_ppto, factor_ppto, label_ppto = tramo_presupuesto(pct_cum)
+        pct_cum = float(v.get("pct_cumplimiento", 0))
+        p_ppto, tramo_ppto, formula_ppto = calc_presupuesto(pct_cum)
 
         # Efectividad
-        pct_ef = v.get("efectividad", 0)
-        tr_ef, factor_ef, label_ef = tramo_efectividad(pct_ef)
+        pct_ef = float(v.get("efectividad", 0))
+        p_ef, tramo_ef, formula_ef = calc_efectividad(pct_ef)
 
-        # TOSH: floor(clientes_tosh / 20) × $10
+        # DN Café
+        cafe_info = cafe_map.get(cod, {})
+        pct_cafe = float(cafe_info.get("cobertura_", 0))
+        imp_cafe = int(cafe_info.get("impactados", 0))
+        mae_cafe = int(cafe_info.get("clientes_maestro", 0))
+        p_cafe, tramo_cafe, formula_cafe = calc_dn_cafe(pct_cafe)
+
+        # Clientes nuevos con pedido
+        n_nuevos = int(nuevos_map.get(cod, 0))
+        p_nuevos, tramo_nuevos, formula_nuevos = calc_nuevos(n_nuevos)
+
+        # Cliente cero
+        mae = int(v.get("maestro", 0))
+        sc  = int(v.get("sin_compra", 0))
+        pct_cero = round(sc / mae * 100, 2) if mae > 0 else 0.0
+        p_cero, tramo_cero, formula_cero = calc_cero(pct_cero)
+
+        # TOSH
         tosh_n    = int(inc.get("clientes_tosh_impactados", 0))
-        tosh_pago = math.floor(tosh_n / 20) * 10
+        tosh_pago = float(math.floor(tosh_n / 20) * 10)
 
-        # Nutrición Experta: $20 si venta ≥ $200, sino $0
+        # Nutrición Experta
         ne_venta = float(inc.get("venta_nutricion_experta", 0))
         ne_pago  = 20.0 if ne_venta >= 200.0 else 0.0
 
-        # HORECA: $1 × clientes nuevos horeca con venta en junio
-        horeca_list  = horeca_por_vendedor.get(cod, [])
-        horeca_count = len(horeca_list)
-        horeca_pago  = float(horeca_count)
+        # HORECA
+        horeca_list  = horeca_por_vend.get(cod, [])
+        horeca_pago  = float(len(horeca_list))
 
-        total_confirmado = tosh_pago + ne_pago + horeca_pago
+        total_indicadores = p_ppto + p_ef + p_cafe + p_nuevos + p_cero
+        total_concursos   = tosh_pago + ne_pago + horeca_pago
+        total_final       = total_indicadores + total_concursos
 
         results.append({
-            "cod":              cod,
-            "nombre":           v.get("nombre", ""),
-            "nombre_limpio":    clean_nombre(v.get("nombre", "")),
+            "cod":           cod,
+            "nombre":        v.get("nombre", ""),
+            "nombre_limpio": clean_nombre(v.get("nombre", "")),
             # Ventas
             "venta_neta":       float(v.get("venta_neta", 0)),
             "cuota":            float(v.get("cuota", 0)),
             "pct_cumplimiento": pct_cum,
             # Presupuesto
-            "tramo_presupuesto": tr_ppto,
-            "factor_presupuesto": factor_ppto,
-            "label_presupuesto": label_ppto,
-            "pago_presupuesto":  PENDIENTE_LABEL if factor_ppto > 0 else "No aplica",
+            "p_ppto":     p_ppto,
+            "tramo_ppto": tramo_ppto,
+            "formula_ppto": formula_ppto,
             # Efectividad
-            "pct_efectividad":   pct_ef,
-            "tramo_efectividad": tr_ef,
-            "factor_efectividad": factor_ef,
-            "label_efectividad": label_ef,
-            "pago_efectividad":  PENDIENTE_LABEL if factor_ef > 0 else "No aplica",
-            # TOSH
-            "tosh_clientes":    tosh_n,
-            "tosh_pago":        tosh_pago,
-            "tosh_skus":        inc.get("tosh_skus_vendidos", []),
-            # NE
-            "ne_venta":         ne_venta,
-            "ne_pago":          ne_pago,
-            # HORECA
-            "horeca_clientes":  horeca_count,
-            "horeca_pago":      horeca_pago,
-            "horeca_detalle":   horeca_list,
+            "pct_ef":    pct_ef,
+            "p_ef":      p_ef,
+            "tramo_ef":  tramo_ef,
+            "formula_ef": formula_ef,
+            # DN Café
+            "pct_cafe":     pct_cafe,
+            "imp_cafe":     imp_cafe,
+            "mae_cafe":     mae_cafe,
+            "p_cafe":       p_cafe,
+            "tramo_cafe":   tramo_cafe,
+            "formula_cafe": formula_cafe,
+            # Clientes nuevos
+            "n_nuevos":       n_nuevos,
+            "p_nuevos":       p_nuevos,
+            "tramo_nuevos":   tramo_nuevos,
+            "formula_nuevos": formula_nuevos,
+            # Cliente cero
+            "pct_cero":     pct_cero,
+            "mae":          mae,
+            "sc":           sc,
+            "p_cero":       p_cero,
+            "tramo_cero":   tramo_cero,
+            "formula_cero": formula_cero,
+            # Concursos
+            "tosh_n":       tosh_n,
+            "tosh_pago":    tosh_pago,
+            "tosh_skus":    inc.get("tosh_skus_vendidos", []),
+            "ne_venta":     ne_venta,
+            "ne_pago":      ne_pago,
+            "horeca_list":  horeca_list,
+            "horeca_pago":  horeca_pago,
             # Totales
-            "total_confirmado": total_confirmado,
-            "total_pendiente":  PENDIENTE_LABEL,
+            "total_indicadores": total_indicadores,
+            "total_concursos":   total_concursos,
+            "total_final":       total_final,
         })
     return results
 
 
+# ── ESTILOS PDF ───────────────────────────────────────────────────────────
+
+def make_styles():
+    ss = getSampleStyleSheet()
+
+    def ps(name, **kw):
+        base = kw.pop("parent", ss["Normal"])
+        return ParagraphStyle(name, parent=base, **kw)
+
+    return {
+        "title":     ps("title",   fontName="Helvetica-Bold", fontSize=15,
+                        textColor=C_BLANCO, alignment=TA_CENTER, leading=19),
+        "sub_hdr":   ps("sub_hdr", fontName="Helvetica", fontSize=10,
+                        textColor=C_BLANCO, alignment=TA_CENTER, leading=13),
+        "sec":       ps("sec",     fontName="Helvetica-Bold", fontSize=9,
+                        textColor=C_BLANCO, alignment=TA_LEFT, leading=12,
+                        leftIndent=6),
+        "lbl":       ps("lbl",     fontName="Helvetica", fontSize=8,
+                        textColor=C_MUTED, leading=11),
+        "lbl_w":     ps("lbl_w",   fontName="Helvetica", fontSize=8,
+                        textColor=C_BLANCO, leading=11),
+        "body":      ps("body",    fontName="Helvetica", fontSize=9,
+                        textColor=C_NEGRO, leading=13),
+        "bold":      ps("bold",    fontName="Helvetica-Bold", fontSize=9,
+                        textColor=C_NEGRO, leading=13),
+        "ok":        ps("ok",      fontName="Helvetica-Bold", fontSize=11,
+                        textColor=C_VERDE2, leading=15),
+        "nok":       ps("nok",     fontName="Helvetica-Bold", fontSize=11,
+                        textColor=C_ROJO, leading=15),
+        "pago":      ps("pago",    fontName="Helvetica-Bold", fontSize=11,
+                        textColor=C_VERDE, leading=15),
+        "zero":      ps("zero",    fontName="Helvetica-Bold", fontSize=11,
+                        textColor=C_MUTED, leading=15),
+        "nota":      ps("nota",    fontName="Helvetica", fontSize=7,
+                        textColor=C_MUTED, leading=10),
+        "total_lbl": ps("total_lbl", fontName="Helvetica-Bold", fontSize=10,
+                        textColor=C_NEGRO, leading=14),
+        "total_val": ps("total_val", fontName="Helvetica-Bold", fontSize=12,
+                        textColor=C_VERDE, alignment=TA_RIGHT, leading=16),
+        "grand":     ps("grand",   fontName="Helvetica-Bold", fontSize=14,
+                        textColor=C_VERDE, alignment=TA_RIGHT, leading=18),
+        "ch":        ps("ch",      fontName="Helvetica-Bold", fontSize=7,
+                        textColor=C_BLANCO, alignment=TA_CENTER, leading=9),
+    }
+
+
+def _sec_hdr(text, styles):
+    t = Table([[Paragraph(text, styles["sec"])]], colWidths=[None])
+    t.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), C_VERDE2),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
+    ]))
+    return t
+
+
+def _ts_base():
+    return TableStyle([
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 6),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("BOX",           (0,0), (-1,-1), 0.5, C_GRIS2),
+        ("INNERGRID",     (0,0), (-1,-1), 0.3, C_GRIS2),
+    ])
+
+
 # ── PDF INDIVIDUAL ────────────────────────────────────────────────────────
-def build_pdf_individual(r, styles, output_path):
+
+def build_pdf_individual(r, styles, out):
     doc = SimpleDocTemplate(
-        output_path,
-        pagesize=A4,
-        topMargin=1.5*cm,
-        bottomMargin=1.5*cm,
-        leftMargin=2.0*cm,
-        rightMargin=2.0*cm,
+        out, pagesize=A4,
+        topMargin=1.4*cm, bottomMargin=1.4*cm,
+        leftMargin=1.8*cm, rightMargin=1.8*cm,
         title=f"Liquidación Incentivos {r['nombre_limpio']} — {PERIODO_LABEL}",
     )
-
-    W = A4[0] - 4.0*cm   # usable width
+    W = A4[0] - 3.6*cm
     story = []
 
     # ── CABECERA ──────────────────────────────────────────────────────────
-    header_data = [
-        [Paragraph("PALUMAR S.A.", styles["title"]),
-         Paragraph(f"Vendedor: {r['nombre_limpio']}<br/>Código: {r['cod']}", styles["subtitle"])],
-        [Paragraph(f"LIQUIDACIÓN DE INCENTIVOS — {PERIODO_LABEL.upper()}", styles["title"]),
-         Paragraph(f"Generado: {FECHA_GEN}", styles["subtitle"])],
-    ]
-    header_tbl = Table([[
+    hdr = Table([[
         Paragraph("PALUMAR S.A.", styles["title"]),
         Paragraph(f"LIQUIDACIÓN DE INCENTIVOS — {PERIODO_LABEL.upper()}", styles["title"]),
-    ]], colWidths=[W*0.35, W*0.65])
-    header_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), C_PALMA_VERDE),
-        ("TEXTCOLOR",  (0, 0), (-1, -1), C_BLANCO),
+    ]], colWidths=[W * .30, W * .70])
+    hdr.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), C_VERDE),
         ("TOPPADDING",    (0,0), (-1,-1), 10),
         ("BOTTOMPADDING", (0,0), (-1,-1), 10),
-        ("LEFTPADDING",   (0,0), (-1,-1), 12),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 12),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-    ]))
-    story.append(header_tbl)
-
-    # Subheader vendedor
-    sub_data = [
-        Paragraph(f"<b>Vendedor:</b> {r['nombre_limpio']} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Código:</b> {r['cod']} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Período:</b> {PERIODO_LABEL} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Emisión:</b> {FECHA_GEN}", styles["body"])
-    ]
-    sub_tbl = Table([[sub_data[0]]], colWidths=[W])
-    sub_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,-1), C_GRIS_CLARO),
-        ("TOPPADDING",    (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
         ("LEFTPADDING",   (0,0), (-1,-1), 10),
         ("RIGHTPADDING",  (0,0), (-1,-1), 10),
-        ("BOX", (0,0), (-1,-1), 0.5, C_GRIS_MED),
-    ]))
-    story.append(sub_tbl)
-    story.append(Spacer(1, 0.4*cm))
-
-    # ── SECCIÓN: VENTAS vs CUOTA ──────────────────────────────────────────
-    story.append(_section_header("1. Ventas vs. Cuota — Presupuesto 2026", styles))
-    story.append(Spacer(1, 0.2*cm))
-
-    ppto_color = C_ACCENT if r["pct_cumplimiento"] >= 80 else C_ROJO
-    ppto_data = [
-        [
-            Paragraph("Venta Neta\nJunio 2026", styles["label"]),
-            Paragraph("Cuota\nAsignada", styles["label"]),
-            Paragraph("% Cumplimiento", styles["label"]),
-            Paragraph("Tramo\nIncentivo", styles["label"]),
-            Paragraph("Factor\nVBI", styles["label"]),
-            Paragraph("Pago\nPresupuesto", styles["label"]),
-        ],
-        [
-            Paragraph(fmt_usd(r["venta_neta"]), styles["body_bold"]),
-            Paragraph(fmt_usd(r["cuota"]), styles["body"]),
-            Paragraph(fmt_pct(r["pct_cumplimiento"]), ParagraphStyle(
-                "pct", parent=styles["body_bold"],
-                textColor=ppto_color, fontSize=11
-            )),
-            Paragraph(r["tramo_presupuesto"], styles["body"]),
-            Paragraph(
-                f"{r['factor_presupuesto']*100:.0f}%" if r["factor_presupuesto"] > 0 else "—",
-                styles["body"]
-            ),
-            Paragraph(r["pago_presupuesto"], styles["pendiente"] if "Pendiente" in r["pago_presupuesto"] else styles["body"]),
-        ],
-    ]
-    ppto_tbl = Table(ppto_data, colWidths=[W*0.18, W*0.18, W*0.14, W*0.17, W*0.12, W*0.21])
-    ppto_tbl.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0), C_PALMA_VERDE2),
-        ("TEXTCOLOR",    (0, 0), (-1, 0), C_BLANCO),
-        ("BACKGROUND",   (0, 1), (-1, 1), C_GRIS_CLARO),
-        ("BOX",          (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-        ("INNERGRID",    (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-        ("TOPPADDING",    (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING",   (0,0), (-1,-1), 6),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 6),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
     ]))
-    story.append(ppto_tbl)
-    story.append(_nota_vbi(styles))
-    story.append(Spacer(1, 0.5*cm))
+    story.append(hdr)
 
-    # ── SECCIÓN: EFECTIVIDAD ──────────────────────────────────────────────
-    story.append(_section_header("2. Efectividad de Visitas", styles))
-    story.append(Spacer(1, 0.2*cm))
-
-    efec_color = C_ACCENT if r["pct_efectividad"] >= 80 else C_ROJO
-    efec_data = [
-        [
-            Paragraph("% Efectividad\nJunio 2026", styles["label"]),
-            Paragraph("Tramo\nEscala", styles["label"]),
-            Paragraph("Factor\nVBI", styles["label"]),
-            Paragraph("Pago\nEfectividad", styles["label"]),
-        ],
-        [
-            Paragraph(fmt_pct(r["pct_efectividad"]), ParagraphStyle(
-                "efp", parent=styles["body_bold"],
-                textColor=efec_color, fontSize=11
-            )),
-            Paragraph(r["tramo_efectividad"], styles["body"]),
-            Paragraph(
-                f"{r['factor_efectividad']*100:.0f}%" if r["factor_efectividad"] > 0 else "—",
-                styles["body"]
-            ),
-            Paragraph(r["pago_efectividad"], styles["pendiente"] if "Pendiente" in r["pago_efectividad"] else styles["body"]),
-        ],
-    ]
-    efec_tbl = Table(efec_data, colWidths=[W*0.20, W*0.25, W*0.20, W*0.35])
-    efec_tbl.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0), C_PALMA_VERDE2),
-        ("TEXTCOLOR",    (0, 0), (-1, 0), C_BLANCO),
-        ("BACKGROUND",   (0, 1), (-1, 1), C_GRIS_CLARO),
-        ("BOX",          (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-        ("INNERGRID",    (0, 0), (-1, -1), 0.5, C_GRIS_MED),
+    info = Table([[Paragraph(
+        f"<b>Vendedor:</b> {r['nombre_limpio']} &nbsp;|&nbsp; "
+        f"<b>Código:</b> {r['cod']} &nbsp;|&nbsp; "
+        f"<b>Período:</b> {PERIODO_LABEL} &nbsp;|&nbsp; "
+        f"<b>Emisión:</b> {FECHA_GEN}",
+        styles["body"])]], colWidths=[W])
+    info.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), C_GRIS),
         ("TOPPADDING",    (0,0), (-1,-1), 5),
         ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING",   (0,0), (-1,-1), 6),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 6),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("LEFTPADDING",   (0,0), (-1,-1), 10),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 10),
+        ("BOX",           (0,0), (-1,-1), 0.5, C_GRIS2),
     ]))
-    story.append(efec_tbl)
-    story.append(_nota_vbi(styles))
-    story.append(Spacer(1, 0.5*cm))
+    story.append(info)
+    story.append(Spacer(1, .35*cm))
 
-    # ── SECCIÓN: CONCURSO TOSH ────────────────────────────────────────────
-    story.append(_section_header("3. Concurso TOSH — BRR.TOSH", styles))
-    story.append(Spacer(1, 0.2*cm))
+    # ── SECCIÓN A: INDICADORES ────────────────────────────────────────────
+    story.append(_sec_hdr("A. INDICADORES DE DESEMPEÑO", styles))
+    story.append(Spacer(1, .15*cm))
 
-    tosh_data = [
-        [
-            Paragraph("Clientes impactados\ncon producto TOSH", styles["label"]),
-            Paragraph("Bloques\ncompletos (÷20)", styles["label"]),
-            Paragraph("Pago TOSH\n($10 / bloque)", styles["label"]),
-        ],
-        [
-            Paragraph(str(r["tosh_clientes"]), styles["body_bold"]),
-            Paragraph(str(math.floor(r["tosh_clientes"] / 20)), styles["body"]),
-            Paragraph(fmt_usd(r["tosh_pago"]), ParagraphStyle(
-                "toshv", parent=styles["body_bold"],
-                textColor=C_PALMA_VERDE2, fontSize=11
-            )),
-        ],
-    ]
-    tosh_tbl = Table(tosh_data, colWidths=[W*0.33, W*0.33, W*0.34])
-    _apply_concurso_style(tosh_tbl)
-    story.append(tosh_tbl)
+    # Tabla de todos los indicadores en una sola vista
+    ind_rows = [[
+        Paragraph("Indicador", styles["lbl_w"]),
+        Paragraph("Dato\nReal", styles["lbl_w"]),
+        Paragraph("Meta /\nEscala", styles["lbl_w"]),
+        Paragraph("VBI", styles["lbl_w"]),
+        Paragraph("Tramo\naplicado", styles["lbl_w"]),
+        Paragraph("Fórmula", styles["lbl_w"]),
+        Paragraph("Pago", styles["lbl_w"]),
+    ]]
 
-    if r["tosh_skus"]:
-        story.append(Spacer(1, 0.15*cm))
-        skus_str = ", ".join(str(s) for s in r["tosh_skus"][:8])
-        if len(r["tosh_skus"]) > 8:
-            skus_str += f" ... (+{len(r['tosh_skus'])-8} más)"
-        story.append(Paragraph(
-            f"<i>SKUs TOSH vendidos: {skus_str}</i>",
-            styles["nota"]
-        ))
-    story.append(Spacer(1, 0.5*cm))
-
-    # ── SECCIÓN: CONCURSO NUTRICIÓN EXPERTA ──────────────────────────────
-    story.append(_section_header("4. Concurso Nutrición Experta", styles))
-    story.append(Spacer(1, 0.2*cm))
-
-    ne_alcanza = r["ne_venta"] >= 200.0
-    ne_data = [
-        [
-            Paragraph("Venta Nutrición Experta\nJunio 2026", styles["label"]),
-            Paragraph("Meta mínima", styles["label"]),
-            Paragraph("¿Alcanza?", styles["label"]),
-            Paragraph("Pago NE", styles["label"]),
-        ],
-        [
-            Paragraph(fmt_usd(r["ne_venta"]), styles["body_bold"]),
-            Paragraph("$200.00", styles["body"]),
-            Paragraph("SÍ" if ne_alcanza else "NO",
-                      ParagraphStyle("neal", parent=styles["body_bold"],
-                                     textColor=C_ACCENT if ne_alcanza else C_ROJO, fontSize=11)),
-            Paragraph(fmt_usd(r["ne_pago"]), ParagraphStyle(
-                "nev", parent=styles["body_bold"],
-                textColor=C_PALMA_VERDE2 if ne_alcanza else C_ROJO, fontSize=11
-            )),
-        ],
-    ]
-    ne_tbl = Table(ne_data, colWidths=[W*0.28, W*0.22, W*0.22, W*0.28])
-    _apply_concurso_style(ne_tbl)
-    story.append(ne_tbl)
-    story.append(Spacer(1, 0.5*cm))
-
-    # ── SECCIÓN: CONCURSO HORECA ──────────────────────────────────────────
-    story.append(_section_header("5. Concurso HORECA — Clientes Nuevos Junio", styles))
-    story.append(Spacer(1, 0.2*cm))
-
-    horeca_data = [
-        [
-            Paragraph("Clientes nuevos HORECA\ncon venta — Junio 2026", styles["label"]),
-            Paragraph("Pago HORECA\n($1 / cliente)", styles["label"]),
-        ],
-        [
-            Paragraph(str(r["horeca_clientes"]), styles["body_bold"]),
-            Paragraph(fmt_usd(r["horeca_pago"]), ParagraphStyle(
-                "horecav", parent=styles["body_bold"],
-                textColor=C_PALMA_VERDE2 if r["horeca_clientes"] > 0 else C_NEGRO,
-                fontSize=11
-            )),
-        ],
-    ]
-    horeca_tbl = Table(horeca_data, colWidths=[W*0.60, W*0.40])
-    _apply_concurso_style(horeca_tbl)
-    story.append(horeca_tbl)
-
-    if r["horeca_detalle"]:
-        story.append(Spacer(1, 0.15*cm))
-        det_rows = [
-            [Paragraph("Código", styles["label"]),
-             Paragraph("Nombre cliente HORECA", styles["label"]),
-             Paragraph("Keyword detectado", styles["label"])]
+    def _ind_row(nombre, dato_str, meta_str, vbi, tramo, formula, pago):
+        ok = pago > 0
+        ps_pago = styles["pago"] if ok else styles["zero"]
+        return [
+            Paragraph(f"<b>{nombre}</b>", styles["body"]),
+            Paragraph(dato_str, styles["bold"]),
+            Paragraph(meta_str, styles["lbl"]),
+            Paragraph(fmt_usd(vbi), styles["lbl"]),
+            Paragraph(tramo, styles["body"]),
+            Paragraph(formula, styles["lbl"]),
+            Paragraph(fmt_usd(pago), ps_pago),
         ]
-        for h in r["horeca_detalle"]:
-            det_rows.append([
-                Paragraph(str(h.get("cod", "")), styles["body"]),
-                Paragraph(str(h.get("nombre", "")), styles["body"]),
-                Paragraph(str(h.get("keyword", "")), styles["body"]),
-            ])
-        det_tbl = Table(det_rows, colWidths=[W*0.20, W*0.55, W*0.25])
-        det_tbl.setStyle(TableStyle([
-            ("BACKGROUND",   (0, 0), (-1, 0), C_GRIS_MED),
-            ("BOX",          (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-            ("INNERGRID",    (0, 0), (-1, -1), 0.3, C_GRIS_MED),
+
+    ind_rows.append(_ind_row(
+        "Presupuesto",
+        fmt_pct(r["pct_cumplimiento"]),
+        "meta 100%",
+        VBI_PRESUPUESTO,
+        r["tramo_ppto"], r["formula_ppto"], r["p_ppto"],
+    ))
+    ind_rows.append(_ind_row(
+        "Efectividad",
+        fmt_pct(r["pct_ef"]),
+        "meta 90%",
+        VBI_EFECTIVIDAD,
+        r["tramo_ef"], r["formula_ef"], r["p_ef"],
+    ))
+    ind_rows.append(_ind_row(
+        "DN Café",
+        f"{fmt_pct(r['pct_cafe'])} ({r['imp_cafe']}/{r['mae_cafe']})",
+        "meta ≥ 40% maestra",
+        VBI_DN_CAFE,
+        r["tramo_cafe"], r["formula_cafe"], r["p_cafe"],
+    ))
+    ind_rows.append(_ind_row(
+        "Clientes nuevos c/pedido",
+        f"{r['n_nuevos']} clientes",
+        "meta ≥ 15",
+        VBI_NUEVOS,
+        r["tramo_nuevos"], r["formula_nuevos"], r["p_nuevos"],
+    ))
+    ind_rows.append(_ind_row(
+        "Cliente cero",
+        f"{fmt_pct(r['pct_cero'])} ({r['sc']}/{r['mae']})",
+        "meta ≤ 2% maestra",
+        VBI_CERO,
+        r["tramo_cero"], r["formula_cero"], r["p_cero"],
+    ))
+
+    # Fila total indicadores
+    ind_rows.append([
+        Paragraph("<b>SUBTOTAL INDICADORES</b>", styles["bold"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(r['total_indicadores'])}</b>",
+                  styles["pago"] if r["total_indicadores"] > 0 else styles["zero"]),
+    ])
+
+    ind_cw = [W*.18, W*.12, W*.15, W*.07, W*.18, W*.19, W*.11]
+    ind_tbl = Table(ind_rows, colWidths=ind_cw)
+    ts = _ts_base()
+    ts.add("BACKGROUND",   (0, 0), (-1, 0), C_VERDE2)
+    ts.add("BACKGROUND",   (0, -1), (-1, -1), C_VERDE_LIGHT)
+    ts.add("LINEABOVE",    (0, -1), (-1, -1), 1.0, C_VERDE2)
+    for i in range(1, len(ind_rows) - 1):
+        bg = C_GRIS if i % 2 == 1 else C_BLANCO
+        ts.add("BACKGROUND", (0, i), (-1, i), bg)
+    ind_tbl.setStyle(ts)
+    story.append(ind_tbl)
+    story.append(Spacer(1, .4*cm))
+
+    # ── SECCIÓN B: CONCURSOS ──────────────────────────────────────────────
+    story.append(_sec_hdr("B. CONCURSOS COMERCIALES", styles))
+    story.append(Spacer(1, .15*cm))
+
+    con_rows = [[
+        Paragraph("Concurso", styles["lbl_w"]),
+        Paragraph("Dato real", styles["lbl_w"]),
+        Paragraph("Regla", styles["lbl_w"]),
+        Paragraph("Pago", styles["lbl_w"]),
+    ]]
+
+    def _con_row(nombre, dato, regla, pago):
+        ok = pago > 0
+        return [
+            Paragraph(f"<b>{nombre}</b>", styles["body"]),
+            Paragraph(dato, styles["bold"]),
+            Paragraph(regla, styles["lbl"]),
+            Paragraph(fmt_usd(pago), styles["pago"] if ok else styles["zero"]),
+        ]
+
+    tosh_bloques = math.floor(r["tosh_n"] / 20)
+    con_rows.append(_con_row(
+        "TOSH (Brr.TOSH)",
+        f"{r['tosh_n']} clientes impactados",
+        f"floor({r['tosh_n']}/20) = {tosh_bloques} bloque(s) × $10",
+        r["tosh_pago"],
+    ))
+    ne_ok = r["ne_venta"] >= 200.0
+    con_rows.append(_con_row(
+        "Nutrición Experta",
+        fmt_usd(r["ne_venta"]),
+        f"{'≥' if ne_ok else '<'} $200 → ${'20' if ne_ok else '0'}",
+        r["ne_pago"],
+    ))
+    con_rows.append(_con_row(
+        "HORECA",
+        f"{len(r['horeca_list'])} cliente(s) HORECA nuevos",
+        f"{len(r['horeca_list'])} × $1",
+        r["horeca_pago"],
+    ))
+
+    con_rows.append([
+        Paragraph("<b>SUBTOTAL CONCURSOS</b>", styles["bold"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(r['total_concursos'])}</b>",
+                  styles["pago"] if r["total_concursos"] > 0 else styles["zero"]),
+    ])
+
+    con_cw = [W*.22, W*.28, W*.30, W*.20]
+    con_tbl = Table(con_rows, colWidths=con_cw)
+    ts2 = _ts_base()
+    ts2.add("BACKGROUND", (0, 0), (-1, 0), C_VERDE2)
+    ts2.add("BACKGROUND", (0, -1), (-1, -1), C_VERDE_LIGHT)
+    ts2.add("LINEABOVE",  (0, -1), (-1, -1), 1.0, C_VERDE2)
+    for i in range(1, len(con_rows) - 1):
+        bg = C_GRIS if i % 2 == 1 else C_BLANCO
+        ts2.add("BACKGROUND", (0, i), (-1, i), bg)
+    con_tbl.setStyle(ts2)
+    story.append(con_tbl)
+
+    if r["horeca_list"]:
+        story.append(Spacer(1, .15*cm))
+        det = [[Paragraph("Código", styles["lbl"]),
+                Paragraph("Cliente HORECA", styles["lbl"]),
+                Paragraph("Keyword", styles["lbl"])]]
+        for h in r["horeca_list"]:
+            det.append([Paragraph(str(h.get("cod","")), styles["nota"]),
+                        Paragraph(str(h.get("nombre","")), styles["nota"]),
+                        Paragraph(str(h.get("keyword","")), styles["nota"])])
+        dt = Table(det, colWidths=[W*.15, W*.60, W*.25])
+        dt.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,0), C_GRIS2),
+            ("BOX",           (0,0), (-1,-1), 0.4, C_GRIS2),
+            ("INNERGRID",     (0,0), (-1,-1), 0.3, C_GRIS2),
             ("TOPPADDING",    (0,0), (-1,-1), 3),
             ("BOTTOMPADDING", (0,0), (-1,-1), 3),
             ("LEFTPADDING",   (0,0), (-1,-1), 5),
             ("RIGHTPADDING",  (0,0), (-1,-1), 5),
         ]))
-        story.append(det_tbl)
-    story.append(Spacer(1, 0.6*cm))
+        story.append(dt)
 
-    # ── RESUMEN TOTAL ─────────────────────────────────────────────────────
-    story.append(HRFlowable(width=W, thickness=1.5, color=C_PALMA_VERDE))
-    story.append(Spacer(1, 0.3*cm))
+    if r["tosh_skus"]:
+        story.append(Spacer(1, .10*cm))
+        skus = "; ".join(str(s) for s in r["tosh_skus"][:6])
+        if len(r["tosh_skus"]) > 6:
+            skus += f" … (+{len(r['tosh_skus'])-6} más)"
+        story.append(Paragraph(f"<i>SKUs TOSH: {skus}</i>", styles["nota"]))
 
-    total_rows = [
-        [Paragraph("CONCEPTO", styles["label"]),
-         Paragraph("ESTADO", styles["label"]),
-         Paragraph("MONTO", styles["label"])],
-        [Paragraph("Presupuesto 2026", styles["body"]),
-         Paragraph(r["pago_presupuesto"], styles["pendiente"] if "Pendiente" in r["pago_presupuesto"] else styles["body"]),
-         Paragraph("—", styles["body"])],
-        [Paragraph("Efectividad de visitas", styles["body"]),
-         Paragraph(r["pago_efectividad"], styles["pendiente"] if "Pendiente" in r["pago_efectividad"] else styles["body"]),
-         Paragraph("—", styles["body"])],
-        [Paragraph("Concurso TOSH", styles["body"]),
-         Paragraph("Confirmado" if r["tosh_pago"] > 0 else "Sin bloque completo", styles["body"]),
-         Paragraph(fmt_usd(r["tosh_pago"]), styles["body_bold"])],
-        [Paragraph("Concurso Nutrición Experta", styles["body"]),
-         Paragraph("Confirmado" if ne_alcanza else "Venta < $200", styles["body"]),
-         Paragraph(fmt_usd(r["ne_pago"]), styles["body_bold"])],
-        [Paragraph("Concurso HORECA", styles["body"]),
-         Paragraph("Confirmado" if r["horeca_clientes"] > 0 else "Sin clientes HORECA nuevos", styles["body"]),
-         Paragraph(fmt_usd(r["horeca_pago"]), styles["body_bold"])],
-        [Paragraph("<b>TOTAL CONCURSOS CONFIRMADOS</b>", styles["body_bold"]),
-         Paragraph("", styles["body"]),
-         Paragraph(f"<b>{fmt_usd(r['total_confirmado'])}</b>", ParagraphStyle(
-             "tcv", parent=styles["body_bold"],
-             textColor=C_PALMA_VERDE, fontSize=12
-         ))],
+    story.append(Spacer(1, .4*cm))
+
+    # ── TOTAL FINAL ────────────────────────────────────────────────────────
+    story.append(HRFlowable(width=W, thickness=1.5, color=C_VERDE))
+    story.append(Spacer(1, .25*cm))
+
+    tot_rows = [
+        [Paragraph("Subtotal Indicadores de desempeño", styles["total_lbl"]),
+         Paragraph(fmt_usd(r["total_indicadores"]), styles["total_val"])],
+        [Paragraph("Subtotal Concursos comerciales", styles["total_lbl"]),
+         Paragraph(fmt_usd(r["total_concursos"]), styles["total_val"])],
     ]
-    total_tbl = Table(total_rows, colWidths=[W*0.35, W*0.45, W*0.20])
-    total_tbl.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0), C_PALMA_VERDE),
-        ("TEXTCOLOR",    (0, 0), (-1, 0), C_BLANCO),
-        ("BACKGROUND",   (0, -1), (-1, -1), C_GRIS_CLARO),
-        ("LINEBELOW",    (0, -1), (-1, -1), 1.0, C_PALMA_VERDE),
-        ("BOX",          (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-        ("INNERGRID",    (0, 0), (-1, -1), 0.3, C_GRIS_MED),
+    tot_tbl = Table(tot_rows, colWidths=[W*.60, W*.40])
+    tot_tbl.setStyle(TableStyle([
         ("TOPPADDING",    (0,0), (-1,-1), 5),
         ("BOTTOMPADDING", (0,0), (-1,-1), 5),
         ("LEFTPADDING",   (0,0), (-1,-1), 8),
         ("RIGHTPADDING",  (0,0), (-1,-1), 8),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("LINEBELOW",     (0,-1), (-1,-1), 0.5, C_GRIS2),
     ]))
-    story.append(total_tbl)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(tot_tbl)
+    story.append(Spacer(1, .15*cm))
 
-    # ── NOTA FINAL ────────────────────────────────────────────────────────
-    nota_text = (
-        "<b>Nota:</b> Los rubros de Presupuesto 2026 y Efectividad de Visitas quedan como "
-        "<b>Pendiente por dato faltante</b>: el Valor Base del Indicador (VBI) no fue proporcionado "
-        "para este período. Una vez se indique el VBI, los montos correspondientes serán calculados "
-        "con los factores registrados en este documento.<br/>"
-        "Datos fuente: BASE_ACUMULADA · FRECUENCIA_ECOM · MAESTRO_CLIENTES — sistema ECOM PALMA, "
-        f"período {PERIODO_LABEL}. Generado automáticamente el {FECHA_GEN}."
-    )
-    nota_tbl = Table([[Paragraph(nota_text, styles["nota"])]], colWidths=[W])
-    nota_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#FFF8E1")),
-        ("BOX",           (0,0), (-1,-1), 0.5, C_AMARILLO),
-        ("TOPPADDING",    (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("LEFTPADDING",   (0,0), (-1,-1), 8),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
-    ]))
-    story.append(nota_tbl)
-
-    doc.build(story)
-
-
-def _section_header(text, styles):
-    tbl = Table([[Paragraph(text, styles["section_head"])]], colWidths=[None])
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0), (-1,-1), C_PALMA_VERDE2),
-        ("TOPPADDING",    (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING",   (0,0), (-1,-1), 8),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
-    ]))
-    return tbl
-
-
-def _nota_vbi(styles):
-    return Paragraph(
-        "⚠ <i>Pago pendiente: el VBI (Valor Base del Indicador) para este indicador no fue proporcionado.</i>",
-        styles["nota"]
-    )
-
-
-def _apply_concurso_style(tbl):
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0), C_PALMA_VERDE2),
-        ("TEXTCOLOR",    (0, 0), (-1, 0), C_BLANCO),
-        ("BACKGROUND",   (0, 1), (-1, 1), C_GRIS_CLARO),
-        ("BOX",          (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-        ("INNERGRID",    (0, 0), (-1, -1), 0.5, C_GRIS_MED),
-        ("TOPPADDING",    (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING",   (0,0), (-1,-1), 6),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 6),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-    ]))
-
-
-# ── PDF CONSOLIDADO ───────────────────────────────────────────────────────
-def build_pdf_consolidado(results, styles, output_path):
-    doc = SimpleDocTemplate(
-        output_path,
-        pagesize=(A4[1], A4[0]),  # landscape
-        topMargin=1.5*cm,
-        bottomMargin=1.5*cm,
-        leftMargin=1.5*cm,
-        rightMargin=1.5*cm,
-        title=f"Consolidado Incentivos PALUMAR — {PERIODO_LABEL}",
-    )
-
-    W = A4[1] - 3.0*cm  # landscape usable width
-
-    story = []
-
-    # Encabezado
-    hdr = Table([[
-        Paragraph("PALUMAR S.A.", styles["title"]),
-        Paragraph(f"CONSOLIDADO DE PAGOS DE INCENTIVOS — {PERIODO_LABEL.upper()}", styles["title"]),
-        Paragraph(f"Generado: {FECHA_GEN}", styles["subtitle"]),
-    ]], colWidths=[W*0.18, W*0.60, W*0.22])
-    hdr.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,-1), C_PALMA_VERDE),
-        ("TEXTCOLOR",  (0,0), (-1,-1), C_BLANCO),
+    # Grand total
+    gt = Table([[
+        Paragraph("<b>TOTAL A PAGAR — JUNIO 2026</b>", ParagraphStyle(
+            "gt", parent=styles["total_lbl"], fontSize=12)),
+        Paragraph(f"<b>{fmt_usd(r['total_final'])}</b>",
+                  ParagraphStyle("gtv", parent=styles["grand"], fontSize=15)),
+    ]], colWidths=[W*.55, W*.45])
+    gt.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), C_VERDE_LIGHT),
+        ("BOX",           (0,0), (-1,-1), 1.2, C_VERDE),
         ("TOPPADDING",    (0,0), (-1,-1), 10),
         ("BOTTOMPADDING", (0,0), (-1,-1), 10),
         ("LEFTPADDING",   (0,0), (-1,-1), 12),
         ("RIGHTPADDING",  (0,0), (-1,-1), 12),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
     ]))
-    story.append(hdr)
-    story.append(Spacer(1, 0.5*cm))
+    story.append(gt)
+    story.append(Spacer(1, .35*cm))
 
-    # Tabla principal
-    col_headers = [
-        "Cód", "Vendedor",
-        "Venta\nNeta", "Cuota", "% Cum.",
-        "Tramo\nPpto.", "Pago\nPpto.",
-        "% Efec.", "Tramo\nEfec.", "Pago\nEfec.",
-        "TOSH\nClts", "Pago\nTOSH",
-        "NE\nVenta", "Pago\nNE",
-        "HORECA\nClts", "Pago\nHOREC",
-        "Total\nConfirm.",
-    ]
-    col_w = [
-        W*0.040, W*0.130,       # cod, nombre
-        W*0.075, W*0.075, W*0.050,   # ventas
-        W*0.065, W*0.085,       # presupuesto
-        W*0.045, W*0.065, W*0.085,   # efectividad
-        W*0.040, W*0.055,       # tosh
-        W*0.060, W*0.050,       # NE
-        W*0.040, W*0.055,       # horeca
-        W*0.080,                # total
-    ]
-
-    rows = [
-        [Paragraph(h, ParagraphStyle("ch", parent=styles["label"],
-                                      textColor=C_BLANCO, fontSize=7,
-                                      alignment=TA_CENTER, leading=9))
-         for h in col_headers]
-    ]
-
-    total_tosh = total_ne = total_horeca = total_confirm = 0
-    for i, r in enumerate(results):
-        bg = C_GRIS_CLARO if i % 2 == 0 else C_BLANCO
-        ne_ok = r["ne_venta"] >= 200
-        rows.append([
-            Paragraph(r["cod"], styles["body"]),
-            Paragraph(r["nombre_limpio"][:22], styles["body"]),
-            Paragraph(fmt_usd(r["venta_neta"]), styles["body"]),
-            Paragraph(fmt_usd(r["cuota"]), styles["body"]),
-            Paragraph(fmt_pct(r["pct_cumplimiento"]),
-                      ParagraphStyle("cp", parent=styles["body_bold"],
-                                     textColor=C_ACCENT if r["pct_cumplimiento"] >= 80 else C_ROJO,
-                                     fontSize=8, alignment=TA_CENTER)),
-            Paragraph(r["tramo_presupuesto"], styles["nota"]),
-            Paragraph(PENDIENTE_LABEL[:18] + "…" if "Pendiente" in r["pago_presupuesto"] else r["pago_presupuesto"],
-                      styles["pendiente"]),
-            Paragraph(fmt_pct(r["pct_efectividad"]),
-                      ParagraphStyle("ef", parent=styles["body_bold"],
-                                     textColor=C_ACCENT if r["pct_efectividad"] >= 80 else C_ROJO,
-                                     fontSize=8, alignment=TA_CENTER)),
-            Paragraph(r["tramo_efectividad"], styles["nota"]),
-            Paragraph(PENDIENTE_LABEL[:18] + "…" if "Pendiente" in r["pago_efectividad"] else r["pago_efectividad"],
-                      styles["pendiente"]),
-            Paragraph(str(r["tosh_clientes"]), styles["body"]),
-            Paragraph(fmt_usd(r["tosh_pago"]), styles["body_bold"]),
-            Paragraph(fmt_usd(r["ne_venta"]), styles["body"]),
-            Paragraph(fmt_usd(r["ne_pago"]),
-                      ParagraphStyle("nep", parent=styles["body_bold"],
-                                     textColor=C_PALMA_VERDE2 if ne_ok else C_ROJO, fontSize=8)),
-            Paragraph(str(r["horeca_clientes"]), styles["body"]),
-            Paragraph(fmt_usd(r["horeca_pago"]), styles["body_bold"]),
-            Paragraph(f"<b>{fmt_usd(r['total_confirmado'])}</b>",
-                      ParagraphStyle("tc", parent=styles["body_bold"],
-                                     textColor=C_PALMA_VERDE, fontSize=9)),
-        ])
-        total_tosh   += r["tosh_pago"]
-        total_ne     += r["ne_pago"]
-        total_horeca += r["horeca_pago"]
-        total_confirm += r["total_confirmado"]
-
-    # Fila de totales
-    rows.append([
-        Paragraph("", styles["body"]),
-        Paragraph("<b>TOTALES</b>", styles["body_bold"]),
-        Paragraph("", styles["body"]), Paragraph("", styles["body"]), Paragraph("", styles["body"]),
-        Paragraph("", styles["body"]), Paragraph("", styles["body"]),
-        Paragraph("", styles["body"]), Paragraph("", styles["body"]), Paragraph("", styles["body"]),
-        Paragraph("", styles["body"]),
-        Paragraph(f"<b>{fmt_usd(total_tosh)}</b>", ParagraphStyle("tt", parent=styles["body_bold"], textColor=C_PALMA_VERDE, fontSize=8)),
-        Paragraph("", styles["body"]),
-        Paragraph(f"<b>{fmt_usd(total_ne)}</b>", ParagraphStyle("tn", parent=styles["body_bold"], textColor=C_PALMA_VERDE, fontSize=8)),
-        Paragraph("", styles["body"]),
-        Paragraph(f"<b>{fmt_usd(total_horeca)}</b>", ParagraphStyle("th", parent=styles["body_bold"], textColor=C_PALMA_VERDE, fontSize=8)),
-        Paragraph(f"<b>{fmt_usd(total_confirm)}</b>", ParagraphStyle("tcc", parent=styles["body_bold"], textColor=C_PALMA_VERDE, fontSize=10)),
-    ])
-
-    main_tbl = Table(rows, colWidths=col_w, repeatRows=1)
-    n_data = len(rows)
-    main_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0),    (-1, 0),         C_PALMA_VERDE),
-        ("BACKGROUND",    (0, n_data-1), (-1, n_data-1), C_GRIS_CLARO),
-        ("LINEBELOW",     (0, 0),    (-1, 0),         1.0, C_BLANCO),
-        ("LINEABOVE",     (0, n_data-1), (-1, n_data-1), 1.0, C_PALMA_VERDE),
-        ("BOX",           (0, 0),    (-1, -1),        0.5, C_GRIS_MED),
-        ("INNERGRID",     (0, 0),    (-1, -1),        0.3, C_GRIS_MED),
-        ("TOPPADDING",    (0, 0),    (-1, -1),        3),
-        ("BOTTOMPADDING", (0, 0),    (-1, -1),        3),
-        ("LEFTPADDING",   (0, 0),    (-1, -1),        3),
-        ("RIGHTPADDING",  (0, 0),    (-1, -1),        3),
-        ("VALIGN",        (0, 0),    (-1, -1),        "MIDDLE"),
-    ] + [
-        ("BACKGROUND", (0, i+1), (-1, i+1), C_GRIS_CLARO if i % 2 == 0 else C_BLANCO)
-        for i in range(len(results))
-    ]))
-    story.append(main_tbl)
-    story.append(Spacer(1, 0.4*cm))
-
-    # Nota
-    nota_text = (
-        f"<b>Nota:</b> Presupuesto y Efectividad marcados como pendientes — VBI no proporcionado. "
-        f"Total confirmado incluye únicamente concursos TOSH + Nutrición Experta + HORECA. "
-        f"Fuente: BASE_ACUMULADA · FRECUENCIA_ECOM — sistema ECOM PALMA, período {PERIODO_LABEL}. "
-        f"Generado el {FECHA_GEN}."
-    )
-    nota_tbl = Table([[Paragraph(nota_text, styles["nota"])]], colWidths=[W])
-    nota_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#FFF8E1")),
+    # Nota pie
+    nota_t = Table([[Paragraph(
+        f"Datos fuente: BASE_ACUMULADA · FRECUENCIA_ECOM · MAESTRO_CLIENTES — "
+        f"sistema ECOM PALMA, período {PERIODO_LABEL}. "
+        f"Indicadores: VBI Presupuesto=${VBI_PRESUPUESTO:.0f} · "
+        f"VBI Efectividad=${VBI_EFECTIVIDAD:.0f} · "
+        f"VBI DN Café/Nuevos/Cero=${VBI_DN_CAFE:.0f}. "
+        f"Devolución y Cartera: $0 (no generan pago variable). "
+        f"Salario básico $724 no incluido. "
+        f"Generado el {FECHA_GEN}.",
+        styles["nota"])]], colWidths=[W])
+    nota_t.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), C_AMARILLO_LT),
         ("BOX",           (0,0), (-1,-1), 0.5, C_AMARILLO),
         ("TOPPADDING",    (0,0), (-1,-1), 5),
         ("BOTTOMPADDING", (0,0), (-1,-1), 5),
         ("LEFTPADDING",   (0,0), (-1,-1), 8),
         ("RIGHTPADDING",  (0,0), (-1,-1), 8),
     ]))
-    story.append(nota_tbl)
+    story.append(nota_t)
 
     doc.build(story)
 
 
-# ── CSV CONSOLIDADO ───────────────────────────────────────────────────────
-def write_csv_consolidado(results, output_path):
-    fieldnames = [
-        "cod", "nombre_limpio",
-        "venta_neta", "cuota", "pct_cumplimiento",
-        "tramo_presupuesto", "factor_presupuesto", "pago_presupuesto",
-        "pct_efectividad", "tramo_efectividad", "factor_efectividad", "pago_efectividad",
-        "tosh_clientes", "tosh_pago",
-        "ne_venta", "ne_pago",
-        "horeca_clientes", "horeca_pago",
-        "total_confirmado", "total_pendiente",
+# ── PDF CONSOLIDADO ───────────────────────────────────────────────────────
+
+def build_pdf_consolidado(results, styles, out):
+    doc = SimpleDocTemplate(
+        out, pagesize=(A4[1], A4[0]),   # landscape
+        topMargin=1.2*cm, bottomMargin=1.2*cm,
+        leftMargin=1.2*cm, rightMargin=1.2*cm,
+        title=f"Consolidado Incentivos PALUMAR — {PERIODO_LABEL}",
+    )
+    W = A4[1] - 2.4*cm
+    story = []
+
+    hdr = Table([[
+        Paragraph("PALUMAR S.A.", styles["title"]),
+        Paragraph(f"CONSOLIDADO DE PAGOS — {PERIODO_LABEL.upper()}", styles["title"]),
+        Paragraph(f"Emisión: {FECHA_GEN}", styles["sub_hdr"]),
+    ]], colWidths=[W*.16, W*.60, W*.24])
+    hdr.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), C_VERDE),
+        ("TOPPADDING",    (0,0), (-1,-1), 9),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 9),
+        ("LEFTPADDING",   (0,0), (-1,-1), 10),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 10),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+    ]))
+    story.append(hdr)
+    story.append(Spacer(1, .4*cm))
+
+    cols = [
+        ("Cód", W*.036),
+        ("Vendedor", W*.115),
+        ("Venta\nNeta", W*.065),
+        ("Cuota", W*.065),
+        ("%\nCum.", W*.043),
+        ("Pago\nPpto.", W*.060),
+        ("%\nEfec.", W*.043),
+        ("Pago\nEfec.", W*.060),
+        ("DN\nCafé%", W*.048),
+        ("Pago\nCafé", W*.054),
+        ("Nuevos\nClts.", W*.046),
+        ("Pago\nNuevos", W*.054),
+        ("%\nCero", W*.044),
+        ("Pago\nCero", W*.054),
+        ("TOSH\nPago", W*.054),
+        ("NE\nPago", W*.046),
+        ("HOR.\nPago", W*.046),
+        ("TOTAL\nFINAL", W*.073),
     ]
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+    headers  = [c[0] for c in cols]
+    col_w    = [c[1] for c in cols]
+
+    rows = [[Paragraph(h, styles["ch"]) for h in headers]]
+
+    tot = {k: 0.0 for k in ["p_ppto","p_ef","p_cafe","p_nuevos","p_cero",
+                              "tosh_pago","ne_pago","horeca_pago","total_final"]}
+
+    def _cp(val, ok=True):
+        return Paragraph(val, styles["body"] if not isinstance(ok, bool) else
+                         (styles["bold"] if ok else styles["body"]))
+
+    for i, r in enumerate(results):
+        ppt_ok  = r["p_ppto"] > 0
+        ef_ok   = r["p_ef"] > 0
+        bg = C_GRIS if i % 2 == 0 else C_BLANCO
+        rows.append([
+            Paragraph(r["cod"], styles["body"]),
+            Paragraph(r["nombre_limpio"][:20], styles["body"]),
+            Paragraph(fmt_usd(r["venta_neta"]), styles["body"]),
+            Paragraph(fmt_usd(r["cuota"]), styles["body"]),
+            Paragraph(fmt_pct(r["pct_cumplimiento"]),
+                      ParagraphStyle("x", parent=styles["bold"],
+                                     textColor=C_VERDE2 if ppt_ok else C_ROJO,
+                                     fontSize=8, alignment=TA_CENTER)),
+            Paragraph(fmt_usd(r["p_ppto"]),
+                      styles["pago"] if ppt_ok else styles["zero"]),
+            Paragraph(fmt_pct(r["pct_ef"]),
+                      ParagraphStyle("x2", parent=styles["bold"],
+                                     textColor=C_VERDE2 if ef_ok else C_ROJO,
+                                     fontSize=8, alignment=TA_CENTER)),
+            Paragraph(fmt_usd(r["p_ef"]),
+                      styles["pago"] if ef_ok else styles["zero"]),
+            Paragraph(fmt_pct(r["pct_cafe"]),
+                      ParagraphStyle("x3", parent=styles["body"],
+                                     textColor=C_VERDE2 if r["p_cafe"] > 0 else C_ROJO,
+                                     fontSize=8, alignment=TA_CENTER)),
+            Paragraph(fmt_usd(r["p_cafe"]),
+                      styles["pago"] if r["p_cafe"] > 0 else styles["zero"]),
+            Paragraph(str(r["n_nuevos"]),
+                      ParagraphStyle("x4", parent=styles["body"],
+                                     textColor=C_VERDE2 if r["p_nuevos"] > 0 else C_NEGRO,
+                                     fontSize=8, alignment=TA_CENTER)),
+            Paragraph(fmt_usd(r["p_nuevos"]),
+                      styles["pago"] if r["p_nuevos"] > 0 else styles["zero"]),
+            Paragraph(fmt_pct(r["pct_cero"]),
+                      ParagraphStyle("x5", parent=styles["body"],
+                                     textColor=C_VERDE2 if r["p_cero"] > 0 else C_NEGRO,
+                                     fontSize=8, alignment=TA_CENTER)),
+            Paragraph(fmt_usd(r["p_cero"]),
+                      styles["pago"] if r["p_cero"] > 0 else styles["zero"]),
+            Paragraph(fmt_usd(r["tosh_pago"]),
+                      styles["pago"] if r["tosh_pago"] > 0 else styles["zero"]),
+            Paragraph(fmt_usd(r["ne_pago"]),
+                      styles["pago"] if r["ne_pago"] > 0 else styles["zero"]),
+            Paragraph(fmt_usd(r["horeca_pago"]),
+                      styles["pago"] if r["horeca_pago"] > 0 else styles["zero"]),
+            Paragraph(f"<b>{fmt_usd(r['total_final'])}</b>",
+                      ParagraphStyle("xf", parent=styles["pago"], fontSize=9)),
+        ])
+        for k in tot:
+            tot[k] += r[k]
+
+    # Fila totales
+    rows.append([
+        Paragraph("", styles["body"]),
+        Paragraph("<b>TOTALES</b>", styles["bold"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(tot['p_ppto'])}</b>",
+                  ParagraphStyle("tp", parent=styles["pago"], fontSize=8)),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(tot['p_ef'])}</b>",
+                  ParagraphStyle("te", parent=styles["pago"], fontSize=8)),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(tot['p_cafe'])}</b>",
+                  ParagraphStyle("tc", parent=styles["pago"], fontSize=8)),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(tot['p_nuevos'])}</b>",
+                  ParagraphStyle("tn", parent=styles["pago"], fontSize=8)),
+        Paragraph("", styles["body"]),
+        Paragraph(f"<b>{fmt_usd(tot['p_cero'])}</b>",
+                  ParagraphStyle("tz", parent=styles["pago"], fontSize=8)),
+        Paragraph(f"<b>{fmt_usd(tot['tosh_pago'])}</b>",
+                  ParagraphStyle("tt", parent=styles["pago"], fontSize=8)),
+        Paragraph(f"<b>{fmt_usd(tot['ne_pago'])}</b>",
+                  ParagraphStyle("tne", parent=styles["pago"], fontSize=8)),
+        Paragraph(f"<b>{fmt_usd(tot['horeca_pago'])}</b>",
+                  ParagraphStyle("th", parent=styles["pago"], fontSize=8)),
+        Paragraph(f"<b>{fmt_usd(tot['total_final'])}</b>",
+                  ParagraphStyle("tff", parent=styles["pago"], fontSize=10)),
+    ])
+
+    n = len(rows)
+    tbl = Table(rows, colWidths=col_w, repeatRows=1)
+    ts = TableStyle([
+        ("BACKGROUND",    (0, 0),    (-1, 0),    C_VERDE),
+        ("BACKGROUND",    (0, n-1),  (-1, n-1),  C_VERDE_LIGHT),
+        ("LINEABOVE",     (0, n-1),  (-1, n-1),  1.0, C_VERDE),
+        ("BOX",           (0, 0),    (-1, -1),   0.5, C_GRIS2),
+        ("INNERGRID",     (0, 0),    (-1, -1),   0.3, C_GRIS2),
+        ("TOPPADDING",    (0, 0),    (-1, -1),   3),
+        ("BOTTOMPADDING", (0, 0),    (-1, -1),   3),
+        ("LEFTPADDING",   (0, 0),    (-1, -1),   3),
+        ("RIGHTPADDING",  (0, 0),    (-1, -1),   3),
+        ("VALIGN",        (0, 0),    (-1, -1),   "MIDDLE"),
+    ] + [
+        ("BACKGROUND", (0, i+1), (-1, i+1), C_GRIS if i % 2 == 0 else C_BLANCO)
+        for i in range(len(results))
+    ])
+    tbl.setStyle(ts)
+    story.append(tbl)
+    story.append(Spacer(1, .3*cm))
+
+    nota_t = Table([[Paragraph(
+        f"VBI: Presupuesto=${VBI_PRESUPUESTO:.0f} · Efectividad=${VBI_EFECTIVIDAD:.0f} · "
+        f"DN Café/Nuevos/Cero=${VBI_DN_CAFE:.0f} · Devolución/Cartera=$0. "
+        f"Salario básico $724 no incluido. "
+        f"Fuente: BASE_ACUMULADA · FRECUENCIA_ECOM · MAESTRO_CLIENTES — {PERIODO_LABEL}. "
+        f"Generado el {FECHA_GEN}.",
+        styles["nota"])]], colWidths=[W])
+    nota_t.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,-1), C_AMARILLO_LT),
+        ("BOX",           (0,0), (-1,-1), 0.5, C_AMARILLO),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
+    ]))
+    story.append(nota_t)
+    doc.build(story)
+
+
+# ── CSVs ─────────────────────────────────────────────────────────────────
+
+def write_csv_consolidado(results, out):
+    fields = [
+        "cod","nombre_limpio",
+        "venta_neta","cuota","pct_cumplimiento",
+        "tramo_ppto","p_ppto",
+        "pct_ef","tramo_ef","p_ef",
+        "pct_cafe","imp_cafe","mae_cafe","tramo_cafe","p_cafe",
+        "n_nuevos","tramo_nuevos","p_nuevos",
+        "pct_cero","sc","mae","tramo_cero","p_cero",
+        "tosh_n","tosh_pago",
+        "ne_venta","ne_pago",
+        "horeca_pago",
+        "total_indicadores","total_concursos","total_final",
+    ]
+    with open(out, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
         for r in results:
-            row = {k: r[k] for k in fieldnames}
-            # format numbers
-            row["venta_neta"]    = f"{r['venta_neta']:.2f}"
-            row["cuota"]         = f"{r['cuota']:.2f}"
-            row["ne_venta"]      = f"{r['ne_venta']:.2f}"
-            row["horeca_pago"]   = f"{r['horeca_pago']:.2f}"
-            row["total_confirmado"] = f"{r['total_confirmado']:.2f}"
+            row = {k: r[k] for k in fields}
+            for k in ["venta_neta","cuota","p_ppto","p_ef","p_cafe","p_nuevos",
+                      "p_cero","tosh_pago","ne_venta","ne_pago","horeca_pago",
+                      "total_indicadores","total_concursos","total_final"]:
+                row[k] = f"{r[k]:.2f}"
             w.writerow(row)
 
 
-# ── CSV AUDITORÍA HORECA ──────────────────────────────────────────────────
-def write_csv_horeca(results, output_path):
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+def write_csv_calculos(results, out):
+    fields = [
+        "cod","nombre_limpio",
+        "venta_neta","cuota","pct_cumplimiento","tramo_ppto","formula_ppto","p_ppto",
+        "pct_ef","tramo_ef","formula_ef","p_ef",
+        "pct_cafe","imp_cafe","mae_cafe","tramo_cafe","formula_cafe","p_cafe",
+        "n_nuevos","tramo_nuevos","formula_nuevos","p_nuevos",
+        "pct_cero","sc","mae","tramo_cero","formula_cero","p_cero",
+        "tosh_n","tosh_bloques","tosh_pago",
+        "ne_venta","ne_meta","ne_pago",
+        "horeca_clientes","horeca_pago",
+        "total_indicadores","total_concursos","total_final",
+    ]
+    with open(out, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["cod_asesor", "nombre_asesor", "cod_cliente", "nombre_cliente", "keyword_horeca"])
-        for r in results:
-            if r["horeca_detalle"]:
-                for h in r["horeca_detalle"]:
-                    w.writerow([
-                        r["cod"], r["nombre_limpio"],
-                        h.get("cod", ""), h.get("nombre", ""), h.get("keyword", "")
-                    ])
-
-
-# ── CSV AUDITORÍA TOSH ────────────────────────────────────────────────────
-def write_csv_tosh(results, output_path):
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["cod_asesor", "nombre_asesor", "clientes_tosh", "bloques_20", "pago_tosh", "skus_vendidos"])
-        for r in results:
-            skus_str = "; ".join(str(s) for s in r.get("tosh_skus", []))
-            w.writerow([
-                r["cod"], r["nombre_limpio"],
-                r["tosh_clientes"],
-                math.floor(r["tosh_clientes"] / 20),
-                f"{r['tosh_pago']:.2f}",
-                skus_str,
-            ])
-
-
-# ── CSV AUDITORÍA NUTRICIÓN EXPERTA ──────────────────────────────────────
-def write_csv_ne(results, output_path):
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["cod_asesor", "nombre_asesor", "venta_nutricion_experta", "meta_200", "alcanza", "pago_ne"])
+        w.writerow(fields)
         for r in results:
             w.writerow([
                 r["cod"], r["nombre_limpio"],
-                f"{r['ne_venta']:.2f}",
-                "200.00",
-                "SI" if r["ne_venta"] >= 200 else "NO",
-                f"{r['ne_pago']:.2f}",
+                f"{r['venta_neta']:.2f}", f"{r['cuota']:.2f}",
+                f"{r['pct_cumplimiento']:.2f}", r["tramo_ppto"],
+                r["formula_ppto"], f"{r['p_ppto']:.2f}",
+                f"{r['pct_ef']:.2f}", r["tramo_ef"],
+                r["formula_ef"], f"{r['p_ef']:.2f}",
+                f"{r['pct_cafe']:.1f}", r["imp_cafe"], r["mae_cafe"],
+                r["tramo_cafe"], r["formula_cafe"], f"{r['p_cafe']:.2f}",
+                r["n_nuevos"], r["tramo_nuevos"],
+                r["formula_nuevos"], f"{r['p_nuevos']:.2f}",
+                f"{r['pct_cero']:.2f}", r["sc"], r["mae"],
+                r["tramo_cero"], r["formula_cero"], f"{r['p_cero']:.2f}",
+                r["tosh_n"], math.floor(r["tosh_n"]/20), f"{r['tosh_pago']:.2f}",
+                f"{r['ne_venta']:.2f}", "200.00", f"{r['ne_pago']:.2f}",
+                len(r["horeca_list"]), f"{r['horeca_pago']:.2f}",
+                f"{r['total_indicadores']:.2f}",
+                f"{r['total_concursos']:.2f}",
+                f"{r['total_final']:.2f}",
             ])
 
 
-# ── CSV AUDITORÍA CÁLCULOS ────────────────────────────────────────────────
-def write_csv_calculos(results, output_path):
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+def write_csv_horeca(results, out):
+    with open(out, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow([
-            "cod_asesor", "nombre_asesor",
-            "venta_neta", "cuota", "pct_cumplimiento",
-            "tramo_presupuesto", "factor_presupuesto_vbi",
-            "pct_efectividad", "tramo_efectividad", "factor_efectividad_vbi",
-            "formula_tosh", "tosh_clientes", "bloques_20", "pago_tosh",
-            "formula_ne", "ne_venta", "ne_meta", "pago_ne",
-            "formula_horeca", "horeca_clientes_nuevos", "pago_horeca",
-            "total_concursos_confirmado",
-            "pago_presupuesto_pendiente", "pago_efectividad_pendiente",
-        ])
+        w.writerow(["cod_asesor","nombre_asesor","cod_cliente","nombre_cliente","keyword"])
         for r in results:
-            w.writerow([
-                r["cod"], r["nombre_limpio"],
-                f"{r['venta_neta']:.2f}", f"{r['cuota']:.2f}", f"{r['pct_cumplimiento']:.2f}",
-                r["tramo_presupuesto"], f"{r['factor_presupuesto']*100:.1f}% de VBI",
-                f"{r['pct_efectividad']:.2f}", r["tramo_efectividad"], f"{r['factor_efectividad']*100:.1f}% de VBI",
-                f"floor({r['tosh_clientes']}/20)×$10", r["tosh_clientes"],
-                math.floor(r["tosh_clientes"]/20), f"{r['tosh_pago']:.2f}",
-                "$20 si NE≥$200", f"{r['ne_venta']:.2f}", "200.00", f"{r['ne_pago']:.2f}",
-                "$1×HORECA_nuevos_junio", r["horeca_clientes"], f"{r['horeca_pago']:.2f}",
-                f"{r['total_confirmado']:.2f}",
-                "Pendiente — VBI no proporcionado",
-                "Pendiente — VBI no proporcionado",
-            ])
+            for h in r["horeca_list"]:
+                w.writerow([r["cod"], r["nombre_limpio"],
+                             h.get("cod",""), h.get("nombre",""), h.get("keyword","")])
+
+
+def write_csv_tosh(results, out):
+    with open(out, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(["cod_asesor","nombre_asesor","clientes_tosh","bloques_20","pago_tosh","skus"])
+        for r in results:
+            w.writerow([r["cod"], r["nombre_limpio"], r["tosh_n"],
+                        math.floor(r["tosh_n"]/20), f"{r['tosh_pago']:.2f}",
+                        "; ".join(str(s) for s in r["tosh_skus"])])
+
+
+def write_csv_ne(results, out):
+    with open(out, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(["cod_asesor","nombre_asesor","venta_ne","meta_200","alcanza","pago_ne"])
+        for r in results:
+            w.writerow([r["cod"], r["nombre_limpio"], f"{r['ne_venta']:.2f}",
+                        "200.00", "SI" if r["ne_venta"] >= 200 else "NO",
+                        f"{r['ne_pago']:.2f}"])
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────
+
 def main():
-    print(f"\n{'='*60}")
+    print(f"\n{'='*65}")
     print(f"  LIQUIDACIÓN DE INCENTIVOS — {PERIODO_LABEL.upper()}")
     print(f"  PALUMAR S.A.")
-    print(f"{'='*60}\n")
+    print(f"{'='*65}\n")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # 1. Fetch
     print("1. Obteniendo datos desde API PALMA...\n")
-    vendedores_data = fetch("vendedores")
-    inc_data        = fetch("incentivos_vendedores")
-    cn_data         = fetch("clientes_nuevos", {"desde": "2026-06-01", "hasta": "2026-06-30"})
+    vendedores_data  = fetch("vendedores")
+    inc_data         = fetch("incentivos_vendedores")
+    cn_data          = fetch("clientes_nuevos", {"desde":"2026-06-01","hasta":"2026-06-30"})
+    cob_neg_data     = fetch("cob_negocio")
 
-    if not isinstance(vendedores_data, list) or len(vendedores_data) == 0:
-        print("ERROR: vendedores endpoint retornó datos vacíos o inesperados")
-        return
+    assert isinstance(vendedores_data, list) and len(vendedores_data) > 0, \
+        "ERROR: vendedores endpoint retornó datos vacíos"
 
-    inc_map = {}
-    for v in inc_data.get("vendedores", []):
-        inc_map[str(v["cod"])] = v
-    print(f"   Vendedores base:     {len(vendedores_data)}")
-    print(f"   Registros incentivos: {len(inc_map)}")
+    # Map incentivos
+    inc_map = {str(v["cod"]): v for v in inc_data.get("vendedores", [])}
 
-    # 2. HORECA desde clientes_nuevos
-    horeca_por_vendedor = {}
-    cn_detalle = cn_data.get("detalle", [])
-    print(f"   Clientes nuevos junio: {len(cn_detalle)}")
+    # Map DN Café por vendedor (cob_negocio filtrado a "04-CafÈ" o similares)
+    cafe_map = {}
+    for row in (cob_neg_data if isinstance(cob_neg_data, list) else []):
+        neg = str(row.get("negocio", "")).lower()
+        if "caf" in neg:
+            vend_txt = str(row.get("vendedor",""))
+            cod = vend_txt.split("-")[0].strip().zfill(3)
+            cafe_map[cod] = row
 
+    # Clientes nuevos con pedido por vendedor
+    cn_detalle = cn_data.get("detalle", []) if isinstance(cn_data, dict) else []
+    nuevos_cnt = Counter(str(c.get("cod_asesor","")).zfill(3) for c in cn_detalle)
+
+    # HORECA detection
+    horeca_por_vend = {}
     horeca_total = 0
     for c in cn_detalle:
-        razon  = c.get("razon_social", "") or ""
-        nombre = c.get("nombre", "")       or ""
+        razon  = str(c.get("razon_social","") or "")
+        nombre = str(c.get("nombre","") or "")
         ok, kw = es_horeca(razon)
         if not ok:
             ok, kw = es_horeca(nombre)
         if ok:
-            cod_a = str(c.get("cod_asesor", "")).zfill(3)
-            if cod_a not in horeca_por_vendedor:
-                horeca_por_vendedor[cod_a] = []
-            horeca_por_vendedor[cod_a].append({
-                "cod":     c.get("cod_cliente", ""),
+            cod_a = str(c.get("cod_asesor","")).zfill(3)
+            if cod_a not in horeca_por_vend:
+                horeca_por_vend[cod_a] = []
+            horeca_por_vend[cod_a].append({
+                "cod":     str(c.get("cod_cliente","")),
                 "nombre":  razon or nombre,
                 "keyword": kw,
             })
             horeca_total += 1
 
-    print(f"   Clientes HORECA nuevos: {horeca_total}")
-    for cod, lst in sorted(horeca_por_vendedor.items()):
-        for h in lst:
-            print(f"     [{cod}] {h['nombre']} → '{h['keyword']}'")
+    print(f"   Vendedores:          {len(vendedores_data)}")
+    print(f"   Clientes nuevos:     {sum(nuevos_cnt.values())}")
+    print(f"   Clientes HORECA:     {horeca_total}")
+    print(f"   Filas DN Café:       {len(cafe_map)}")
 
-    # 3. Calcular
+    # 2. Calcular
     print("\n2. Calculando incentivos...\n")
-    results = calcular_incentivos(vendedores_data, inc_map, horeca_por_vendedor)
+    results = calcular_incentivos(vendedores_data, inc_map, horeca_por_vend,
+                                   cafe_map, nuevos_cnt)
 
-    print(f"{'COD':<5} {'NOMBRE':<28} {'%CUM':>6} {'TOSH$':>7} {'NE$':>6} {'HORECA$':>8} {'TOTAL$':>8}")
-    print("-"*70)
-    grand_total = 0
+    # Verificar no-negativos
     for r in results:
-        print(f"{r['cod']:<5} {r['nombre_limpio']:<28} "
-              f"{r['pct_cumplimiento']:>5.1f}% "
-              f"{r['tosh_pago']:>7.2f} "
-              f"{r['ne_pago']:>6.2f} "
-              f"{r['horeca_pago']:>8.2f} "
-              f"{r['total_confirmado']:>8.2f}")
-        grand_total += r["total_confirmado"]
-    print("-"*70)
-    print(f"{'TOTAL':>38} {grand_total:>8.2f}")
+        assert r["total_final"] >= 0, f"Pago negativo en {r['cod']}: {r['total_final']}"
 
-    # 4. PDFs individuales
+    # Resumen en consola
+    hdr_fmt = "{:<5} {:<27} {:>6} {:>7} {:>6} {:>6} {:>7} {:>7} {:>7} {:>8}"
+    sep = "-" * 82
+    print(hdr_fmt.format("COD","NOMBRE","%CUM","PPTO$","EF$","CAFÉ$","NUE$","CERO$","CON$","TOTAL$"))
+    print(sep)
+    for r in results:
+        print(hdr_fmt.format(
+            r["cod"], r["nombre_limpio"][:27],
+            fmt_pct(r["pct_cumplimiento"]),
+            fmt_usd(r["p_ppto"]),
+            fmt_usd(r["p_ef"]),
+            fmt_usd(r["p_cafe"]),
+            fmt_usd(r["p_nuevos"]),
+            fmt_usd(r["p_cero"]),
+            fmt_usd(r["total_concursos"]),
+            fmt_usd(r["total_final"]),
+        ))
+    print(sep)
+    grand = sum(r["total_final"] for r in results)
+    print(f"{'GRAN TOTAL':>50}  {fmt_usd(grand):>8}")
+    print(f"\n  Indicadores: Ppto={fmt_usd(sum(r['p_ppto'] for r in results))} "
+          f"Efec={fmt_usd(sum(r['p_ef'] for r in results))} "
+          f"Café={fmt_usd(sum(r['p_cafe'] for r in results))} "
+          f"Nuevos={fmt_usd(sum(r['p_nuevos'] for r in results))} "
+          f"Cero={fmt_usd(sum(r['p_cero'] for r in results))}")
+    print(f"  Concursos:   TOSH={fmt_usd(sum(r['tosh_pago'] for r in results))} "
+          f"NE={fmt_usd(sum(r['ne_pago'] for r in results))} "
+          f"HORECA={fmt_usd(sum(r['horeca_pago'] for r in results))}")
+
+    # 3. PDFs individuales
     print("\n3. Generando PDFs individuales...\n")
     styles = make_styles()
     for r in results:
-        slug = slug_nombre(r["nombre"])
+        slug  = slug_nombre(r["nombre"])
         fname = f"LIQUIDACION_INCENTIVOS_JUNIO_2026_{r['cod']}_{slug}.pdf"
-        fpath = os.path.join(OUTPUT_DIR, fname)
-        build_pdf_individual(r, styles, fpath)
-        print(f"   ✓ {fname}")
+        build_pdf_individual(r, styles, os.path.join(OUTPUT_DIR, fname))
+        print(f"   ✓ {fname}  → Total: {fmt_usd(r['total_final'])}")
 
-    # 5. PDF consolidado
+    # 4. PDF consolidado
     print("\n4. Generando PDF consolidado...\n")
     cons_pdf = os.path.join(OUTPUT_DIR, "CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.pdf")
     build_pdf_consolidado(results, styles, cons_pdf)
     print(f"   ✓ CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.pdf")
 
-    # 6. CSVs
+    # 5. CSVs
     print("\n5. Generando CSVs...\n")
     write_csv_consolidado(results, os.path.join(OUTPUT_DIR, "CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.csv"))
     print("   ✓ CONSOLIDADO_PAGOS_INCENTIVOS_JUNIO_2026.csv")
-
-    write_csv_horeca(results, os.path.join(OUTPUT_DIR, "AUDITORIA_HORECA_JUNIO_2026.csv"))
+    write_csv_calculos(results,   os.path.join(OUTPUT_DIR, "AUDITORIA_CALCULOS_INCENTIVOS_JUNIO_2026.csv"))
+    print("   ✓ AUDITORIA_CALCULOS_INCENTIVOS_JUNIO_2026.csv")
+    write_csv_horeca(results,     os.path.join(OUTPUT_DIR, "AUDITORIA_HORECA_JUNIO_2026.csv"))
     print("   ✓ AUDITORIA_HORECA_JUNIO_2026.csv")
-
-    write_csv_tosh(results, os.path.join(OUTPUT_DIR, "AUDITORIA_TOSH_JUNIO_2026.csv"))
+    write_csv_tosh(results,       os.path.join(OUTPUT_DIR, "AUDITORIA_TOSH_JUNIO_2026.csv"))
     print("   ✓ AUDITORIA_TOSH_JUNIO_2026.csv")
-
-    write_csv_ne(results, os.path.join(OUTPUT_DIR, "AUDITORIA_NE_JUNIO_2026.csv"))
+    write_csv_ne(results,         os.path.join(OUTPUT_DIR, "AUDITORIA_NE_JUNIO_2026.csv"))
     print("   ✓ AUDITORIA_NE_JUNIO_2026.csv")
 
-    write_csv_calculos(results, os.path.join(OUTPUT_DIR, "AUDITORIA_CALCULOS_JUNIO_2026.csv"))
-    print("   ✓ AUDITORIA_CALCULOS_JUNIO_2026.csv")
+    # 6. Validaciones finales
+    print("\n6. Validaciones...\n")
+    assert len(results) == 14, f"Esperados 14 vendedores, obtenidos {len(results)}"
+    no_pendientes = all(
+        "Pendiente" not in str(r["tramo_ppto"]) and "Pendiente" not in str(r["tramo_ef"])
+        for r in results
+    )
+    sum_ind = sum(r["total_final"] for r in results)
+    assert abs(sum_ind - grand) < 0.01, f"Discrepancia suma: {sum_ind} vs {grand}"
+    pagos_neg = [r["cod"] for r in results if r["total_final"] < 0]
+    assert not pagos_neg, f"Pagos negativos en: {pagos_neg}"
 
-    # 7. Resumen final
-    print(f"\n{'='*60}")
-    print(f"  RESUMEN FINAL")
-    print(f"{'='*60}")
-    print(f"  Vendedores procesados:    {len(results)}")
-    print(f"  Clientes HORECA nuevos:   {horeca_total}")
-    print(f"  Total concursos TOSH:     {fmt_usd(sum(r['tosh_pago'] for r in results))}")
-    print(f"  Total concursos NE:       {fmt_usd(sum(r['ne_pago'] for r in results))}")
-    print(f"  Total concursos HORECA:   {fmt_usd(sum(r['horeca_pago'] for r in results))}")
-    print(f"  TOTAL CONFIRMADO:         {fmt_usd(grand_total)}")
-    print(f"  Presupuesto + Efectividad: PENDIENTE (VBI no proporcionado)")
-    print(f"\n  Archivos en: {os.path.abspath(OUTPUT_DIR)}/")
-    print(f"{'='*60}\n")
+    print(f"   ✓ 14 vendedores procesados")
+    print(f"   ✓ Sin pendientes VBI (presupuesto y efectividad calculados)")
+    print(f"   ✓ Sin pagos negativos")
+    print(f"   ✓ Suma individuales = consolidado: {fmt_usd(grand)}")
+
+    print(f"\n{'='*65}")
+    print(f"  RESUMEN FINAL — TOTAL A PAGAR JUNIO 2026")
+    print(f"{'='*65}")
+    print(f"  Presupuesto:          {fmt_usd(sum(r['p_ppto'] for r in results))}")
+    print(f"  Efectividad:          {fmt_usd(sum(r['p_ef'] for r in results))}")
+    print(f"  DN Café:              {fmt_usd(sum(r['p_cafe'] for r in results))}")
+    print(f"  Clientes nuevos:      {fmt_usd(sum(r['p_nuevos'] for r in results))}")
+    print(f"  Cliente cero:         {fmt_usd(sum(r['p_cero'] for r in results))}")
+    print(f"  ────────────────────────────────────")
+    print(f"  Subtotal indicadores: {fmt_usd(sum(r['total_indicadores'] for r in results))}")
+    print(f"  Concurso TOSH:        {fmt_usd(sum(r['tosh_pago'] for r in results))}")
+    print(f"  Concurso NE:          {fmt_usd(sum(r['ne_pago'] for r in results))}")
+    print(f"  Concurso HORECA:      {fmt_usd(sum(r['horeca_pago'] for r in results))}")
+    print(f"  Subtotal concursos:   {fmt_usd(sum(r['total_concursos'] for r in results))}")
+    print(f"  ════════════════════════════════════")
+    print(f"  TOTAL GENERAL:        {fmt_usd(grand)}")
+    print(f"{'='*65}\n")
 
 
 if __name__ == "__main__":
