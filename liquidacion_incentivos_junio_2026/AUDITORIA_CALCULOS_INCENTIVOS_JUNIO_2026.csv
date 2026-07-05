@@ -1,15 +1,239 @@
-﻿cod,nombre,venta_neta,cuota,pct_cum,tramo_ppto,formula_ppto,p_ppto,pct_ef,tramo_ef,formula_ef,p_ef,pct_cafe,tramo_cafe,p_cafe,n_nuevos,tramo_nuevos,p_nuevos,pct_cero,tramo_cero,p_cero,tosh_n,bloq20,tosh_pago,ne_venta,ne_pago,horeca_n,horeca_pago,total_ind,total_con,total_final
-201,ANAYS CASTILLO,28294.73,39823.99,71.05,< 80%,$0.00,0.00,82.40,80% – 87%,$55×80%,44.00,41.5,≥40% ✓,55.00,7,< 15 clientes,0.00,2.76,2.8% > 2%,0.00,10,0,0.00,35.14,0.00,0,0.00,99.00,0.00,99.00
-202,MELISSA ZULAY CASTILLO FUENTES,29652.24,42425.97,69.89,< 80%,$0.00,0.00,95.70,≥ 90%,$55×110%,60.50,40.6,≥40% ✓,55.00,4,< 15 clientes,0.00,5.80,5.8% > 2%,0.00,21,1,10.00,29.72,0.00,0,0.00,115.50,10.00,125.50
-203,RAUL  CASTRO,31934.51,40777.05,78.31,< 80%,$0.00,0.00,82.80,80% – 87%,$55×80%,44.00,48.4,≥40% ✓,55.00,4,< 15 clientes,0.00,13.95,13.9% > 2%,0.00,6,0,0.00,171.64,0.00,0,0.00,99.00,0.00,99.00
-204,ALAY WOODS,25075.12,37238.00,67.34,< 80%,$0.00,0.00,77.20,< 80%,$0.00,0.00,31.1,< 40%,0.00,0,< 15 clientes,0.00,12.16,12.2% > 2%,0.00,42,2,20.00,65.26,0.00,0,0.00,0.00,20.00,20.00
-205,RENE ISAIAS MU—OZ,15020.72,46828.96,32.08,< 80%,$0.00,0.00,70.90,< 80%,$0.00,0.00,25.8,< 40%,0.00,4,< 15 clientes,0.00,18.18,18.2% > 2%,0.00,5,0,0.00,6.00,0.00,0,0.00,0.00,0.00,0.00
-206,GRACIELA  CASSINO,21866.50,26153.98,83.61,80% – 95%,$154×60%,92.40,77.80,< 80%,$0.00,0.00,35.2,< 40%,0.00,4,< 15 clientes,0.00,8.79,8.8% > 2%,0.00,20,1,10.00,28.29,0.00,0,0.00,92.40,10.00,102.40
-207,JAIME ELIAS CASTILLO SANCHEZ,28911.74,41154.02,70.25,< 80%,$0.00,0.00,75.70,< 80%,$0.00,0.00,27.4,< 40%,0.00,4,< 15 clientes,0.00,17.95,17.9% > 2%,0.00,13,0,0.00,84.25,0.00,0,0.00,0.00,0.00,0.00
-208,ARIEL GONZALEZ,22749.54,32458.95,70.09,< 80%,$0.00,0.00,89.80,87% – 90%,$55×90%,49.50,37.9,< 40%,0.00,16,≥15 clientes ✓,55.00,4.17,4.2% > 2%,0.00,54,2,20.00,72.65,0.00,0,0.00,104.50,20.00,124.50
-209,ENRIQUE  JIMENEZ,25693.52,35461.04,72.46,< 80%,$0.00,0.00,75.20,< 80%,$0.00,0.00,25.0,< 40%,0.00,6,< 15 clientes,0.00,25.00,25.0% > 2%,0.00,30,1,10.00,27.25,0.00,0,0.00,0.00,10.00,10.00
-210,JOHNNY TIPPY,30705.25,39085.00,78.56,< 80%,$0.00,0.00,73.20,< 80%,$0.00,0.00,41.8,≥40% ✓,55.00,15,≥15 clientes ✓,55.00,14.56,14.6% > 2%,0.00,17,0,0.00,0.00,0.00,0,0.00,110.00,0.00,110.00
-211,HAYMETH  LEWIS,67385.95,50274.03,134.04,> 105% (tope 110%),$154×110.0%,169.40,58.70,< 80%,$0.00,0.00,32.3,< 40%,0.00,12,< 15 clientes,0.00,19.35,19.4% > 2%,0.00,16,0,0.00,335.68,20.00,1,1.00,169.40,21.00,190.40
-212,ISMALDO GOMEZ,55552.86,62777.29,88.49,80% – 95%,$154×60%,92.40,65.80,< 80%,$0.00,0.00,22.3,< 40%,0.00,6,< 15 clientes,0.00,12.74,12.7% > 2%,0.00,21,1,10.00,43.36,0.00,0,0.00,92.40,10.00,102.40
-213,GUSTAVO ROJAS,44636.97,51607.99,86.49,80% – 95%,$154×60%,92.40,49.00,< 80%,$0.00,0.00,24.5,< 40%,0.00,6,< 15 clientes,0.00,16.56,16.6% > 2%,0.00,17,0,0.00,77.58,0.00,1,1.00,92.40,1.00,93.40
-214,RUTA CENTRALES 2,8533.32,18480.00,46.18,< 80%,$0.00,0.00,51.60,< 80%,$0.00,0.00,18.6,< 40%,0.00,2,< 15 clientes,0.00,36.08,36.1% > 2%,0.00,3,0,0.00,0.00,0.00,0,0.00,0.00,0.00,0.00
+﻿cod,nombre,concepto,categoria,vbi,resultado,escala,pago,pendiente,nota
+201,ANAYS CASTILLO,Presupuesto / Total negocio,calidad,132.00,71.0%,< 80%,0.00,NO,
+201,ANAYS CASTILLO,Efectividad de visitas,calidad,33.00,82.4%,80% – 87%,26.40,NO,
+201,ANAYS CASTILLO,DN Café Molido Sello Rojo,calidad,55.00,41.5% (90/217),≥40% maestra,55.00,NO,
+201,ANAYS CASTILLO,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+201,ANAYS CASTILLO,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+201,ANAYS CASTILLO,Clientes nuevos con pedido,calidad,22.00,7 clientes,≥10 clientes,0.00,NO,
+201,ANAYS CASTILLO,Cliente cero,calidad,33.00,2.8% (6/217),≤4% de maestra,33.00,NO,
+201,ANAYS CASTILLO,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+201,ANAYS CASTILLO,Devolución (meta),calidad,22.00,7.8%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+201,ANAYS CASTILLO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+201,ANAYS CASTILLO,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+201,ANAYS CASTILLO,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+201,ANAYS CASTILLO,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+201,ANAYS CASTILLO,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+201,ANAYS CASTILLO,Barras TOSH (×20 clientes),concurso,0.00,10 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+201,ANAYS CASTILLO,Nutrición Experta (concurso),concurso,0.00,$35.14,≥$200 → $20,0.00,NO,
+201,ANAYS CASTILLO,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,Presupuesto / Total negocio,calidad,132.00,69.9%,< 80%,0.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,Efectividad de visitas,calidad,33.00,95.7%,≥ 90%,36.30,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,DN Café Molido Sello Rojo,calidad,55.00,40.6% (84/207),≥40% maestra,55.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+202,MELISSA ZULAY CASTILLO FUENTES,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+202,MELISSA ZULAY CASTILLO FUENTES,Clientes nuevos con pedido,calidad,22.00,4 clientes,≥10 clientes,0.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,Cliente cero,calidad,33.00,5.8% (12/207),≤4% de maestra,0.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+202,MELISSA ZULAY CASTILLO FUENTES,Devolución (meta),calidad,22.00,12.5%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+202,MELISSA ZULAY CASTILLO FUENTES,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+202,MELISSA ZULAY CASTILLO FUENTES,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+202,MELISSA ZULAY CASTILLO FUENTES,Barras TOSH (×20 clientes),concurso,0.00,21 clientes (1 bloq. de 20),$10 / bloque de 20,10.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,Nutrición Experta (concurso),concurso,0.00,$29.72,≥$200 → $20,0.00,NO,
+202,MELISSA ZULAY CASTILLO FUENTES,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+203,RAUL  CASTRO,Presupuesto / Total negocio,calidad,132.00,78.3%,< 80%,0.00,NO,
+203,RAUL  CASTRO,Efectividad de visitas,calidad,33.00,82.8%,80% – 87%,26.40,NO,
+203,RAUL  CASTRO,DN Café Molido Sello Rojo,calidad,55.00,48.4% (104/215),≥40% maestra,55.00,NO,
+203,RAUL  CASTRO,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+203,RAUL  CASTRO,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+203,RAUL  CASTRO,Clientes nuevos con pedido,calidad,22.00,4 clientes,≥10 clientes,0.00,NO,
+203,RAUL  CASTRO,Cliente cero,calidad,33.00,13.9% (30/215),≤4% de maestra,0.00,NO,
+203,RAUL  CASTRO,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+203,RAUL  CASTRO,Devolución (meta),calidad,22.00,10.4%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+203,RAUL  CASTRO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+203,RAUL  CASTRO,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+203,RAUL  CASTRO,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+203,RAUL  CASTRO,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+203,RAUL  CASTRO,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+203,RAUL  CASTRO,Barras TOSH (×20 clientes),concurso,0.00,6 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+203,RAUL  CASTRO,Nutrición Experta (concurso),concurso,0.00,$171.64,≥$200 → $20,0.00,NO,
+203,RAUL  CASTRO,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+204,ALAY WOODS,Presupuesto / Total negocio,calidad,132.00,67.3%,< 80%,0.00,NO,
+204,ALAY WOODS,Efectividad de visitas,calidad,33.00,77.2%,< 80%,0.00,NO,
+204,ALAY WOODS,DN Café Molido Sello Rojo,calidad,55.00,31.1% (69/222),≥40% maestra,0.00,NO,
+204,ALAY WOODS,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+204,ALAY WOODS,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+204,ALAY WOODS,Clientes nuevos con pedido,calidad,22.00,0 clientes,≥10 clientes,0.00,NO,
+204,ALAY WOODS,Cliente cero,calidad,33.00,12.2% (27/222),≤4% de maestra,0.00,NO,
+204,ALAY WOODS,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+204,ALAY WOODS,Devolución (meta),calidad,22.00,12.0%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+204,ALAY WOODS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+204,ALAY WOODS,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+204,ALAY WOODS,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+204,ALAY WOODS,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+204,ALAY WOODS,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+204,ALAY WOODS,Barras TOSH (×20 clientes),concurso,0.00,42 clientes (2 bloq. de 20),$10 / bloque de 20,20.00,NO,
+204,ALAY WOODS,Nutrición Experta (concurso),concurso,0.00,$65.26,≥$200 → $20,0.00,NO,
+204,ALAY WOODS,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+205,RENE ISAIAS MU—OZ,Presupuesto / Total negocio,calidad,132.00,32.1%,< 80%,0.00,NO,
+205,RENE ISAIAS MU—OZ,Efectividad de visitas,calidad,33.00,70.9%,< 80%,0.00,NO,
+205,RENE ISAIAS MU—OZ,DN Café Molido Sello Rojo,calidad,55.00,25.8% (34/132),≥40% maestra,0.00,NO,
+205,RENE ISAIAS MU—OZ,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+205,RENE ISAIAS MU—OZ,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+205,RENE ISAIAS MU—OZ,Clientes nuevos con pedido,calidad,22.00,4 clientes,≥10 clientes,0.00,NO,
+205,RENE ISAIAS MU—OZ,Cliente cero,calidad,33.00,18.2% (24/132),≤4% de maestra,0.00,NO,
+205,RENE ISAIAS MU—OZ,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+205,RENE ISAIAS MU—OZ,Devolución (meta),calidad,22.00,21.6%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+205,RENE ISAIAS MU—OZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+205,RENE ISAIAS MU—OZ,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+205,RENE ISAIAS MU—OZ,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+205,RENE ISAIAS MU—OZ,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+205,RENE ISAIAS MU—OZ,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+205,RENE ISAIAS MU—OZ,Barras TOSH (×20 clientes),concurso,0.00,5 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+205,RENE ISAIAS MU—OZ,Nutrición Experta (concurso),concurso,0.00,$6.00,≥$200 → $20,0.00,NO,
+205,RENE ISAIAS MU—OZ,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+206,GRACIELA  CASSINO,Presupuesto / Total negocio,calidad,132.00,83.6%,80% – 95%,79.20,NO,
+206,GRACIELA  CASSINO,Efectividad de visitas,calidad,33.00,77.8%,< 80%,0.00,NO,
+206,GRACIELA  CASSINO,DN Café Molido Sello Rojo,calidad,55.00,35.2% (64/182),≥40% maestra,0.00,NO,
+206,GRACIELA  CASSINO,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+206,GRACIELA  CASSINO,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+206,GRACIELA  CASSINO,Clientes nuevos con pedido,calidad,22.00,4 clientes,≥10 clientes,0.00,NO,
+206,GRACIELA  CASSINO,Cliente cero,calidad,33.00,8.8% (16/182),≤4% de maestra,0.00,NO,
+206,GRACIELA  CASSINO,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+206,GRACIELA  CASSINO,Devolución (meta),calidad,22.00,6.6%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+206,GRACIELA  CASSINO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+206,GRACIELA  CASSINO,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+206,GRACIELA  CASSINO,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+206,GRACIELA  CASSINO,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+206,GRACIELA  CASSINO,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+206,GRACIELA  CASSINO,Barras TOSH (×20 clientes),concurso,0.00,20 clientes (1 bloq. de 20),$10 / bloque de 20,10.00,NO,
+206,GRACIELA  CASSINO,Nutrición Experta (concurso),concurso,0.00,$28.29,≥$200 → $20,0.00,NO,
+206,GRACIELA  CASSINO,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,Presupuesto / Total negocio,calidad,132.00,70.2%,< 80%,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,Efectividad de visitas,calidad,33.00,75.7%,< 80%,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,DN Café Molido Sello Rojo,calidad,55.00,27.4% (64/234),≥40% maestra,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+207,JAIME ELIAS CASTILLO SANCHEZ,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+207,JAIME ELIAS CASTILLO SANCHEZ,Clientes nuevos con pedido,calidad,22.00,4 clientes,≥10 clientes,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,Cliente cero,calidad,33.00,17.9% (42/234),≤4% de maestra,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+207,JAIME ELIAS CASTILLO SANCHEZ,Devolución (meta),calidad,22.00,10.4%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+207,JAIME ELIAS CASTILLO SANCHEZ,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+207,JAIME ELIAS CASTILLO SANCHEZ,Barras TOSH (×20 clientes),concurso,0.00,13 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,Nutrición Experta (concurso),concurso,0.00,$84.25,≥$200 → $20,0.00,NO,
+207,JAIME ELIAS CASTILLO SANCHEZ,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+208,ARIEL GONZALEZ,Presupuesto / Total negocio,calidad,132.00,70.1%,< 80%,0.00,NO,
+208,ARIEL GONZALEZ,Efectividad de visitas,calidad,33.00,89.8%,87% – 90%,29.70,NO,
+208,ARIEL GONZALEZ,DN Café Molido Sello Rojo,calidad,55.00,37.9% (91/240),≥40% maestra,0.00,NO,
+208,ARIEL GONZALEZ,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+208,ARIEL GONZALEZ,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+208,ARIEL GONZALEZ,Clientes nuevos con pedido,calidad,22.00,16 clientes,≥10 clientes,22.00,NO,
+208,ARIEL GONZALEZ,Cliente cero,calidad,33.00,4.2% (10/240),≤4% de maestra,0.00,NO,
+208,ARIEL GONZALEZ,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+208,ARIEL GONZALEZ,Devolución (meta),calidad,22.00,9.8%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+208,ARIEL GONZALEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+208,ARIEL GONZALEZ,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+208,ARIEL GONZALEZ,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+208,ARIEL GONZALEZ,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+208,ARIEL GONZALEZ,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+208,ARIEL GONZALEZ,Barras TOSH (×20 clientes),concurso,0.00,54 clientes (2 bloq. de 20),$10 / bloque de 20,20.00,NO,
+208,ARIEL GONZALEZ,Nutrición Experta (concurso),concurso,0.00,$72.65,≥$200 → $20,0.00,NO,
+208,ARIEL GONZALEZ,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+209,ENRIQUE  JIMENEZ,Presupuesto / Total negocio,calidad,132.00,72.5%,< 80%,0.00,NO,
+209,ENRIQUE  JIMENEZ,Efectividad de visitas,calidad,33.00,75.2%,< 80%,0.00,NO,
+209,ENRIQUE  JIMENEZ,DN Café Molido Sello Rojo,calidad,55.00,25.0% (59/236),≥40% maestra,0.00,NO,
+209,ENRIQUE  JIMENEZ,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+209,ENRIQUE  JIMENEZ,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+209,ENRIQUE  JIMENEZ,Clientes nuevos con pedido,calidad,22.00,6 clientes,≥10 clientes,0.00,NO,
+209,ENRIQUE  JIMENEZ,Cliente cero,calidad,33.00,25.0% (59/236),≤4% de maestra,0.00,NO,
+209,ENRIQUE  JIMENEZ,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+209,ENRIQUE  JIMENEZ,Devolución (meta),calidad,22.00,12.5%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+209,ENRIQUE  JIMENEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+209,ENRIQUE  JIMENEZ,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+209,ENRIQUE  JIMENEZ,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+209,ENRIQUE  JIMENEZ,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+209,ENRIQUE  JIMENEZ,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+209,ENRIQUE  JIMENEZ,Barras TOSH (×20 clientes),concurso,0.00,30 clientes (1 bloq. de 20),$10 / bloque de 20,10.00,NO,
+209,ENRIQUE  JIMENEZ,Nutrición Experta (concurso),concurso,0.00,$27.25,≥$200 → $20,0.00,NO,
+209,ENRIQUE  JIMENEZ,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+210,JOHNNY TIPPY,Presupuesto / Total negocio,calidad,132.00,78.6%,< 80%,0.00,NO,
+210,JOHNNY TIPPY,Efectividad de visitas,calidad,33.00,73.2%,< 80%,0.00,NO,
+210,JOHNNY TIPPY,DN Café Molido Sello Rojo,calidad,55.00,41.8% (109/261),≥40% maestra,55.00,NO,
+210,JOHNNY TIPPY,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+210,JOHNNY TIPPY,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+210,JOHNNY TIPPY,Clientes nuevos con pedido,calidad,22.00,15 clientes,≥10 clientes,22.00,NO,
+210,JOHNNY TIPPY,Cliente cero,calidad,33.00,14.6% (38/261),≤4% de maestra,0.00,NO,
+210,JOHNNY TIPPY,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+210,JOHNNY TIPPY,Devolución (meta),calidad,22.00,6.8%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+210,JOHNNY TIPPY,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+210,JOHNNY TIPPY,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+210,JOHNNY TIPPY,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+210,JOHNNY TIPPY,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+210,JOHNNY TIPPY,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+210,JOHNNY TIPPY,Barras TOSH (×20 clientes),concurso,0.00,17 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+210,JOHNNY TIPPY,Nutrición Experta (concurso),concurso,0.00,$0.00,≥$200 → $20,0.00,NO,
+210,JOHNNY TIPPY,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+211,HAYMETH  LEWIS,Presupuesto / Total negocio,calidad,132.00,134.0%,> 105% (tope 110%),145.20,NO,
+211,HAYMETH  LEWIS,Efectividad de visitas,calidad,33.00,58.7%,< 80%,0.00,NO,
+211,HAYMETH  LEWIS,DN Café Molido Sello Rojo,calidad,55.00,32.3% (20/62),≥40% maestra,0.00,NO,
+211,HAYMETH  LEWIS,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+211,HAYMETH  LEWIS,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+211,HAYMETH  LEWIS,Clientes nuevos con pedido,calidad,22.00,12 clientes,≥10 clientes,22.00,NO,
+211,HAYMETH  LEWIS,Cliente cero,calidad,33.00,19.4% (12/62),≤4% de maestra,0.00,NO,
+211,HAYMETH  LEWIS,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+211,HAYMETH  LEWIS,Devolución (meta),calidad,22.00,3.9%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+211,HAYMETH  LEWIS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+211,HAYMETH  LEWIS,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+211,HAYMETH  LEWIS,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+211,HAYMETH  LEWIS,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+211,HAYMETH  LEWIS,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+211,HAYMETH  LEWIS,Barras TOSH (×20 clientes),concurso,0.00,16 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+211,HAYMETH  LEWIS,Nutrición Experta (concurso),concurso,0.00,$335.68,≥$200 → $20,20.00,NO,
+211,HAYMETH  LEWIS,Clientes nuevos HORECA,concurso,0.00,1 cliente(s) con venta,$1 / cliente HORECA,1.00,NO,
+212,ISMALDO GOMEZ,Presupuesto / Total negocio,calidad,132.00,88.5%,80% – 95%,79.20,NO,
+212,ISMALDO GOMEZ,Efectividad de visitas,calidad,33.00,65.8%,< 80%,0.00,NO,
+212,ISMALDO GOMEZ,DN Café Molido Sello Rojo,calidad,55.00,22.3% (35/157),≥40% maestra,0.00,NO,
+212,ISMALDO GOMEZ,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+212,ISMALDO GOMEZ,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+212,ISMALDO GOMEZ,Clientes nuevos con pedido,calidad,22.00,6 clientes,≥10 clientes,0.00,NO,
+212,ISMALDO GOMEZ,Cliente cero,calidad,33.00,12.7% (20/157),≤4% de maestra,0.00,NO,
+212,ISMALDO GOMEZ,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+212,ISMALDO GOMEZ,Devolución (meta),calidad,22.00,7.4%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+212,ISMALDO GOMEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+212,ISMALDO GOMEZ,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+212,ISMALDO GOMEZ,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+212,ISMALDO GOMEZ,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+212,ISMALDO GOMEZ,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+212,ISMALDO GOMEZ,Barras TOSH (×20 clientes),concurso,0.00,21 clientes (1 bloq. de 20),$10 / bloque de 20,10.00,NO,
+212,ISMALDO GOMEZ,Nutrición Experta (concurso),concurso,0.00,$43.36,≥$200 → $20,0.00,NO,
+212,ISMALDO GOMEZ,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
+213,GUSTAVO ROJAS,Presupuesto / Total negocio,calidad,132.00,86.5%,80% – 95%,79.20,NO,
+213,GUSTAVO ROJAS,Efectividad de visitas,calidad,33.00,49.0%,< 80%,0.00,NO,
+213,GUSTAVO ROJAS,DN Café Molido Sello Rojo,calidad,55.00,24.5% (37/151),≥40% maestra,0.00,NO,
+213,GUSTAVO ROJAS,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+213,GUSTAVO ROJAS,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+213,GUSTAVO ROJAS,Clientes nuevos con pedido,calidad,22.00,6 clientes,≥10 clientes,0.00,NO,
+213,GUSTAVO ROJAS,Cliente cero,calidad,33.00,16.6% (25/151),≤4% de maestra,0.00,NO,
+213,GUSTAVO ROJAS,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+213,GUSTAVO ROJAS,Devolución (meta),calidad,22.00,7.2%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+213,GUSTAVO ROJAS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+213,GUSTAVO ROJAS,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+213,GUSTAVO ROJAS,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+213,GUSTAVO ROJAS,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+213,GUSTAVO ROJAS,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+213,GUSTAVO ROJAS,Barras TOSH (×20 clientes),concurso,0.00,17 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+213,GUSTAVO ROJAS,Nutrición Experta (concurso),concurso,0.00,$77.58,≥$200 → $20,0.00,NO,
+213,GUSTAVO ROJAS,Clientes nuevos HORECA,concurso,0.00,1 cliente(s) con venta,$1 / cliente HORECA,1.00,NO,
+214,RUTA CENTRALES 2,Presupuesto / Total negocio,calidad,132.00,46.2%,< 80%,0.00,NO,
+214,RUTA CENTRALES 2,Efectividad de visitas,calidad,33.00,51.6%,< 80%,0.00,NO,
+214,RUTA CENTRALES 2,DN Café Molido Sello Rojo,calidad,55.00,18.6% (18/97),≥40% maestra,0.00,NO,
+214,RUTA CENTRALES 2,DN Jet (Chocolates Jet),calidad,33.00,Sin fuente SKU,≥40% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Jet en API
+214,RUTA CENTRALES 2,DN Galletas Cremas ×6,calidad,33.00,Sin fuente SKU,Meta en fuente,Pendiente por dato fuente,SI,No hay datos de distribución SKU Galletas Cremas en API
+214,RUTA CENTRALES 2,Clientes nuevos con pedido,calidad,22.00,2 clientes,≥10 clientes,0.00,NO,
+214,RUTA CENTRALES 2,Cliente cero,calidad,33.00,36.1% (35/97),≤4% de maestra,0.00,NO,
+214,RUTA CENTRALES 2,DN Tikys,calidad,22.00,Sin fuente SKU,≥15% maestra,Pendiente por dato fuente,SI,No hay datos de distribución SKU Tikys en API
+214,RUTA CENTRALES 2,Devolución (meta),calidad,22.00,16.8%,Meta no definida en fuente,Pendiente por dato fuente,SI,Meta de devolución no disponible en fuente de datos
+214,RUTA CENTRALES 2,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
+214,RUTA CENTRALES 2,Ejecución negocio Chocolates,cantidad,22.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+214,RUTA CENTRALES 2,Ejecución negocio Galletas,cantidad,33.00,Sin cuota por negocio,Meta por definir,Pendiente por dato fuente,SI,Sin cuota de venta por negocio en API
+214,RUTA CENTRALES 2,Ejecución negocio Zuko,cantidad,22.00,Sin negocio Zuko,Meta por definir,Pendiente por dato fuente,SI,Negocio Zuko no identificado en API
+214,RUTA CENTRALES 2,Nutrición Experta (indicador),cantidad,11.00,Sin meta definida,Meta por definir,Pendiente por dato fuente,SI,Meta del indicador NE no disponible; concurso NE sí aplica
+214,RUTA CENTRALES 2,Barras TOSH (×20 clientes),concurso,0.00,3 clientes (0 bloq. de 20),$10 / bloque de 20,0.00,NO,
+214,RUTA CENTRALES 2,Nutrición Experta (concurso),concurso,0.00,$0.00,≥$200 → $20,0.00,NO,
+214,RUTA CENTRALES 2,Clientes nuevos HORECA,concurso,0.00,0 cliente(s) con venta,$1 / cliente HORECA,0.00,NO,
