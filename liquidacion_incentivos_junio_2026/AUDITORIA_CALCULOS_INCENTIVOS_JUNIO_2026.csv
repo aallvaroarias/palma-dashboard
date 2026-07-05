@@ -11,7 +11,7 @@
 201,ANAYS CASTILLO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 201,ANAYS CASTILLO,Ejecución negocio Chocolates,cantidad,22.00,"$7,345.47 / $11,563.62",63.5% · < 80%,0.00,NO,
 201,ANAYS CASTILLO,Ejecución negocio Galletas,cantidad,33.00,"$5,127.04 / $8,518.51",60.2% · < 80%,0.00,NO,
-201,ANAYS CASTILLO,Ejecución negocio Zuko,cantidad,22.00,"$3,776.80 · 134/217 cli (61.8%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+201,ANAYS CASTILLO,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$4,957.55 / $3,782.83",131.1% · > 105% (tope 110%),24.20,NO,
 201,ANAYS CASTILLO,Ejecución negocio Café,cantidad,0.00,"$2,550.81 / $2,415.89 (105.6%)",VBI $0 — informativo,0.00,NO,
 201,ANAYS CASTILLO,Ejecución negocio Cárnico,cantidad,0.00,"$7,021.79 / $13,361.73 (52.6%)",VBI $0 — informativo,0.00,NO,
 201,ANAYS CASTILLO,Nutrición Experta (indicador),cantidad,11.00,$35.14 / $80.00,43.9% · < 80%,0.00,NO,
@@ -30,7 +30,7 @@
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Chocolates,cantidad,22.00,"$9,238.80 / $11,352.34",81.4% · 80% – 95%,13.20,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Galletas,cantidad,33.00,"$3,320.93 / $5,967.46",55.7% · < 80%,0.00,NO,
-202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Zuko,cantidad,22.00,"$2,747.92 · 98/207 cli (47.3%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$3,800.14 / $3,358.51",113.1% · > 105% (tope 110%),24.20,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Café,cantidad,0.00,"$1,941.82 / $2,590.65 (75.0%)",VBI $0 — informativo,0.00,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Cárnico,cantidad,0.00,"$10,615.14 / $18,991.66 (55.9%)",VBI $0 — informativo,0.00,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Nutrición Experta (indicador),cantidad,11.00,$29.72 / $80.00,37.1% · < 80%,0.00,NO,
@@ -49,7 +49,7 @@
 203,RAUL  CASTRO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 203,RAUL  CASTRO,Ejecución negocio Chocolates,cantidad,22.00,"$6,799.11 / $9,525.33",71.4% · < 80%,0.00,NO,
 203,RAUL  CASTRO,Ejecución negocio Galletas,cantidad,33.00,"$3,574.69 / $4,268.48",83.7% · 80% – 95%,19.80,NO,
-203,RAUL  CASTRO,Ejecución negocio Zuko,cantidad,22.00,"$2,694.76 · 79/215 cli (36.7%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+203,RAUL  CASTRO,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$3,532.56 / $2,741.19",128.9% · > 105% (tope 110%),24.20,NO,
 203,RAUL  CASTRO,Ejecución negocio Café,cantidad,0.00,"$2,508.58 / $2,323.35 (108.0%)",VBI $0 — informativo,0.00,NO,
 203,RAUL  CASTRO,Ejecución negocio Cárnico,cantidad,0.00,"$14,427.91 / $21,728.37 (66.4%)",VBI $0 — informativo,0.00,NO,
 203,RAUL  CASTRO,Nutrición Experta (indicador),cantidad,11.00,$171.64 / $80.00,214.5% · > 105% (tope 110%),12.10,NO,
@@ -68,7 +68,7 @@
 204,ALAY WOODS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 204,ALAY WOODS,Ejecución negocio Chocolates,cantidad,22.00,"$8,181.40 / $11,835.24",69.1% · < 80%,0.00,NO,
 204,ALAY WOODS,Ejecución negocio Galletas,cantidad,33.00,"$3,822.61 / $5,762.49",66.3% · < 80%,0.00,NO,
-204,ALAY WOODS,Ejecución negocio Zuko,cantidad,22.00,"$1,812.34 · 83/222 cli (37.4%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+204,ALAY WOODS,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,816.04 / $2,310.63",78.6% · < 80%,0.00,NO,
 204,ALAY WOODS,Ejecución negocio Café,cantidad,0.00,"$2,647.99 / $2,638.07 (100.4%)",VBI $0 — informativo,0.00,NO,
 204,ALAY WOODS,Ejecución negocio Cárnico,cantidad,0.00,"$7,339.87 / $14,355.70 (51.1%)",VBI $0 — informativo,0.00,NO,
 204,ALAY WOODS,Nutrición Experta (indicador),cantidad,11.00,$65.26 / $80.00,81.6% · 80% – 95%,6.60,NO,
@@ -87,7 +87,7 @@
 205,RENE ISAIAS MU—OZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 205,RENE ISAIAS MU—OZ,Ejecución negocio Chocolates,cantidad,22.00,"$4,832.70 / $15,405.83",31.4% · < 80%,0.00,NO,
 205,RENE ISAIAS MU—OZ,Ejecución negocio Galletas,cantidad,33.00,"$2,329.88 / $7,907.53",29.5% · < 80%,0.00,NO,
-205,RENE ISAIAS MU—OZ,Ejecución negocio Zuko,cantidad,22.00,"$3,009.92 · 46/132 cli (34.8%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+205,RENE ISAIAS MU—OZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$2,483.80 / $4,852.53",51.2% · < 80%,0.00,NO,
 205,RENE ISAIAS MU—OZ,Ejecución negocio Café,cantidad,0.00,"$1,071.44 / $4,407.72 (24.3%)",VBI $0 — informativo,0.00,NO,
 205,RENE ISAIAS MU—OZ,Ejecución negocio Cárnico,cantidad,0.00,"$3,678.20 / $14,095.25 (26.1%)",VBI $0 — informativo,0.00,NO,
 205,RENE ISAIAS MU—OZ,Nutrición Experta (indicador),cantidad,11.00,$-9.71 / $80.00,-12.1% · < 80%,0.00,NO,
@@ -106,7 +106,7 @@
 206,GRACIELA  CASSINO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 206,GRACIELA  CASSINO,Ejecución negocio Chocolates,cantidad,22.00,"$6,419.89 / $6,321.14",101.6% · 99.1% – 105%,23.10,NO,
 206,GRACIELA  CASSINO,Ejecución negocio Galletas,cantidad,33.00,"$1,718.87 / $2,459.95",69.9% · < 80%,0.00,NO,
-206,GRACIELA  CASSINO,Ejecución negocio Zuko,cantidad,22.00,"$2,187.80 · 75/182 cli (41.2%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+206,GRACIELA  CASSINO,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$2,861.62 / $2,020.67",141.6% · > 105% (tope 110%),24.20,NO,
 206,GRACIELA  CASSINO,Ejecución negocio Café,cantidad,0.00,"$2,478.45 / $2,425.16 (102.2%)",VBI $0 — informativo,0.00,NO,
 206,GRACIELA  CASSINO,Ejecución negocio Cárnico,cantidad,0.00,"$7,765.55 / $12,841.85 (60.5%)",VBI $0 — informativo,0.00,NO,
 206,GRACIELA  CASSINO,Nutrición Experta (indicador),cantidad,11.00,$28.29 / $80.00,35.4% · < 80%,0.00,NO,
@@ -125,7 +125,7 @@
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Chocolates,cantidad,22.00,"$7,444.36 / $10,777.04",69.1% · < 80%,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Galletas,cantidad,33.00,"$3,184.84 / $5,622.91",56.6% · < 80%,0.00,NO,
-207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Zuko,cantidad,22.00,$950.08 · 55/234 cli (23.5%),Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,314.24 / $2,207.76",59.5% · < 80%,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Café,cantidad,0.00,"$2,346.33 / $2,823.58 (83.1%)",VBI $0 — informativo,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Cárnico,cantidad,0.00,"$13,383.21 / $19,529.72 (68.5%)",VBI $0 — informativo,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Nutrición Experta (indicador),cantidad,11.00,$84.25 / $80.00,105.3% · > 105% (tope 110%),11.58,NO,
@@ -144,7 +144,7 @@
 208,ARIEL GONZALEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 208,ARIEL GONZALEZ,Ejecución negocio Chocolates,cantidad,22.00,"$6,052.66 / $9,488.27",63.8% · < 80%,0.00,NO,
 208,ARIEL GONZALEZ,Ejecución negocio Galletas,cantidad,33.00,"$2,873.47 / $4,801.77",59.8% · < 80%,0.00,NO,
-208,ARIEL GONZALEZ,Ejecución negocio Zuko,cantidad,22.00,"$1,131.04 · 68/240 cli (28.3%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+208,ARIEL GONZALEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,767.32 / $2,665.94",66.3% · < 80%,0.00,NO,
 208,ARIEL GONZALEZ,Ejecución negocio Café,cantidad,0.00,"$2,152.97 / $2,628.36 (81.9%)",VBI $0 — informativo,0.00,NO,
 208,ARIEL GONZALEZ,Ejecución negocio Cárnico,cantidad,0.00,"$8,338.91 / $12,753.71 (65.4%)",VBI $0 — informativo,0.00,NO,
 208,ARIEL GONZALEZ,Nutrición Experta (indicador),cantidad,11.00,$72.65 / $80.00,90.8% · 80% – 95%,6.60,NO,
@@ -163,7 +163,7 @@
 209,ENRIQUE  JIMENEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 209,ENRIQUE  JIMENEZ,Ejecución negocio Chocolates,cantidad,22.00,"$7,875.35 / $10,970.94",71.8% · < 80%,0.00,NO,
 209,ENRIQUE  JIMENEZ,Ejecución negocio Galletas,cantidad,33.00,"$4,147.60 / $8,099.90",51.2% · < 80%,0.00,NO,
-209,ENRIQUE  JIMENEZ,Ejecución negocio Zuko,cantidad,22.00,$319.60 · 17/236 cli (7.2%),Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+209,ENRIQUE  JIMENEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$766.00 / $1,097.41",69.8% · < 80%,0.00,NO,
 209,ENRIQUE  JIMENEZ,Ejecución negocio Café,cantidad,0.00,"$2,284.26 / $2,713.65 (84.2%)",VBI $0 — informativo,0.00,NO,
 209,ENRIQUE  JIMENEZ,Ejecución negocio Cárnico,cantidad,0.00,"$8,630.47 / $12,419.00 (69.5%)",VBI $0 — informativo,0.00,NO,
 209,ENRIQUE  JIMENEZ,Nutrición Experta (indicador),cantidad,11.00,$27.25 / $80.00,34.1% · < 80%,0.00,NO,
@@ -182,7 +182,7 @@
 210,JOHNNY TIPPY,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 210,JOHNNY TIPPY,Ejecución negocio Chocolates,cantidad,22.00,"$5,993.57 / $8,406.34",71.3% · < 80%,0.00,NO,
 210,JOHNNY TIPPY,Ejecución negocio Galletas,cantidad,33.00,"$6,855.66 / $9,343.17",73.4% · < 80%,0.00,NO,
-210,JOHNNY TIPPY,Ejecución negocio Zuko,cantidad,22.00,"$1,114.28 · 52/261 cli (19.9%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+210,JOHNNY TIPPY,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,777.86 / $1,681.17",105.8% · > 105% (tope 110%),23.27,NO,
 210,JOHNNY TIPPY,Ejecución negocio Café,cantidad,0.00,"$5,123.00 / $2,765.09 (185.3%)",VBI $0 — informativo,0.00,NO,
 210,JOHNNY TIPPY,Ejecución negocio Cárnico,cantidad,0.00,"$9,589.52 / $16,671.12 (57.5%)",VBI $0 — informativo,0.00,NO,
 210,JOHNNY TIPPY,Nutrición Experta (indicador),cantidad,11.00,$-7.43 / $80.00,-9.3% · < 80%,0.00,NO,
@@ -201,7 +201,7 @@
 211,HAYMETH  LEWIS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 211,HAYMETH  LEWIS,Ejecución negocio Chocolates,cantidad,22.00,"$39,137.13 / $27,260.41",143.6% · > 105% (tope 110%),24.20,NO,
 211,HAYMETH  LEWIS,Ejecución negocio Galletas,cantidad,33.00,"$12,473.59 / $12,116.19",102.9% · 99.1% – 105%,34.65,NO,
-211,HAYMETH  LEWIS,Ejecución negocio Zuko,cantidad,22.00,"$7,733.40 · 26/62 cli (41.9%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+211,HAYMETH  LEWIS,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$9,024.14 / $6,751.91",133.7% · > 105% (tope 110%),24.20,NO,
 211,HAYMETH  LEWIS,Ejecución negocio Café,cantidad,0.00,"$1,466.72 / $2,778.09 (52.8%)",VBI $0 — informativo,0.00,NO,
 211,HAYMETH  LEWIS,Ejecución negocio Cárnico,cantidad,0.00,"$3,272.45 / $1,162.76 (281.4%)",VBI $0 — informativo,0.00,NO,
 211,HAYMETH  LEWIS,Nutrición Experta (indicador),cantidad,11.00,$335.68 / $80.00,419.6% · > 105% (tope 110%),12.10,NO,
@@ -220,7 +220,7 @@
 212,ISMALDO GOMEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 212,ISMALDO GOMEZ,Ejecución negocio Chocolates,cantidad,22.00,"$34,785.79 / $39,240.48",88.6% · 80% – 95%,13.20,NO,
 212,ISMALDO GOMEZ,Ejecución negocio Galletas,cantidad,33.00,"$10,363.33 / $13,086.34",79.2% · < 80%,0.00,NO,
-212,ISMALDO GOMEZ,Ejecución negocio Zuko,cantidad,22.00,"$2,084.50 · 52/157 cli (33.1%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+212,ISMALDO GOMEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$3,615.34 / $4,379.08",82.6% · 80% – 95%,13.20,NO,
 212,ISMALDO GOMEZ,Ejecución negocio Café,cantidad,0.00,"$2,236.81 / $2,366.66 (94.5%)",VBI $0 — informativo,0.00,NO,
 212,ISMALDO GOMEZ,Ejecución negocio Cárnico,cantidad,0.00,"$584.86 / $1,540.98 (38.0%)",VBI $0 — informativo,0.00,NO,
 212,ISMALDO GOMEZ,Nutrición Experta (indicador),cantidad,11.00,$43.36 / $80.00,54.2% · < 80%,0.00,NO,
@@ -239,7 +239,7 @@
 213,GUSTAVO ROJAS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 213,GUSTAVO ROJAS,Ejecución negocio Chocolates,cantidad,22.00,"$27,835.86 / $31,798.56",87.5% · 80% – 95%,13.20,NO,
 213,GUSTAVO ROJAS,Ejecución negocio Galletas,cantidad,33.00,"$6,628.45 / $12,624.67",52.5% · < 80%,0.00,NO,
-213,GUSTAVO ROJAS,Ejecución negocio Zuko,cantidad,22.00,"$2,224.54 · 56/151 cli (37.1%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+213,GUSTAVO ROJAS,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$4,271.58 / $2,065.04",206.9% · > 105% (tope 110%),24.20,NO,
 213,GUSTAVO ROJAS,Ejecución negocio Café,cantidad,0.00,"$2,220.18 / $2,158.30 (102.9%)",VBI $0 — informativo,0.00,NO,
 213,GUSTAVO ROJAS,Ejecución negocio Cárnico,cantidad,0.00,"$2,402.82 / $2,651.25 (90.6%)",VBI $0 — informativo,0.00,NO,
 213,GUSTAVO ROJAS,Nutrición Experta (indicador),cantidad,11.00,$55.29 / $80.00,69.1% · < 80%,0.00,NO,
@@ -258,7 +258,7 @@
 214,RUTA CENTRALES 2,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 214,RUTA CENTRALES 2,Ejecución negocio Chocolates,cantidad,22.00,"$1,360.56 / $3,727.07",36.5% · < 80%,0.00,NO,
 214,RUTA CENTRALES 2,Ejecución negocio Galletas,cantidad,33.00,"$2,080.70 / $3,727.47",55.8% · < 80%,0.00,NO,
-214,RUTA CENTRALES 2,Ejecución negocio Zuko,cantidad,22.00,"$1,690.08 · 32/97 cli (33.0%)",Pend. — meta Zuko no definida,Pendiente por dato fuente,SI,"Venta calculada (SKUs 295-Zuko, Bebidas TMLUC); falta meta para liquidar"
+214,RUTA CENTRALES 2,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,987.40 / $1,777.14",111.8% · > 105% (tope 110%),24.20,NO,
 214,RUTA CENTRALES 2,Ejecución negocio Café,cantidad,0.00,"$1,016.82 / $3,388.56 (30.0%)",VBI $0 — informativo,0.00,NO,
 214,RUTA CENTRALES 2,Ejecución negocio Cárnico,cantidad,0.00,"$1,732.22 / $5,647.80 (30.7%)",VBI $0 — informativo,0.00,NO,
 214,RUTA CENTRALES 2,Nutrición Experta (indicador),cantidad,11.00,$0.00 / $80.00,0.0% · < 80%,0.00,NO,
