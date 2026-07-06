@@ -695,16 +695,16 @@ def make_styles():
         "nota":      ps("nota",    fontName="Helvetica-Bold", fontSize=10, leading=15),
         "footer":    ps("footer",  fontName="Helvetica", fontSize=7,
                         textColor=C_TEXT_MUTED, alignment=TA_CENTER, leading=10),
-        "cons_th":   ps("cth",     fontName="Helvetica-Bold", fontSize=6.5,
-                        textColor=C_BLANCO, alignment=TA_CENTER, leading=9),
-        "cons_td":   ps("ctd",     fontName="Helvetica", fontSize=7.5,
-                        textColor=C_TEXT_DARK, leading=9),
-        "cons_num":  ps("cnum",    fontName="Helvetica-Bold", fontSize=7.5,
-                        textColor=C_TEAL, alignment=TA_RIGHT, leading=9),
-        "cons_zero": ps("czero",   fontName="Helvetica", fontSize=7,
-                        textColor=C_TEXT_MUTED, alignment=TA_RIGHT, leading=9),
-        "cons_pend": ps("cpend",   fontName="Helvetica-Oblique", fontSize=7,
-                        textColor=C_ORANGE, alignment=TA_CENTER, leading=9),
+        "cons_th":   ps("cth",     fontName="Helvetica-Bold", fontSize=6,
+                        textColor=C_BLANCO, alignment=TA_CENTER, leading=8),
+        "cons_td":   ps("ctd",     fontName="Helvetica", fontSize=6.5,
+                        textColor=C_TEXT_DARK, leading=8),
+        "cons_num":  ps("cnum",    fontName="Helvetica-Bold", fontSize=6.5,
+                        textColor=C_TEAL, alignment=TA_RIGHT, leading=8),
+        "cons_zero": ps("czero",   fontName="Helvetica", fontSize=6.5,
+                        textColor=C_TEXT_MUTED, alignment=TA_RIGHT, leading=8),
+        "cons_pend": ps("cpend",   fontName="Helvetica-Oblique", fontSize=6.5,
+                        textColor=C_ORANGE, alignment=TA_CENTER, leading=8),
     }
 
 
@@ -1098,10 +1098,10 @@ def build_pdf_individual(r, styles, out):
 def build_pdf_consolidado(results, styles, out):
     doc = SimpleDocTemplate(
         out, pagesize=(A4[1], A4[0]),  # landscape
-        topMargin=1.2*cm, bottomMargin=1.2*cm,
-        leftMargin=1.5*cm, rightMargin=1.5*cm,
+        topMargin=1.0*cm, bottomMargin=1.0*cm,
+        leftMargin=0.6*cm, rightMargin=0.6*cm,
     )
-    W = A4[1] - 3.0*cm
+    W = A4[1] - 1.2*cm
     story = []
 
     story.append(Paragraph("PALMA · Distribuciones Palumar S.A.", styles["brand"]))
@@ -1175,16 +1175,16 @@ def build_pdf_consolidado(results, styles, out):
     #          | TOSH | NE Conc | HORECA | TOTAL
     # * = pago aún pendiente; sin * = calculado en v6.x
     cols = [
-        ("Cód",     W*.036),("Vendedor",  W*.10),
-        ("Venta\nNeta",W*.058),("Meta",    W*.058),
-        ("%\nCum.", W*.040),("Cob\n%",   W*.036),("Efec\n%", W*.036),
-        ("Pago\nPpto.",W*.052),("Pago\nEfec.",W*.047),
-        ("Pago\nCafé", W*.047),("DN\nJet", W*.040),("DN\nGall.",W*.040),
-        ("Pago\nNuevos",W*.047),("Pago\nCero",W*.047),("DN\nTikys", W*.040),
-        ("Devol",   W*.040),("Fotos*",    W*.040),
-        ("Ej.\nChoc",W*.038),("Ej.\nGall",W*.038),("Ej.\nBeb.\nTMLUC",W*.040),("NE\nInd",W*.034),
-        ("TOSH",    W*.042),("NE\nConc.", W*.040),("HOR.",    W*.036),
-        ("TOTAL",   W*.076),
+        ("Cód",     W*.031),("Vendedor",  W*.087),
+        ("Venta\nNeta",W*.051),("Meta",   W*.051),
+        ("%\nCum.", W*.035),("Cob\n%",   W*.031),("Efec\n%", W*.031),
+        ("Pago\nPpto.",W*.045),("Pago\nEfec.",W*.041),
+        ("Pago\nCafé", W*.041),("DN\nJet", W*.035),("DN\nGall.",W*.035),
+        ("Pago\nNuevos",W*.041),("Pago\nCero",W*.041),("DN\nTikys", W*.035),
+        ("Devol",   W*.035),("Fotos*",    W*.035),
+        ("Ej.\nChoc",W*.033),("Ej.\nGall",W*.033),("Ej.\nBeb.\nTMLUC",W*.035),("NE\nInd",W*.030),
+        ("TOSH",    W*.037),("NE\nConc.", W*.035),("HOR.",    W*.031),
+        ("TOTAL",   W*.066),
     ]
     headers  = [c[0] for c in cols]
     col_w    = [c[1] for c in cols]
@@ -1223,7 +1223,7 @@ def build_pdf_consolidado(results, styles, out):
             _num(r["p_choc"]), _num(r["p_gall"]), _num(r["p_bebidas_tmluc"]), _num(r["p_ne_ind"]),
             _num(r["tosh_pago"]), _num(r["ne_pago"]), _num(r["horeca_pago"]),
             Paragraph(f"<b>{fmt_usd(r['total_final'])}</b>",
-                      ParagraphStyle("tf",parent=styles["cons_num"],fontSize=8)),
+                      ParagraphStyle("tf",parent=styles["cons_num"],fontSize=6.5)),
         ])
         for k in ["p_ppto","p_ef","p_cafe","p_jet","p_cremas","p_tikys","p_nuevos","p_cero",
                   "p_devol","p_choc","p_gall","p_bebidas_tmluc","p_ne_ind",
@@ -1254,7 +1254,7 @@ def build_pdf_consolidado(results, styles, out):
         Paragraph(f"<b>{fmt_usd(tot['ne_pago'])}</b>",   styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['horeca_pago'])}</b>",styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['total_final'])}</b>",
-                  ParagraphStyle("tft",parent=styles["cons_num"],fontSize=9)),
+                  ParagraphStyle("tft",parent=styles["cons_num"],fontSize=7)),
     ])
 
     tbl = Table(rows, colWidths=col_w, repeatRows=1)

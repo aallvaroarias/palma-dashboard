@@ -41,7 +41,7 @@
 203,RAUL  CASTRO,Efectividad de visitas,calidad,33.00,82.8%,80% – 87%,26.40,NO,
 203,RAUL  CASTRO,DN Café Molido Sello Rojo,calidad,55.00,48.4% (104/215),≥40% maestra,55.00,NO,
 203,RAUL  CASTRO,DN Jet (Chocolates Jet),calidad,33.00,0.0% (0/215),≥40% maestra,0.00,NO,
-203,RAUL  CASTRO,DN Galletas Cremas ×6,calidad,33.00,0.0% (0/215),≥10% maestra,0.00,NO,calculado con referencias CREMAS del negocio Galletas
+203,RAUL  CASTRO,DN Galletas Cremas ×6,calidad,33.00,8.4% (18/215),≥10% maestra,0.00,NO,calculado con referencias CREMAS del negocio Galletas
 203,RAUL  CASTRO,Clientes nuevos con pedido,calidad,22.00,4 clientes,≥10 clientes,0.00,NO,
 203,RAUL  CASTRO,Cliente cero,calidad,33.00,13.9% (30/215),≤4% de maestra,0.00,NO,
 203,RAUL  CASTRO,DN Tikys,calidad,22.00,0.0% (0/215),≥15% maestra,0.00,NO,
@@ -231,7 +231,7 @@
 213,GUSTAVO ROJAS,Efectividad de visitas,calidad,33.00,49.0%,< 80%,0.00,NO,
 213,GUSTAVO ROJAS,DN Café Molido Sello Rojo,calidad,55.00,24.5% (37/151),≥40% maestra,0.00,NO,
 213,GUSTAVO ROJAS,DN Jet (Chocolates Jet),calidad,33.00,0.0% (0/151),≥40% maestra,0.00,NO,
-213,GUSTAVO ROJAS,DN Galletas Cremas ×6,calidad,33.00,0.0% (0/151),≥10% maestra,0.00,NO,calculado con referencias CREMAS del negocio Galletas
+213,GUSTAVO ROJAS,DN Galletas Cremas ×6,calidad,33.00,13.9% (21/151),≥10% maestra,33.00,NO,calculado con referencias CREMAS del negocio Galletas
 213,GUSTAVO ROJAS,Clientes nuevos con pedido,calidad,22.00,6 clientes,≥10 clientes,0.00,NO,
 213,GUSTAVO ROJAS,Cliente cero,calidad,33.00,16.6% (25/151),≤4% de maestra,0.00,NO,
 213,GUSTAVO ROJAS,DN Tikys,calidad,22.00,0.0% (0/151),≥15% maestra,0.00,NO,
