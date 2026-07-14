@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-generar_incentivos.py - v6.3
+generar_incentivos.py - v6.4
+Indicador Fotos eliminado (sin fuente de datos).
 DN Galletas Cremas liquidado: meta 10% universo, filtro por nombre CREMA en negocio Galletas.
 Bebidas TMLUC calculado (venta negocio 10-TMLUC / meta cuotas).
 PALUMAR S.A. — Junio 2026
@@ -47,7 +48,6 @@ VBI_NUEVOS             = 22.00    # era $55  — CORREGIDO
 VBI_CERO               = 33.00    # era $55  — CORREGIDO
 VBI_DN_TIKYS           = 22.00    # nuevo (pendiente — sin fuente SKU Tikys)
 VBI_DEVOLUCION_IND     = 22.00    # nuevo (pendiente — sin meta definida)
-VBI_FOTOS              = 33.00    # nuevo (pendiente — sin fuente fotos)
 
 # ▸ Indicadores de cantidad
 VBI_EJ_CHOCOLATES    = 22.00   # calculado desde cuotas v6.0
@@ -517,9 +517,6 @@ def calcular_incentivos(vendedores_list, inc_map, horeca_por_vend,
                 p_tikys, tramo_tikys),
             ind("Devolución (meta ≤5%)", "calidad",
                 VBI_DEVOLUCION_IND, fmt_pct(pct_devol), tramo_devol, p_devol),
-            ind("Ejecución de fotos", "calidad",
-                VBI_FOTOS, "Sin fuente", "Meta en fuente", None,
-                nota="No existe fuente de datos de fotos en API"),
             # CANTIDAD
             ind("Ejecución negocio Chocolates", "cantidad",
                 VBI_EJ_CHOCOLATES, choc_resultado, choc_escala, p_choc,
@@ -983,7 +980,7 @@ def build_pdf_individual(r, styles, out):
 
     # Leyenda
     story.append(Paragraph(
-        "Fondo <font color='#E67E22'>naranja</font> = Pendiente por dato fuente. "
+        "Fondo <font color='#E67E22'>naranja</font> = Pendiente por dato fuente (solo indicadores de cantidad sin meta en cuotas). "
         "No suma al total hasta que exista fuente de datos.",
         ParagraphStyle("ley", parent=styles["muted"], leftIndent=4, spaceAfter=6)))
 
@@ -1181,7 +1178,7 @@ def build_pdf_consolidado(results, styles, out):
         ("Pago\nPpto.",W*.045),("Pago\nEfec.",W*.041),
         ("Pago\nCafé", W*.041),("DN\nJet", W*.035),("DN\nGall.",W*.035),
         ("Pago\nNuevos",W*.041),("Pago\nCero",W*.041),("DN\nTikys", W*.035),
-        ("Devol",   W*.035),("Fotos*",    W*.035),
+        ("Devol",   W*.035),
         ("Ej.\nChoc",W*.033),("Ej.\nGall",W*.033),("Ej.\nBeb.\nTMLUC",W*.035),("NE\nInd",W*.030),
         ("TOSH",    W*.037),("NE\nConc.", W*.035),("HOR.",    W*.031),
         ("TOTAL",   W*.066),
@@ -1219,7 +1216,7 @@ def build_pdf_consolidado(results, styles, out):
             _num(r["p_ppto"]), _num(r["p_ef"]),
             _num(r["p_cafe"]), _num(r["p_jet"]), _num(r["p_cremas"]),
             _num(r["p_nuevos"]), _num(r["p_cero"]), _num(r["p_tikys"]),
-            _num(r["p_devol"]), _pend(),
+            _num(r["p_devol"]),
             _num(r["p_choc"]), _num(r["p_gall"]), _num(r["p_bebidas_tmluc"]), _num(r["p_ne_ind"]),
             _num(r["tosh_pago"]), _num(r["ne_pago"]), _num(r["horeca_pago"]),
             Paragraph(f"<b>{fmt_usd(r['total_final'])}</b>",
@@ -1245,7 +1242,6 @@ def build_pdf_consolidado(results, styles, out):
         Paragraph(f"<b>{fmt_usd(tot['p_cero'])}</b>",    styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_tikys'])}</b>",   styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_devol'])}</b>",   styles["cons_num"]),
-        _pend(),
         Paragraph(f"<b>{fmt_usd(tot['p_choc'])}</b>",           styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_gall'])}</b>",           styles["cons_num"]),
         Paragraph(f"<b>{fmt_usd(tot['p_bebidas_tmluc'])}</b>",  styles["cons_num"]),
@@ -1281,10 +1277,9 @@ def build_pdf_consolidado(results, styles, out):
         story.append(e)
 
     story.append(Paragraph(
-        "v6.3 — Indicadores calculados: Devolución (meta ≤5%), DN Galletas Cremas (≥10% universo), "
+        "v6.4 — Indicadores calculados: Devolución (meta ≤5%), DN Galletas Cremas (≥10% universo), "
         "Ejecución Chocolates/Galletas/Bebidas TMLUC/NE (metas desde cuotas, escala presupuesto), "
         "DN Jet, DN Tikys. "
-        "Pendiente: Fotos. "
         f"Potencial pendiente promedio: "
         f"{fmt_usd(sum(r['potencial_pendiente'] for r in results)/len(results))}.",
         ParagraphStyle("al",parent=styles["body"],textColor=C_ORANGE,spaceAfter=4)))

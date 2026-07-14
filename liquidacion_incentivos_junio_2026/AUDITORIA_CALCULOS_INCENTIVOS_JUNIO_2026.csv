@@ -8,7 +8,6 @@
 201,ANAYS CASTILLO,Cliente cero,calidad,33.00,2.8% (6/217),≤4% de maestra,33.00,NO,
 201,ANAYS CASTILLO,DN Tikys,calidad,22.00,0.0% (0/217),≥15% maestra,0.00,NO,
 201,ANAYS CASTILLO,Devolución (meta ≤5%),calidad,22.00,7.8%,7.8% > 5%,0.00,NO,
-201,ANAYS CASTILLO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 201,ANAYS CASTILLO,Ejecución negocio Chocolates,cantidad,22.00,"$7,345.47 / $11,563.62",63.5% · < 80%,0.00,NO,
 201,ANAYS CASTILLO,Ejecución negocio Galletas,cantidad,33.00,"$5,127.04 / $8,518.51",60.2% · < 80%,0.00,NO,
 201,ANAYS CASTILLO,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$4,957.55 / $3,782.83",131.1% · > 105% (tope 110%),24.20,NO,
@@ -27,7 +26,6 @@
 202,MELISSA ZULAY CASTILLO FUENTES,Cliente cero,calidad,33.00,5.8% (12/207),≤4% de maestra,0.00,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,DN Tikys,calidad,22.00,0.0% (0/207),≥15% maestra,0.00,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Devolución (meta ≤5%),calidad,22.00,12.5%,12.5% > 5%,0.00,NO,
-202,MELISSA ZULAY CASTILLO FUENTES,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Chocolates,cantidad,22.00,"$9,238.80 / $11,352.34",81.4% · 80% – 95%,13.20,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Galletas,cantidad,33.00,"$3,320.93 / $5,967.46",55.7% · < 80%,0.00,NO,
 202,MELISSA ZULAY CASTILLO FUENTES,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$3,800.14 / $3,358.51",113.1% · > 105% (tope 110%),24.20,NO,
@@ -46,7 +44,6 @@
 203,RAUL  CASTRO,Cliente cero,calidad,33.00,13.9% (30/215),≤4% de maestra,0.00,NO,
 203,RAUL  CASTRO,DN Tikys,calidad,22.00,0.0% (0/215),≥15% maestra,0.00,NO,
 203,RAUL  CASTRO,Devolución (meta ≤5%),calidad,22.00,10.4%,10.4% > 5%,0.00,NO,
-203,RAUL  CASTRO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 203,RAUL  CASTRO,Ejecución negocio Chocolates,cantidad,22.00,"$6,799.11 / $9,525.33",71.4% · < 80%,0.00,NO,
 203,RAUL  CASTRO,Ejecución negocio Galletas,cantidad,33.00,"$3,574.69 / $4,268.48",83.7% · 80% – 95%,19.80,NO,
 203,RAUL  CASTRO,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$3,532.56 / $2,741.19",128.9% · > 105% (tope 110%),24.20,NO,
@@ -65,7 +62,6 @@
 204,ALAY WOODS,Cliente cero,calidad,33.00,12.2% (27/222),≤4% de maestra,0.00,NO,
 204,ALAY WOODS,DN Tikys,calidad,22.00,0.0% (0/222),≥15% maestra,0.00,NO,
 204,ALAY WOODS,Devolución (meta ≤5%),calidad,22.00,12.0%,12.0% > 5%,0.00,NO,
-204,ALAY WOODS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 204,ALAY WOODS,Ejecución negocio Chocolates,cantidad,22.00,"$8,181.40 / $11,835.24",69.1% · < 80%,0.00,NO,
 204,ALAY WOODS,Ejecución negocio Galletas,cantidad,33.00,"$3,822.61 / $5,762.49",66.3% · < 80%,0.00,NO,
 204,ALAY WOODS,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,816.04 / $2,310.63",78.6% · < 80%,0.00,NO,
@@ -84,7 +80,6 @@
 205,RENE ISAIAS MU—OZ,Cliente cero,calidad,33.00,18.2% (24/132),≤4% de maestra,0.00,NO,
 205,RENE ISAIAS MU—OZ,DN Tikys,calidad,22.00,0.0% (0/132),≥15% maestra,0.00,NO,
 205,RENE ISAIAS MU—OZ,Devolución (meta ≤5%),calidad,22.00,21.6%,21.6% > 5%,0.00,NO,
-205,RENE ISAIAS MU—OZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 205,RENE ISAIAS MU—OZ,Ejecución negocio Chocolates,cantidad,22.00,"$4,832.70 / $15,405.83",31.4% · < 80%,0.00,NO,
 205,RENE ISAIAS MU—OZ,Ejecución negocio Galletas,cantidad,33.00,"$2,329.88 / $7,907.53",29.5% · < 80%,0.00,NO,
 205,RENE ISAIAS MU—OZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$2,483.80 / $4,852.53",51.2% · < 80%,0.00,NO,
@@ -103,7 +98,6 @@
 206,GRACIELA  CASSINO,Cliente cero,calidad,33.00,8.8% (16/182),≤4% de maestra,0.00,NO,
 206,GRACIELA  CASSINO,DN Tikys,calidad,22.00,0.0% (0/182),≥15% maestra,0.00,NO,
 206,GRACIELA  CASSINO,Devolución (meta ≤5%),calidad,22.00,6.6%,6.6% > 5%,0.00,NO,
-206,GRACIELA  CASSINO,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 206,GRACIELA  CASSINO,Ejecución negocio Chocolates,cantidad,22.00,"$6,419.89 / $6,321.14",101.6% · 99.1% – 105%,23.10,NO,
 206,GRACIELA  CASSINO,Ejecución negocio Galletas,cantidad,33.00,"$1,718.87 / $2,459.95",69.9% · < 80%,0.00,NO,
 206,GRACIELA  CASSINO,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$2,861.62 / $2,020.67",141.6% · > 105% (tope 110%),24.20,NO,
@@ -122,7 +116,6 @@
 207,JAIME ELIAS CASTILLO SANCHEZ,Cliente cero,calidad,33.00,17.9% (42/234),≤4% de maestra,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,DN Tikys,calidad,22.00,0.0% (0/234),≥15% maestra,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Devolución (meta ≤5%),calidad,22.00,10.4%,10.4% > 5%,0.00,NO,
-207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Chocolates,cantidad,22.00,"$7,444.36 / $10,777.04",69.1% · < 80%,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Galletas,cantidad,33.00,"$3,184.84 / $5,622.91",56.6% · < 80%,0.00,NO,
 207,JAIME ELIAS CASTILLO SANCHEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,314.24 / $2,207.76",59.5% · < 80%,0.00,NO,
@@ -136,12 +129,11 @@
 208,ARIEL GONZALEZ,Efectividad de visitas,calidad,33.00,89.8%,87% – 90%,29.70,NO,
 208,ARIEL GONZALEZ,DN Café Molido Sello Rojo,calidad,55.00,37.9% (91/240),≥40% maestra,0.00,NO,
 208,ARIEL GONZALEZ,DN Jet (Chocolates Jet),calidad,33.00,0.0% (0/240),≥40% maestra,0.00,NO,
-208,ARIEL GONZALEZ,DN Galletas Cremas ×6,calidad,33.00,5.0% (12/240),≥10% maestra,0.00,NO,calculado con referencias CREMAS del negocio Galletas
+208,ARIEL GONZALEZ,DN Galletas Cremas ×6,calidad,33.00,0.0% (0/240),≥10% maestra,0.00,NO,calculado con referencias CREMAS del negocio Galletas
 208,ARIEL GONZALEZ,Clientes nuevos con pedido,calidad,22.00,16 clientes,≥10 clientes,22.00,NO,
 208,ARIEL GONZALEZ,Cliente cero,calidad,33.00,4.2% (10/240),≤4% de maestra,0.00,NO,
 208,ARIEL GONZALEZ,DN Tikys,calidad,22.00,0.0% (0/240),≥15% maestra,0.00,NO,
 208,ARIEL GONZALEZ,Devolución (meta ≤5%),calidad,22.00,9.8%,9.8% > 5%,0.00,NO,
-208,ARIEL GONZALEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 208,ARIEL GONZALEZ,Ejecución negocio Chocolates,cantidad,22.00,"$6,052.66 / $9,488.27",63.8% · < 80%,0.00,NO,
 208,ARIEL GONZALEZ,Ejecución negocio Galletas,cantidad,33.00,"$2,873.47 / $4,801.77",59.8% · < 80%,0.00,NO,
 208,ARIEL GONZALEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,767.32 / $2,665.94",66.3% · < 80%,0.00,NO,
@@ -160,7 +152,6 @@
 209,ENRIQUE  JIMENEZ,Cliente cero,calidad,33.00,25.0% (59/236),≤4% de maestra,0.00,NO,
 209,ENRIQUE  JIMENEZ,DN Tikys,calidad,22.00,0.0% (0/236),≥15% maestra,0.00,NO,
 209,ENRIQUE  JIMENEZ,Devolución (meta ≤5%),calidad,22.00,12.5%,12.5% > 5%,0.00,NO,
-209,ENRIQUE  JIMENEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 209,ENRIQUE  JIMENEZ,Ejecución negocio Chocolates,cantidad,22.00,"$7,875.35 / $10,970.94",71.8% · < 80%,0.00,NO,
 209,ENRIQUE  JIMENEZ,Ejecución negocio Galletas,cantidad,33.00,"$4,147.60 / $8,099.90",51.2% · < 80%,0.00,NO,
 209,ENRIQUE  JIMENEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$766.00 / $1,097.41",69.8% · < 80%,0.00,NO,
@@ -179,7 +170,6 @@
 210,JOHNNY TIPPY,Cliente cero,calidad,33.00,14.6% (38/261),≤4% de maestra,0.00,NO,
 210,JOHNNY TIPPY,DN Tikys,calidad,22.00,0.0% (0/261),≥15% maestra,0.00,NO,
 210,JOHNNY TIPPY,Devolución (meta ≤5%),calidad,22.00,6.8%,6.8% > 5%,0.00,NO,
-210,JOHNNY TIPPY,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 210,JOHNNY TIPPY,Ejecución negocio Chocolates,cantidad,22.00,"$5,993.57 / $8,406.34",71.3% · < 80%,0.00,NO,
 210,JOHNNY TIPPY,Ejecución negocio Galletas,cantidad,33.00,"$6,855.66 / $9,343.17",73.4% · < 80%,0.00,NO,
 210,JOHNNY TIPPY,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,777.86 / $1,681.17",105.8% · > 105% (tope 110%),23.27,NO,
@@ -198,7 +188,6 @@
 211,HAYMETH  LEWIS,Cliente cero,calidad,33.00,19.4% (12/62),≤4% de maestra,0.00,NO,
 211,HAYMETH  LEWIS,DN Tikys,calidad,22.00,0.0% (0/62),≥15% maestra,0.00,NO,
 211,HAYMETH  LEWIS,Devolución (meta ≤5%),calidad,22.00,3.9%,≤5% ✓,22.00,NO,
-211,HAYMETH  LEWIS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 211,HAYMETH  LEWIS,Ejecución negocio Chocolates,cantidad,22.00,"$39,137.13 / $27,260.41",143.6% · > 105% (tope 110%),24.20,NO,
 211,HAYMETH  LEWIS,Ejecución negocio Galletas,cantidad,33.00,"$12,473.59 / $12,116.19",102.9% · 99.1% – 105%,34.65,NO,
 211,HAYMETH  LEWIS,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$9,024.14 / $6,751.91",133.7% · > 105% (tope 110%),24.20,NO,
@@ -217,7 +206,6 @@
 212,ISMALDO GOMEZ,Cliente cero,calidad,33.00,12.7% (20/157),≤4% de maestra,0.00,NO,
 212,ISMALDO GOMEZ,DN Tikys,calidad,22.00,0.0% (0/157),≥15% maestra,0.00,NO,
 212,ISMALDO GOMEZ,Devolución (meta ≤5%),calidad,22.00,7.4%,7.4% > 5%,0.00,NO,
-212,ISMALDO GOMEZ,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 212,ISMALDO GOMEZ,Ejecución negocio Chocolates,cantidad,22.00,"$34,785.79 / $39,240.48",88.6% · 80% – 95%,13.20,NO,
 212,ISMALDO GOMEZ,Ejecución negocio Galletas,cantidad,33.00,"$10,363.33 / $13,086.34",79.2% · < 80%,0.00,NO,
 212,ISMALDO GOMEZ,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$3,615.34 / $4,379.08",82.6% · 80% – 95%,13.20,NO,
@@ -236,7 +224,6 @@
 213,GUSTAVO ROJAS,Cliente cero,calidad,33.00,16.6% (25/151),≤4% de maestra,0.00,NO,
 213,GUSTAVO ROJAS,DN Tikys,calidad,22.00,0.0% (0/151),≥15% maestra,0.00,NO,
 213,GUSTAVO ROJAS,Devolución (meta ≤5%),calidad,22.00,7.2%,7.2% > 5%,0.00,NO,
-213,GUSTAVO ROJAS,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 213,GUSTAVO ROJAS,Ejecución negocio Chocolates,cantidad,22.00,"$27,835.86 / $31,798.56",87.5% · 80% – 95%,13.20,NO,
 213,GUSTAVO ROJAS,Ejecución negocio Galletas,cantidad,33.00,"$6,628.45 / $12,624.67",52.5% · < 80%,0.00,NO,
 213,GUSTAVO ROJAS,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$4,271.58 / $2,065.04",206.9% · > 105% (tope 110%),24.20,NO,
@@ -255,7 +242,6 @@
 214,RUTA CENTRALES 2,Cliente cero,calidad,33.00,36.1% (35/97),≤4% de maestra,0.00,NO,
 214,RUTA CENTRALES 2,DN Tikys,calidad,22.00,0.0% (0/97),≥15% maestra,0.00,NO,
 214,RUTA CENTRALES 2,Devolución (meta ≤5%),calidad,22.00,16.8%,16.8% > 5%,0.00,NO,
-214,RUTA CENTRALES 2,Ejecución de fotos,calidad,33.00,Sin fuente,Meta en fuente,Pendiente por dato fuente,SI,No existe fuente de datos de fotos en API
 214,RUTA CENTRALES 2,Ejecución negocio Chocolates,cantidad,22.00,"$1,360.56 / $3,727.07",36.5% · < 80%,0.00,NO,
 214,RUTA CENTRALES 2,Ejecución negocio Galletas,cantidad,33.00,"$2,080.70 / $3,727.47",55.8% · < 80%,0.00,NO,
 214,RUTA CENTRALES 2,Ejecución negocio Bebidas TMLUC,cantidad,22.00,"$1,987.40 / $1,777.14",111.8% · > 105% (tope 110%),24.20,NO,
